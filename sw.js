@@ -1,9 +1,10 @@
-const CACHE = 'sonqollay-v1';
+// Service worker de la app (cache de shell para offline).
+// El SW de FCM es ./firebase-messaging-sw.js (registrado aparte).
+const CACHE = 'sonqollay-v2';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
-  './app.js',
   './manifest.webmanifest',
   './icon.svg'
 ];
@@ -22,10 +23,21 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  // No interceptar requests a Firebase / Google APIs ni al SDK
+  if (
+    url.hostname.endsWith('googleapis.com') ||
+    url.hostname.endsWith('gstatic.com') ||
+    url.hostname.endsWith('firebaseio.com') ||
+    url.hostname.endsWith('firebase.googleapis.com')
+  ) return;
+
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      if (res && res.ok && url.origin === self.location.origin) {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+      }
       return res;
     }).catch(() => cached))
   );

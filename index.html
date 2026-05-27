@@ -68,13 +68,17 @@
 
     <!-- Vista Configuración -->
     <section id="view-settings" class="view">
+      <h2 class="section-title">Notificaciones</h2>
+      <button class="btn btn-block" id="enablePushBtn">🔔 Activar notificaciones push</button>
+      <p class="hint">Te avisará en este dispositivo cuando se envíen notificaciones desde Firebase.</p>
+
       <h2 class="section-title">Datos</h2>
       <button class="btn btn-block" id="exportBtn">Exportar respaldo (JSON)</button>
       <label class="btn btn-block btn-outline" for="importFile">Importar respaldo</label>
       <input type="file" id="importFile" accept="application/json" hidden />
       <button class="btn btn-block btn-outline" id="exportCsvBtn">Exportar cotizaciones (CSV)</button>
       <button class="btn btn-block btn-danger" id="resetBtn">Restablecer datos iniciales</button>
-      <p class="hint">Los datos se guardan localmente en tu teléfono. Usa exportar para tener respaldo.</p>
+      <p class="hint">Los datos están sincronizados en Firestore. Funciona offline y se sincroniza al recuperar la conexión.</p>
     </section>
   </main>
 
@@ -199,6 +203,6 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

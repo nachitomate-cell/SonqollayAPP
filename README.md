@@ -1,41 +1,85 @@
 # SonqollayAPP
 
-App móvil (PWA) para gestionar clientes y cotizaciones. Sin pérdida de seguimientos.
+PWA móvil para gestión de clientes y cotizaciones con **Firestore** (sincronización en la nube + offline) y **Firebase Cloud Messaging** (notificaciones push web).
 
-## Cómo usar
+## 1) Configurar Firebase
 
-### Opción A — Abrir directo en el teléfono
+### a) Crear el proyecto / obtener config
 
-1. Subí los archivos a cualquier hosting estático (GitHub Pages, Netlify, Vercel, etc.).
-2. Abrí la URL desde tu teléfono.
-3. En iPhone: Safari → Compartir → "Agregar a pantalla de inicio".
-4. En Android: Chrome → menú → "Instalar app" / "Agregar a pantalla principal".
+1. Andá a https://console.firebase.google.com → tu proyecto.
+2. **Configuración del proyecto** → "Tus apps" → agregá una **App web** si no existe.
+3. Copiá el objeto `firebaseConfig` (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId).
 
-### Opción B — Probar local
+### b) Pegar los valores
+
+Editá **dos** archivos con los mismos valores:
+
+- `firebase-config.js` (módulo ES que usa la app)
+- `firebase-config-compat.js` (lo usa el service worker de FCM)
+
+La **VAPID Public Key** ya está cargada:
+
+```
+BG51GzCL7b78_tnJ1GzvV53HimMawsAwPPdTCKM8XPAKV6RS8arlEQZ-BxzQqyFLxCJaY-durev5H6GyJysO9HU
+```
+
+### c) Habilitar servicios en la consola
+
+- **Authentication** → Sign-in method → habilitar **Anónimo**.
+- **Firestore Database** → Crear base de datos (modo producción).
+- **Reglas de Firestore**: copiar el contenido de `firestore.rules` en *Rules* y publicar.
+- **Cloud Messaging** → ya tenés la VAPID Web Push registrada.
+
+### d) Dominios autorizados
+
+En Authentication → Settings → **Authorized domains**, agregá el dominio donde alojás la app (ej. `tu-usuario.github.io`). `localhost` ya viene autorizado.
+
+## 2) Estructura de datos en Firestore
+
+```
+users/{uid}/
+  ├─ quotes/{id}    → { empresa, numero, fecha, descripcion, valor,
+  │                     contactos, estado, seguimiento, notas, createdAt, updatedAt }
+  ├─ clients/{id}   → { empresa, nombre, email, telefono, cargo, notas }
+  └─ fcmTokens/{token} → { token, ua, createdAt }
+```
+
+Cada teléfono recibe un UID anónimo persistente. Si reinstalás la app, generá un respaldo (Ajustes → Exportar JSON) o usá login Google en el futuro para enlazar datos entre dispositivos.
+
+## 3) Funcionalidades
+
+- **Cotizaciones**: ABM, estado (Borrador/Enviada/En revisión/Adjudicada/Perdida), valor CLP, contactos, próximo seguimiento, notas.
+- **Clientes**: ficha por empresa con persona, email, teléfono, cargo.
+- **Dashboard**: KPIs, próximos seguimientos, últimas cotizaciones.
+- **Sync real-time**: cambios desde cualquier dispositivo aparecen al instante.
+- **Offline-first**: Firestore con persistencia IndexedDB + Service Worker.
+- **Push web (FCM)**: botón en Ajustes para activar; el token queda guardado en `users/{uid}/fcmTokens` para enviar mensajes desde tu backend o Cloud Functions.
+- **Exportar/Importar** respaldo JSON, **Exportar CSV** (Excel).
+- **mailto** desde cada cotización.
+
+## 4) Probar local
 
 ```bash
 cd SonqollayAPP
 python3 -m http.server 8080
+# abrir http://localhost:8080
 ```
 
-Luego abrir `http://localhost:8080` desde el teléfono (en la misma red Wi-Fi).
+> Importante: FCM requiere **HTTPS** (o `localhost`). Para usarlo desde un teléfono real, hostealo en GitHub Pages / Netlify / Firebase Hosting.
 
-## Características
+## 5) Deploy con Firebase Hosting (opcional)
 
-- **Cotizaciones**: alta/edición/borrado, estado (Borrador, Enviada, En revisión, Adjudicada, Perdida), valor en CLP, contactos, próximo seguimiento, notas.
-- **Clientes**: ficha por empresa con persona de contacto, email, teléfono, cargo.
-- **Dashboard**: KPIs, próximos seguimientos, últimas cotizaciones.
-- **Buscador** en cotizaciones y clientes.
-- **Exportar/Importar** respaldo en JSON. Exportar cotizaciones a CSV (compatible con Excel).
-- **Enviar correo** desde el detalle de la cotización (abre el cliente de email del teléfono).
-- **Compartir** vía `navigator.share` o portapapeles.
-- **Offline-first**: funciona sin conexión gracias al Service Worker.
-- **Datos locales**: persisten en `localStorage` del navegador del teléfono.
+```bash
+npm i -g firebase-tools
+firebase login
+firebase init hosting     # apuntar a este directorio como public
+firebase deploy
+```
 
-## Datos precargados
+## 6) Enviar notificaciones de prueba
 
-La app viene precargada con las 12 cotizaciones del respaldo de contactos (Arcadis, Keypro, Worley, JRI, WSP, Salfa, Techint, R&Q).
+Desde Firebase Console → **Cloud Messaging** → Enviar mensaje de prueba → pegá el token FCM (lo podés ver en Firestore en `users/{uid}/fcmTokens/...`).
 
-## Backup
+## 7) Datos precargados
 
-Tus datos viven en el teléfono. Andá a **Ajustes → Exportar respaldo (JSON)** periódicamente y guardá el archivo en Drive / iCloud / email para no perder seguimientos.
+En la primera conexión, si la cuenta no tiene cotizaciones, se siembran las 12 del respaldo (Arcadis, Keypro, Worley, JRI, WSP, Salfa, Techint, R&Q).
