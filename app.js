@@ -206,7 +206,8 @@ async function setupFcm() {
 
   const btn = document.getElementById('enablePushBtn');
   if (!btn) return;
-  if (Notification.permission === 'granted') btn.textContent = '🔔 Notificaciones activadas';
+  const pushLabel = document.getElementById('pushBtnLabel');
+  if (Notification.permission === 'granted' && pushLabel) pushLabel.textContent = 'Notificaciones activadas';
 
   btn.addEventListener('click', async () => {
     try {
@@ -218,7 +219,7 @@ async function setupFcm() {
       await setDoc(doc(tokensCol(), token), {
         token, ua: navigator.userAgent, createdAt: serverTimestamp(),
       });
-      btn.textContent = '🔔 Notificaciones activadas';
+      if (pushLabel) pushLabel.textContent = 'Notificaciones activadas';
       showToast('Notificaciones activadas');
     } catch (e) {
       console.error(e);
@@ -273,7 +274,7 @@ function renderDashboard() {
 function cardQuoteHtml(q, extra) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
   return `
-    <div class="card" data-quote-id="${q.id}">
+    <div class="card" data-quote-id="${q.id}" data-estado="${escapeHtml(q.estado || 'Borrador')}">
       <div class="card-row">
         <div class="card-title">${escapeHtml(q.numero)} · ${escapeHtml(q.empresa)}</div>
         <span class="tag estado-${escapeHtml(estadoClass)}">${escapeHtml(q.estado || 'Borrador')}</span>
