@@ -11,6 +11,9 @@ import {
 import {
   getMessaging, getToken, onMessage, isSupported
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging.js';
+import {
+  getAnalytics, isSupported as analyticsSupported
+} from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js';
 import { firebaseConfig, VAPID_KEY } from './firebase-config.js';
 
 // ---------- Init Firebase ----------
@@ -23,6 +26,8 @@ enableIndexedDbPersistence(dbf).catch(err => {
     console.warn('Persistencia offline no disponible:', err.code);
   }
 });
+
+analyticsSupported().then(ok => { if (ok) getAnalytics(app); }).catch(() => {});
 
 // ---------- Datos iniciales (sembrado en primera conexión) ----------
 const seedQuotes = [

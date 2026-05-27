@@ -67,19 +67,57 @@ python3 -m http.server 8080
 
 > Importante: FCM requiere **HTTPS** (o `localhost`). Para usarlo desde un teléfono real, hostealo en GitHub Pages / Netlify / Firebase Hosting.
 
-## 5) Deploy con Firebase Hosting (opcional)
+## 5) Deploy con Firebase Hosting + Functions
+
+El proyecto ya viene con `firebase.json` y `.firebaserc` apuntando al proyecto `sonqollayapp`.
 
 ```bash
 npm i -g firebase-tools
 firebase login
-firebase init hosting     # apuntar a este directorio como public
+
+# Instalar deps de las functions
+cd functions && npm install && cd ..
+
+# Deploy completo (hosting + reglas + functions)
 firebase deploy
 ```
 
-## 6) Enviar notificaciones de prueba
+Deploy parcial:
+```bash
+firebase deploy --only hosting
+firebase deploy --only firestore:rules
+firebase deploy --only functions
+firebase deploy --only functions:dailyFollowUpReminders
+```
+
+## 6) Cloud Functions incluidas
+
+Ubicadas en `functions/index.js`:
+
+- **`dailyFollowUpReminders`** — Schedule: todos los días 09:00 (America/Santiago). Para cada usuario, busca cotizaciones cuyo `seguimiento` sea hoy, esté vencido (hasta 14 días atrás) o caiga en los próximos 3 días (excluye Adjudicadas/Perdidas) y envía un push consolidado a todos los tokens FCM del usuario.
+- **`onQuoteSeguimientoToday`** — Trigger Firestore (onWrite). Si una cotización se crea/edita con `seguimiento === hoy`, envía un push instantáneo.
+- **`notifyOnNewQuote`** — Trigger Firestore (onCreate). Notifica cada cotización nueva con empresa y valor.
+
+Las funciones limpian automáticamente los tokens FCM que el navegador haya invalidado.
+
+### Probar las funciones
+
+```bash
+# Emulador local (sin afectar producción)
+cd functions && npm run serve
+
+# Disparar manualmente el schedule (después de deploy)
+gcloud scheduler jobs run firebase-schedule-dailyFollowUpReminders-us-central1 --location=us-central1
+```
+
+### Requisitos para usar Cloud Functions
+
+- El proyecto Firebase debe estar en plan **Blaze** (pay-as-you-go). El uso de las funciones de esta app es muy bajo y normalmente queda dentro del cupo gratuito.
+
+## 7) Enviar notificaciones de prueba
 
 Desde Firebase Console → **Cloud Messaging** → Enviar mensaje de prueba → pegá el token FCM (lo podés ver en Firestore en `users/{uid}/fcmTokens/...`).
 
-## 7) Datos precargados
+## 8) Datos precargados
 
 En la primera conexión, si la cuenta no tiene cotizaciones, se siembran las 12 del respaldo (Arcadis, Keypro, Worley, JRI, WSP, Salfa, Techint, R&Q).
