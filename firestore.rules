@@ -1,11 +1,21 @@
-// Reglas de seguridad de Firestore para SonqollayAPP.
-// Copiá estas reglas en Firebase Console → Firestore → Rules.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Cada usuario (incluido anónimo) solo accede a su propio árbol.
-    match /users/{uid}/{document=**} {
+
+    // Cotizaciones y clientes: compartidos entre todos los usuarios autenticados
+    match /quotes/{id} {
+      allow read, write: if request.auth != null;
+    }
+    match /clients/{id} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Perfil y tokens FCM: cada usuario solo accede a los suyos
+    match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+      match /fcmTokens/{token} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
     }
   }
 }

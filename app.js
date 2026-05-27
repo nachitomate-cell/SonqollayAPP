@@ -1,7 +1,7 @@
-// SonqollayAPP - Firestore + FCM
+// SonqollayAPP - Firestore + FCM + Google Auth
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
 import {
-  getAuth, signInAnonymously, onAuthStateChanged
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
   getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc,
@@ -20,6 +20,7 @@ import { firebaseConfig, VAPID_KEY } from './firebase-config.js';
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const dbf = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
 
 enableIndexedDbPersistence(dbf).catch(err => {
   if (err.code === 'failed-precondition' || err.code === 'unimplemented') {
@@ -29,7 +30,7 @@ enableIndexedDbPersistence(dbf).catch(err => {
 
 analyticsSupported().then(ok => { if (ok) getAnalytics(app); }).catch(() => {});
 
-// ---------- Datos iniciales (sembrado en primera conexión) ----------
+// ---------- Datos iniciales (sembrado global en primera conexión) ----------
 const seedQuotes = [
   { empresa: 'Arcadis', numero: 'P014_v01', fecha: '2026-03-16', descripcion: 'Celdas flotación División Andina - Codelco', valor: 93230280, contactos: 'juan.sarquis@arcadis.com; ricardo.bravo@arcadis.com', estado: 'Enviada' },
   { empresa: 'Arcadis', numero: 'P015_v01', fecha: '2026-04-10', descripcion: 'Tranque Ovejería Etapa V (Codelco VP)', valor: 461530100, contactos: 'carolina.cofre@arcadis.com', estado: 'Enviada' },
@@ -75,42 +76,90 @@ function showToast(msg) {
   showToast._t = setTimeout(() => t.classList.add('hidden'), 2400);
 }
 
-// ---------- Estado en memoria (mirror de Firestore) ----------
+// ---------- Estado en memoria ----------
 let currentUser = null;
 let quotes = [];
 let clients = [];
 let unsubQuotes = null;
 let unsubClients = null;
 
-const userRoot = () => doc(dbf, 'users', currentUser.uid);
-const quotesCol = () => collection(userRoot(), 'quotes');
-const clientsCol = () => collection(userRoot(), 'clients');
-const tokensCol = () => collection(userRoot(), 'fcmTokens');
+// Colecciones compartidas (toda la empresa)
+const quotesCol = () => collection(dbf, 'quotes');
+const clientsCol = () => collection(dbf, 'clients');
+const tokensCol = () => collection(doc(dbf, 'users', currentUser.uid), 'fcmTokens');
 
-// ---------- Auth + suscripciones ----------
+// ---------- Login screen ----------
+function showLoginScreen() {
+  document.getElementById('loginScreen').classList.remove('hidden');
+}
+function hideLoginScreen() {
+  document.getElementById('loginScreen').classList.add('hidden');
+}
+
+document.getElementById('googleSignInBtn').addEventListener('click', async () => {
+  try {
+    await signInWithPopup(auth, googleProvider);
+  } catch (e) {
+    console.error('Google sign-in error', e);
+    showToast('Error al iniciar sesión');
+  }
+});
+
+// ---------- Auth ----------
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
-    try {
-      await signInAnonymously(auth);
-    } catch (e) {
-      console.error('Auth error', e);
-      showToast('Error al iniciar sesión: ' + e.message);
-    }
+    if (unsubQuotes) { unsubQuotes(); unsubQuotes = null; }
+    if (unsubClients) { unsubClients(); unsubClients = null; }
+    currentUser = null;
+    showLoginScreen();
     return;
   }
   currentUser = user;
+  hideLoginScreen();
+  await saveUserProfile(user);
+  renderUserInfo(user);
   await maybeSeed();
   subscribe();
   setupFcm().catch(e => console.warn('FCM setup', e));
 });
 
+async function saveUserProfile(user) {
+  await setDoc(doc(dbf, 'users', user.uid), {
+    displayName: user.displayName || '',
+    email: user.email || '',
+    photoURL: user.photoURL || '',
+    lastLogin: serverTimestamp(),
+  }, { merge: true });
+}
+
+function renderUserInfo(user) {
+  const photo = document.getElementById('userPhoto');
+  const name = document.getElementById('userName');
+  const email = document.getElementById('userEmail');
+  if (photo) {
+    photo.src = user.photoURL || '';
+    photo.style.display = user.photoURL ? 'block' : 'none';
+  }
+  if (name) name.textContent = user.displayName || '';
+  if (email) email.textContent = user.email || '';
+}
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  if (!confirm('¿Cerrar sesión?')) return;
+  await fbSignOut(auth);
+});
+
+// ---------- Seed global (solo si la colección está vacía) ----------
 async function maybeSeed() {
   const snap = await getDocs(quotesCol());
   if (!snap.empty) return;
   const batch = writeBatch(dbf);
   for (const q of seedQuotes) {
     const id = uid();
-    batch.set(doc(quotesCol(), id), { id, seguimiento: '', notas: '', createdAt: serverTimestamp(), ...q });
+    batch.set(doc(quotesCol(), id), {
+      id, seguimiento: '', notas: '', createdAt: serverTimestamp(),
+      createdBy: currentUser.uid, ...q
+    });
   }
   const empresas = [...new Set(seedQuotes.map(q => q.empresa))];
   for (const empresa of empresas) {
@@ -122,7 +171,7 @@ async function maybeSeed() {
       id, empresa,
       nombre: '', email: [...new Set(emails)][0] || '',
       telefono: '', cargo: '', notas: '',
-      createdAt: serverTimestamp(),
+      createdAt: serverTimestamp(), createdBy: currentUser.uid,
     });
   }
   await batch.commit();
@@ -155,7 +204,6 @@ async function setupFcm() {
     showToast(`${title}${body ? ' · ' + body : ''}`);
   });
 
-  // Botón en Ajustes para activar push (no pedimos permiso automáticamente)
   const btn = document.getElementById('enablePushBtn');
   if (!btn) return;
   if (Notification.permission === 'granted') btn.textContent = '🔔 Notificaciones activadas';
@@ -373,7 +421,8 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     await setDoc(doc(quotesCol(), id), {
       id, ...data,
       updatedAt: serverTimestamp(),
-      ...(editingQuoteId ? {} : { createdAt: serverTimestamp() })
+      updatedBy: currentUser.uid,
+      ...(editingQuoteId ? {} : { createdAt: serverTimestamp(), createdBy: currentUser.uid })
     }, { merge: true });
     if (!editingQuoteId) await ensureClientForCompany(data.empresa, data.contactos);
     quoteModal.classList.add('hidden');
@@ -404,7 +453,7 @@ async function ensureClientForCompany(empresa, contactos) {
     id, empresa,
     nombre: '', email: emails[0] || '',
     telefono: '', cargo: '', notas: '',
-    createdAt: serverTimestamp(),
+    createdAt: serverTimestamp(), createdBy: currentUser.uid,
   });
 }
 
@@ -497,7 +546,8 @@ document.getElementById('clientSave').addEventListener('click', async () => {
     await setDoc(doc(clientsCol(), id), {
       id, ...data,
       updatedAt: serverTimestamp(),
-      ...(editingClientId ? {} : { createdAt: serverTimestamp() })
+      updatedBy: currentUser.uid,
+      ...(editingClientId ? {} : { createdAt: serverTimestamp(), createdBy: currentUser.uid })
     }, { merge: true });
     clientModal.classList.add('hidden');
     showToast('Cliente guardado');
@@ -564,7 +614,7 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 });
 
 document.getElementById('resetBtn').addEventListener('click', async () => {
-  if (!confirm('Esto BORRARÁ todos tus datos de Firestore y volverá a los iniciales. ¿Continuar?')) return;
+  if (!confirm('Esto BORRARÁ todas las cotizaciones y clientes de la empresa y volverá a los datos iniciales. ¿Continuar?')) return;
   try {
     const batch = writeBatch(dbf);
     const [qs, cs] = await Promise.all([getDocs(quotesCol()), getDocs(clientsCol())]);
