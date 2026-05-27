@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SonqollayAPP" />
+  <title>SonqollayAPP</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">S</div>
+      <div>
+        <h1>SonqollayAPP</h1>
+        <p class="subtitle">Clientes y cotizaciones</p>
+      </div>
+    </div>
+    <button id="menuBtn" class="icon-btn" aria-label="Menú">⋮</button>
+  </header>
+
+  <main id="app">
+    <!-- Vista Dashboard -->
+    <section id="view-dashboard" class="view active">
+      <div class="kpis">
+        <div class="kpi">
+          <span class="kpi-label">Cotizaciones</span>
+          <span class="kpi-value" id="kpi-quotes">0</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">Clientes</span>
+          <span class="kpi-value" id="kpi-clients">0</span>
+        </div>
+        <div class="kpi kpi-wide">
+          <span class="kpi-label">Valor total cotizado</span>
+          <span class="kpi-value" id="kpi-total">$ 0</span>
+        </div>
+      </div>
+
+      <h2 class="section-title">Próximos seguimientos</h2>
+      <div id="follow-ups" class="list"></div>
+
+      <h2 class="section-title">Últimas cotizaciones</h2>
+      <div id="recent-quotes" class="list"></div>
+    </section>
+
+    <!-- Vista Cotizaciones -->
+    <section id="view-quotes" class="view">
+      <div class="toolbar">
+        <input id="search-quotes" type="search" placeholder="Buscar cotización, empresa..." />
+      </div>
+      <div id="quotes-list" class="list"></div>
+    </section>
+
+    <!-- Vista Clientes -->
+    <section id="view-clients" class="view">
+      <div class="toolbar">
+        <input id="search-clients" type="search" placeholder="Buscar cliente..." />
+      </div>
+      <div id="clients-list" class="list"></div>
+    </section>
+
+    <!-- Vista Configuración -->
+    <section id="view-settings" class="view">
+      <h2 class="section-title">Datos</h2>
+      <button class="btn btn-block" id="exportBtn">Exportar respaldo (JSON)</button>
+      <label class="btn btn-block btn-outline" for="importFile">Importar respaldo</label>
+      <input type="file" id="importFile" accept="application/json" hidden />
+      <button class="btn btn-block btn-outline" id="exportCsvBtn">Exportar cotizaciones (CSV)</button>
+      <button class="btn btn-block btn-danger" id="resetBtn">Restablecer datos iniciales</button>
+      <p class="hint">Los datos se guardan localmente en tu teléfono. Usa exportar para tener respaldo.</p>
+    </section>
+  </main>
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-view="dashboard">
+      <span class="nav-icon">🏠</span><span>Inicio</span>
+    </button>
+    <button class="nav-btn" data-view="quotes">
+      <span class="nav-icon">📄</span><span>Cotizaciones</span>
+    </button>
+    <button class="fab" id="fab" aria-label="Nuevo">+</button>
+    <button class="nav-btn" data-view="clients">
+      <span class="nav-icon">👥</span><span>Clientes</span>
+    </button>
+    <button class="nav-btn" data-view="settings">
+      <span class="nav-icon">⚙️</span><span>Ajustes</span>
+    </button>
+  </nav>
+
+  <!-- Modal de creación rápida -->
+  <div id="fabMenu" class="sheet hidden">
+    <div class="sheet-content">
+      <h3>Nuevo</h3>
+      <button class="btn btn-block" data-new="quote">📄 Nueva cotización</button>
+      <button class="btn btn-block btn-outline" data-new="client">👥 Nuevo cliente</button>
+      <button class="btn btn-block btn-ghost" id="closeSheet">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Modal formulario cotización -->
+  <div id="quoteModal" class="modal hidden">
+    <div class="modal-content">
+      <header class="modal-header">
+        <button class="icon-btn" id="quoteClose">←</button>
+        <h2 id="quoteTitle">Cotización</h2>
+        <button class="text-btn" id="quoteSave">Guardar</button>
+      </header>
+      <form id="quoteForm" class="form">
+        <label>Empresa
+          <input list="companies" name="empresa" required />
+          <datalist id="companies"></datalist>
+        </label>
+        <label>N° Cotización
+          <input name="numero" required placeholder="P001_v01" />
+        </label>
+        <label>Fecha
+          <input name="fecha" type="date" required />
+        </label>
+        <label>Descripción
+          <textarea name="descripcion" rows="2"></textarea>
+        </label>
+        <label>Valor (CLP)
+          <input name="valor" type="text" inputmode="numeric" placeholder="$ 0" />
+        </label>
+        <label>Contactos (separados por ;)
+          <textarea name="contactos" rows="2" placeholder="correo@ejemplo.com; otro@ejemplo.com"></textarea>
+        </label>
+        <label>Estado
+          <select name="estado">
+            <option value="Borrador">Borrador</option>
+            <option value="Enviada">Enviada</option>
+            <option value="En revisión">En revisión</option>
+            <option value="Adjudicada">Adjudicada</option>
+            <option value="Perdida">Perdida</option>
+          </select>
+        </label>
+        <label>Próximo seguimiento
+          <input name="seguimiento" type="date" />
+        </label>
+        <label>Notas
+          <textarea name="notas" rows="3"></textarea>
+        </label>
+        <button type="button" class="btn btn-block btn-danger" id="quoteDelete" hidden>Eliminar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal formulario cliente -->
+  <div id="clientModal" class="modal hidden">
+    <div class="modal-content">
+      <header class="modal-header">
+        <button class="icon-btn" id="clientClose">←</button>
+        <h2 id="clientTitle">Cliente</h2>
+        <button class="text-btn" id="clientSave">Guardar</button>
+      </header>
+      <form id="clientForm" class="form">
+        <label>Empresa
+          <input name="empresa" required />
+        </label>
+        <label>Persona de contacto
+          <input name="nombre" placeholder="Nombre apellido" />
+        </label>
+        <label>Email
+          <input name="email" type="email" />
+        </label>
+        <label>Teléfono
+          <input name="telefono" type="tel" />
+        </label>
+        <label>Cargo
+          <input name="cargo" />
+        </label>
+        <label>Notas
+          <textarea name="notas" rows="3"></textarea>
+        </label>
+        <button type="button" class="btn btn-block btn-danger" id="clientDelete" hidden>Eliminar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Vista detalle cotización -->
+  <div id="quoteDetail" class="modal hidden">
+    <div class="modal-content">
+      <header class="modal-header">
+        <button class="icon-btn" id="detailClose">←</button>
+        <h2>Detalle</h2>
+        <button class="text-btn" id="detailEdit">Editar</button>
+      </header>
+      <div class="detail-body" id="detailBody"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
