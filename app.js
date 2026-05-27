@@ -162,7 +162,7 @@ async function setupFcm() {
 
   btn.addEventListener('click', async () => {
     try {
-      const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+      const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { type: 'module' });
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') { showToast('Permiso denegado'); return; }
       const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
