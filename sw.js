@@ -1,6 +1,6 @@
 // Service worker de la app (cache de shell para offline).
 // El SW de FCM es ./firebase-messaging-sw.js (registrado aparte).
-const CACHE = 'sonqollay-v7';
+const CACHE = 'sonqollay-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -34,6 +34,23 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
+
+  // Caché dinámico de Firebase SDK (gstatic.com) para soporte offline resiliente
+  if (url.hostname.endsWith('gstatic.com') && url.pathname.includes('/firebasejs/')) {
+    e.respondWith(
+      caches.match(e.request).then(cached => {
+        const network = fetch(e.request).then(res => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+          }
+          return res;
+        });
+        return cached || network;
+      })
+    );
+    return;
+  }
 
   // No interceptar requests a Firebase / Google APIs ni al SDK
   if (

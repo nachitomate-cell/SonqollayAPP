@@ -763,7 +763,7 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
       ...(editingQuoteId ? {} : { createdAt: serverTimestamp(), createdBy: currentUser.uid })
     }, { merge: true });
     logActivity(editingQuoteId ? 'quote_edit' : 'quote_new', `${data.numero} · ${data.empresa}`).catch(() => {});
-    if (!editingQuoteId) await ensureClientForCompany(data.empresa, data.contactos);
+    await ensureClientForCompany(data.empresa, data.contactos);
     quoteModal.classList.add('hidden');
     showToast('Cotización guardada');
   } catch (e) {
@@ -973,14 +973,15 @@ document.getElementById('exportCsvBtn').addEventListener('click', () => {
   a.href = url; a.download = `cotizaciones_${new Date().toISOString().slice(0,10)}.csv`;
   a.click(); URL.revokeObjectURL(url);
 });
-
 document.getElementById('importFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-    if (!data.quotes || !data.clients) throw new Error('Archivo inválido');
+    if (!data || !Array.isArray(data.quotes) || !Array.isArray(data.clients)) {
+      throw new Error('El archivo no tiene un formato de respaldo válido');
+    }
     if (!confirm(`Importar ${data.quotes.length} cotizaciones y ${data.clients.length} contactos?\nSe agregarán a los existentes.`)) return;
 
     // Firestore max 500 ops/batch — split into chunks of 490

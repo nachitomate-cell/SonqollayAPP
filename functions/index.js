@@ -24,6 +24,12 @@ function daysBetween(isoA, isoB) {
   return Math.round((b - a) / 86400000);
 }
 
+function addDaysISO(isoDate, days) {
+  const date = new Date(isoDate + 'T00:00:00Z');
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function formatCLP(v) {
   if (v == null || v === '' || isNaN(v)) return '—';
   return '$ ' + Number(v).toLocaleString('es-CL');
@@ -86,8 +92,16 @@ exports.dailyFollowUpReminders = onSchedule(
   { schedule: '0 9 * * *', timeZone: 'America/Santiago', region: 'us-central1' },
   async () => {
     const today = todayISO();
-    const quotesSnap = await db.collection('quotes').get();
-    logger.info(`Verificando seguimientos · ${today} · ${quotesSnap.size} cotizaciones`);
+    const fourteenDaysAgo = addDaysISO(today, -14);
+    const threeDaysFromNow = addDaysISO(today, 3);
+
+    // Consulta filtrada para obtener solo cotizaciones con seguimiento en el rango de interés
+    const quotesSnap = await db.collection('quotes')
+      .where('seguimiento', '>=', fourteenDaysAgo)
+      .where('seguimiento', '<=', threeDaysFromNow)
+      .get();
+
+    logger.info(`Verificando seguimientos · ${today} · ${quotesSnap.size} cotizaciones filtradas`);
 
     const buckets = { hoy: [], proximos: [], vencidos: [] };
     quotesSnap.forEach(d => {

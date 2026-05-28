@@ -104,7 +104,7 @@ main { padding: 14px 14px 20px; }
 .card[data-estado="Enviada"]    { border-left-color: var(--accent); }
 .card[data-estado="Adjudicada"] { border-left-color: var(--success); }
 .card[data-estado="Perdida"]    { border-left-color: var(--danger); }
-.card[data-estado="Revisión"]   { border-left-color: var(--warn); }
+.card[data-estado="En revisión"] { border-left-color: var(--warn); }
 .card[data-estado="Borrador"]   { border-left-color: var(--muted); }
 
 .card-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
