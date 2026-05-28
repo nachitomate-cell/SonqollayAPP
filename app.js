@@ -4,8 +4,8 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
-  getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc,
-  serverTimestamp, query, orderBy, writeBatch, getDocs,
+  getFirestore, collection, doc, getDoc, onSnapshot, setDoc, deleteDoc,
+  serverTimestamp, query, orderBy, limit, writeBatch, getDocs,
   enableIndexedDbPersistence
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import {
@@ -95,6 +95,219 @@ function skeletonCards(n = 3) {
   }).join('');
 }
 
+// ─── Time helpers ───
+function fmtDuration(sec) {
+  if (!sec || sec < 60) return '< 1m';
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+function timeAgo(date) {
+  const s = Math.round((Date.now() - date.getTime()) / 1000);
+  if (s < 60)  return 'hace un momento';
+  const m = Math.round(s / 60);
+  if (m < 60)  return `hace ${m}m`;
+  const h = Math.round(m / 60);
+  if (h < 24)  return `hace ${h}h`;
+  const d = Math.round(h / 24);
+  if (d < 30)  return `hace ${d}d`;
+  return date.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' });
+}
+
+// ─── Activity logger ───
+async function logActivity(action, detail) {
+  if (!currentUser) return;
+  try {
+    await setDoc(doc(collection(dbf, 'activityLogs'), uid()), {
+      uid: currentUser.uid,
+      email: currentUser.email || '',
+      displayName: currentUser.displayName || currentUser.email || '',
+      photoURL: currentUser.photoURL || '',
+      action, detail: String(detail || ''),
+      sessionId: _sessionId,
+      timestamp: serverTimestamp(),
+    });
+  } catch (_) {}
+}
+
+function _flushScreenTime() {
+  if (!_viewStart) return;
+  const elapsed = Math.round((Date.now() - _viewStart) / 1000);
+  if (['dashboard','quotes','clients','settings'].includes(_activeView))
+    _screenTime[_activeView] = (_screenTime[_activeView] || 0) + elapsed;
+  _viewStart = Date.now();
+}
+
+async function _writeSession(final = false) {
+  if (!_sessionRef || !currentUser) return;
+  _flushScreenTime();
+  const duration = Math.round((Date.now() - (_sessionStart || Date.now())) / 1000);
+  try {
+    await setDoc(_sessionRef, {
+      screenTime: { ..._screenTime }, duration,
+      ...(final ? { endTime: serverTimestamp() } : {}),
+    }, { merge: true });
+  } catch (_) {}
+}
+
+function _scheduleFlush() {
+  clearTimeout(_flushTimer);
+  _flushTimer = setTimeout(async () => { await _writeSession(); _scheduleFlush(); }, 30000);
+}
+
+async function startActivitySession() {
+  if (!currentUser) return;
+  _sessionStart = Date.now();
+  _viewStart = Date.now();
+  _activeView = 'dashboard';
+  _screenTime = { dashboard: 0, quotes: 0, clients: 0, settings: 0 };
+  _sessionRef = doc(dbf, 'sessions', _sessionId);
+  try {
+    await setDoc(_sessionRef, {
+      sessionId: _sessionId,
+      uid: currentUser.uid,
+      email: currentUser.email || '',
+      displayName: currentUser.displayName || currentUser.email || '',
+      photoURL: currentUser.photoURL || '',
+      startTime: serverTimestamp(),
+      endTime: null, duration: 0,
+      screenTime: { dashboard: 0, quotes: 0, clients: 0, settings: 0 },
+    });
+  } catch (_) {}
+  logActivity('login', '');
+  _scheduleFlush();
+}
+
+async function endActivitySession() {
+  clearTimeout(_flushTimer);
+  if (!_sessionRef) return;
+  await logActivity('logout', '');
+  await _writeSession(true);
+  _sessionRef = null;
+}
+
+async function checkAdminStatus() {
+  try {
+    const snap = await getDoc(doc(dbf, 'users', currentUser.uid));
+    isAdmin = snap.exists() && snap.data().isAdmin === true;
+  } catch (_) { isAdmin = false; }
+  document.getElementById('adminNavSection')?.classList.toggle('hidden', !isAdmin);
+}
+
+// ─── Admin subscriptions ───
+function subscribeAdmin() {
+  if (unsubAdminActivity || unsubAdminSessions) return;
+  const actQ = query(collection(dbf, 'activityLogs'), orderBy('timestamp', 'desc'), limit(200));
+  const sesQ = query(collection(dbf, 'sessions'),     orderBy('startTime', 'desc'), limit(500));
+
+  unsubAdminActivity = onSnapshot(actQ, snap => {
+    _adminActivity = snap.docs.map(d => d.data());
+    renderAdminUsers(); renderAdminActivity();
+  }, err => { if (err.code === 'permission-denied') renderAdminGate(false); });
+
+  unsubAdminSessions = onSnapshot(sesQ, snap => {
+    _adminSessions = snap.docs.map(d => d.data());
+    renderAdminUsers();
+  }, () => {});
+}
+
+function unsubscribeAdmin() {
+  if (unsubAdminActivity) { unsubAdminActivity(); unsubAdminActivity = null; }
+  if (unsubAdminSessions) { unsubAdminSessions(); unsubAdminSessions = null; }
+}
+
+function renderAdminGate(hasAccess) {
+  const gate    = document.getElementById('adminGate');
+  const content = document.getElementById('adminContent');
+  if (gate)    gate.style.display    = hasAccess ? 'none' : '';
+  if (content) content.style.display = hasAccess ? ''     : 'none';
+}
+
+function renderAdminUsers() {
+  const el = document.getElementById('admin-users');
+  if (!el) return;
+  const labels = { dashboard: 'Inicio', quotes: 'Cotizaciones', clients: 'Clientes', settings: 'Ajustes' };
+
+  const map = {};
+  _adminSessions.forEach(s => {
+    if (!map[s.uid]) map[s.uid] = {
+      uid: s.uid, displayName: s.displayName, email: s.email, photoURL: s.photoURL,
+      sessions: 0, totalTime: 0,
+      screenTime: { dashboard: 0, quotes: 0, clients: 0, settings: 0 },
+      lastSeen: null,
+    };
+    const u = map[s.uid];
+    u.sessions++;
+    u.totalTime += s.duration || 0;
+    ['dashboard','quotes','clients','settings'].forEach(v => { u.screenTime[v] += s.screenTime?.[v] || 0; });
+    const t = s.startTime?.toDate?.();
+    if (t && (!u.lastSeen || t > u.lastSeen)) u.lastSeen = t;
+  });
+
+  const users = Object.values(map).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+  if (!users.length) { el.innerHTML = '<div class="empty"><span>Sin sesiones registradas aún</span></div>'; return; }
+
+  el.innerHTML = users.map(u => {
+    const totalST = Object.values(u.screenTime).reduce((s, v) => s + v, 0);
+    const bars = ['dashboard','quotes','clients','settings'].map(v => {
+      const pct = totalST > 0 ? Math.round(u.screenTime[v] / totalST * 100) : 0;
+      return `<div class="st-row">
+        <span class="st-label">${labels[v]}</span>
+        <div class="st-track"><div class="st-bar" style="width:${pct}%"></div></div>
+        <span class="st-val">${fmtDuration(u.screenTime[v])}</span>
+      </div>`;
+    }).join('');
+    const actionCount = _adminActivity.filter(a => a.uid === u.uid && !['login','logout'].includes(a.action)).length;
+    const init = (u.displayName || u.email || '?').trim()[0].toUpperCase();
+    return `<div class="admin-user-card">
+      <div class="auc-header">
+        ${u.photoURL ? `<img class="auc-avatar" src="${escapeHtml(u.photoURL)}" alt="" />`
+                     : `<div class="auc-avatar auc-avatar-init">${escapeHtml(init)}</div>`}
+        <div class="auc-info">
+          <span class="auc-name">${escapeHtml(u.displayName || u.email)}</span>
+          <span class="auc-email">${escapeHtml(u.email)}</span>
+        </div>
+        <div class="auc-stats">
+          <span class="auc-stat-big">${fmtDuration(u.totalTime)}</span>
+          <span class="auc-stat-sm">${u.sessions} sesión${u.sessions !== 1 ? 'es' : ''}</span>
+          ${u.lastSeen ? `<span class="auc-stat-sm muted">${timeAgo(u.lastSeen)}</span>` : ''}
+        </div>
+      </div>
+      <div class="auc-st">${bars}</div>
+      ${actionCount ? `<div class="auc-foot">${actionCount} acciones registradas</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderAdminActivity() {
+  const el = document.getElementById('admin-activity');
+  if (!el) return;
+  const cfg = {
+    login:         { text: 'inició sesión',        color: 'var(--success)' },
+    logout:        { text: 'cerró sesión',          color: 'var(--muted)'   },
+    quote_new:     { text: 'creó cotización',       color: 'var(--accent)'  },
+    quote_edit:    { text: 'editó cotización',      color: 'var(--warn)'    },
+    quote_delete:  { text: 'eliminó cotización',    color: 'var(--danger)'  },
+    client_new:    { text: 'creó cliente',          color: 'var(--accent)'  },
+    client_edit:   { text: 'editó cliente',         color: 'var(--warn)'    },
+    client_delete: { text: 'eliminó cliente',       color: 'var(--danger)'  },
+  };
+  const items = _adminActivity.slice(0, 80);
+  if (!items.length) { el.innerHTML = '<div style="padding:20px 0;text-align:center;color:var(--muted);font-size:13px">Sin actividad registrada aún</div>'; return; }
+  el.innerHTML = items.map(a => {
+    const c = cfg[a.action] || { text: a.action, color: 'var(--muted)' };
+    const when = a.timestamp?.toDate ? timeAgo(a.timestamp.toDate()) : '—';
+    return `<div class="act-item">
+      <div class="act-dot" style="background:${c.color}"></div>
+      <div class="act-body">
+        <span class="act-who">${escapeHtml(a.displayName || a.email)}</span>
+        <span class="act-what">${c.text}</span>
+        ${a.detail ? `<span class="act-detail">${escapeHtml(a.detail)}</span>` : ''}
+      </div>
+      <span class="act-time">${when}</span>
+    </div>`;
+  }).join('');
+}
+
 // ---------- Estado en memoria ----------
 let currentUser = null;
 let quotes = [];
@@ -103,6 +316,20 @@ let unsubQuotes = null;
 let unsubClients = null;
 let quotesLoaded = false;
 let clientsLoaded = false;
+
+// ─── Activity tracking ───
+const _sessionId = uid();
+let _sessionStart = null;
+let _viewStart = null;
+let _activeView = 'dashboard';
+let _screenTime = { dashboard: 0, quotes: 0, clients: 0, settings: 0 };
+let _sessionRef = null;
+let _flushTimer = null;
+let isAdmin = false;
+let unsubAdminActivity = null;
+let unsubAdminSessions = null;
+let _adminSessions = [];
+let _adminActivity = [];
 
 // Colecciones compartidas (toda la empresa)
 const quotesCol = () => collection(dbf, 'quotes');
@@ -129,11 +356,14 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
 // ---------- Auth ----------
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
+    await endActivitySession();
+    unsubscribeAdmin();
     if (unsubQuotes) { unsubQuotes(); unsubQuotes = null; }
     if (unsubClients) { unsubClients(); unsubClients = null; }
     currentUser = null;
     quotesLoaded = false;
     clientsLoaded = false;
+    isAdmin = false;
     hideSplash();
     showLoginScreen();
     return;
@@ -142,9 +372,11 @@ onAuthStateChanged(auth, async (user) => {
   hideLoginScreen();
   await saveUserProfile(user);
   renderUserInfo(user);
+  await checkAdminStatus();
   await maybeSeed();
   renderAll();
   subscribe();
+  startActivitySession().catch(() => {});
   setupFcm().catch(e => console.warn('FCM setup', e));
 });
 
@@ -385,10 +617,22 @@ function renderCompaniesDatalist() {
 
 // ---------- Navegación ----------
 function showView(name) {
+  const wasAdmin = document.getElementById('view-admin')?.classList.contains('active');
+  if (wasAdmin && name !== 'admin') unsubscribeAdmin();
+
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === name));
   window.scrollTo(0, 0);
+
+  _flushScreenTime();
+  _activeView = name;
+  _viewStart = Date.now();
+
+  if (name === 'admin') {
+    renderAdminGate(isAdmin);
+    if (isAdmin) subscribeAdmin();
+  }
 }
 document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
 
@@ -462,6 +706,7 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
       updatedBy: currentUser.uid,
       ...(editingQuoteId ? {} : { createdAt: serverTimestamp(), createdBy: currentUser.uid })
     }, { merge: true });
+    logActivity(editingQuoteId ? 'quote_edit' : 'quote_new', `${data.numero} · ${data.empresa}`).catch(() => {});
     if (!editingQuoteId) await ensureClientForCompany(data.empresa, data.contactos);
     quoteModal.classList.add('hidden');
     showToast('Cotización guardada');
@@ -474,7 +719,9 @@ document.getElementById('quoteDelete').addEventListener('click', async () => {
   if (!editingQuoteId) return;
   if (!confirm('¿Eliminar esta cotización?')) return;
   try {
+    const qDel = quotes.find(x => x.id === editingQuoteId);
     await deleteDoc(doc(quotesCol(), editingQuoteId));
+    if (qDel) logActivity('quote_delete', `${qDel.numero} · ${qDel.empresa}`).catch(() => {});
     quoteModal.classList.add('hidden');
     showToast('Cotización eliminada');
   } catch (e) {
@@ -587,6 +834,7 @@ document.getElementById('clientSave').addEventListener('click', async () => {
       updatedBy: currentUser.uid,
       ...(editingClientId ? {} : { createdAt: serverTimestamp(), createdBy: currentUser.uid })
     }, { merge: true });
+    logActivity(editingClientId ? 'client_edit' : 'client_new', data.empresa).catch(() => {});
     clientModal.classList.add('hidden');
     showToast('Cliente guardado');
   } catch (e) {
@@ -597,7 +845,9 @@ document.getElementById('clientSave').addEventListener('click', async () => {
 document.getElementById('clientDelete').addEventListener('click', async () => {
   if (!editingClientId) return;
   if (!confirm('¿Eliminar este cliente?')) return;
+  const cDel = clients.find(x => x.id === editingClientId);
   await deleteDoc(doc(clientsCol(), editingClientId));
+  if (cDel) logActivity('client_delete', cDel.empresa).catch(() => {});
   clientModal.classList.add('hidden');
   showToast('Cliente eliminado');
 });
@@ -663,6 +913,21 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
     showToast('Datos restablecidos');
   } catch (e) {
     showToast('Error: ' + e.message);
+  }
+});
+
+// ---------- Admin navigation ----------
+document.getElementById('adminNavBtn')?.addEventListener('click', () => showView('admin'));
+document.getElementById('adminBackBtn')?.addEventListener('click', () => showView('settings'));
+
+// ---------- Screen time: pause/resume on visibility change ----------
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    _flushScreenTime();
+    _writeSession().catch(() => {});
+  } else {
+    _viewStart = Date.now();
+    _scheduleFlush();
   }
 });
 
