@@ -68,6 +68,18 @@ const daysUntil = (iso) => {
 };
 const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+function getSeguimientoStatus(q) {
+  if (!q.seguimiento) return null;
+  const estado = (q.estado || '').toLowerCase();
+  if (estado === 'adjudicada' || estado === 'perdida') return null;
+  const d = daysUntil(q.seguimiento);
+  if (d === 0)  return { key: 'red',    label: 'Vence hoy' };
+  if (d < 0)    return { key: 'red',    label: d === -1 ? 'Venció ayer' : `Venció hace ${-d}d` };
+  if (d <= 3)   return { key: 'yellow', label: `Vence en ${d}d` };
+  if (d <= 30)  return { key: 'green',  label: `En ${d}d` };
+  return               { key: 'muted',  label: formatDate(q.seguimiento) };
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -503,6 +515,44 @@ function renderDashboard() {
   const total = quotes.reduce((s, q) => s + (Number(q.valor) || 0), 0);
   document.getElementById('kpi-total').textContent = formatCLP(total);
 
+  // Semáforo summary
+  const smEl = document.getElementById('semaforo-summary');
+  if (smEl) {
+    if (!quotesLoaded) {
+      smEl.innerHTML = '';
+    } else {
+      const active = quotes.filter(q => {
+        if (!q.seguimiento) return false;
+        const e = (q.estado || '').toLowerCase();
+        return e !== 'adjudicada' && e !== 'perdida';
+      });
+      if (!active.length) {
+        smEl.innerHTML = '';
+      } else {
+        const red    = active.filter(q => daysUntil(q.seguimiento) <= 0).length;
+        const yellow = active.filter(q => { const d = daysUntil(q.seguimiento); return d > 0 && d <= 3; }).length;
+        const green  = active.filter(q => daysUntil(q.seguimiento) > 3).length;
+        smEl.innerHTML = `<div class="semaforo-summary">
+          <div class="ss-item${red === 0 ? ' zero' : ''}">
+            <span class="ss-dot red"></span>
+            <span class="ss-count red">${red}</span>
+            <span class="ss-lbl">Vencido${red !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="ss-item${yellow === 0 ? ' zero' : ''}">
+            <span class="ss-dot yellow"></span>
+            <span class="ss-count yellow">${yellow}</span>
+            <span class="ss-lbl">Próximo${yellow !== 1 ? 's' : ''}</span>
+          </div>
+          <div class="ss-item${green === 0 ? ' zero' : ''}">
+            <span class="ss-dot green"></span>
+            <span class="ss-count green">${green}</span>
+            <span class="ss-lbl">Al día</span>
+          </div>
+        </div>`;
+      }
+    }
+  }
+
   const followUps = quotes
     .filter(q => q.seguimiento)
     .sort((a, b) => a.seguimiento.localeCompare(b.seguimiento))
@@ -513,14 +563,7 @@ function renderDashboard() {
   } else if (!followUps.length) {
     fuEl.innerHTML = '<div class="empty">Sin seguimientos programados</div>';
   } else {
-    fuEl.innerHTML = followUps.map(q => {
-      const d = daysUntil(q.seguimiento);
-      let label = `${formatDate(q.seguimiento)}`;
-      if (d === 0) label += ' · Hoy';
-      else if (d > 0) label += ` · en ${d}d`;
-      else label += ` · hace ${-d}d`;
-      return cardQuoteHtml(q, label);
-    }).join('');
+    fuEl.innerHTML = followUps.map(q => cardQuoteHtml(q)).join('');
     bindQuoteCards(fuEl);
   }
 
@@ -538,8 +581,9 @@ function renderDashboard() {
   }
 }
 
-function cardQuoteHtml(q, extra) {
+function cardQuoteHtml(q) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
+  const sm = getSeguimientoStatus(q);
   return `
     <div class="card" data-quote-id="${q.id}" data-estado="${escapeHtml(q.estado || 'Borrador')}">
       <div class="card-row">
@@ -548,9 +592,14 @@ function cardQuoteHtml(q, extra) {
       </div>
       <div class="card-sub">${escapeHtml(q.descripcion || '—')}</div>
       <div class="card-row">
-        <span class="card-meta">${formatDate(q.fecha)}${extra ? ' · ' + escapeHtml(extra) : ''}</span>
+        <span class="card-meta">${formatDate(q.fecha)}</span>
         <span class="card-meta"><strong style="color:var(--text)">${formatCLP(q.valor)}</strong></span>
       </div>
+      ${sm ? `<div class="sm-row">
+        <span class="sm-dot ${sm.key}${sm.key === 'red' ? ' pulse' : ''}"></span>
+        <span class="sm-label ${sm.key}">${sm.label}</span>
+        <span class="sm-date">${formatDate(q.seguimiento)}</span>
+      </div>` : ''}
     </div>`;
 }
 
@@ -752,6 +801,7 @@ function openQuoteDetail(id) {
   detailQuoteId = id;
   const emails = (q.contactos || '').split(';').map(s => s.trim()).filter(Boolean);
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
+  const sm = getSeguimientoStatus(q);
 
   document.getElementById('detailBody').innerHTML = `
     <h3>${escapeHtml(q.numero)}</h3>
@@ -761,7 +811,11 @@ function openQuoteDetail(id) {
     <div class="detail-row"><span class="lbl">Fecha</span><span class="val">${formatDate(q.fecha)}</span></div>
     <div class="detail-row"><span class="lbl">Valor</span><span class="val"><strong>${formatCLP(q.valor)}</strong></span></div>
     <div class="detail-row"><span class="lbl">Descripción</span><span class="val">${escapeHtml(q.descripcion || '—')}</span></div>
-    <div class="detail-row"><span class="lbl">Seguimiento</span><span class="val">${q.seguimiento ? formatDate(q.seguimiento) : '—'}</span></div>
+    <div class="detail-row"><span class="lbl">Seguimiento</span><span class="val">${
+      q.seguimiento
+        ? formatDate(q.seguimiento) + (sm ? ` <span class="semaforo-tag ${sm.key}">${sm.label}</span>` : '')
+        : '—'
+    }</span></div>
     <div class="detail-row"><span class="lbl">Contactos</span><span class="val">${
       emails.length
         ? emails.map(e => `<div><a href="mailto:${escapeHtml(e)}">${escapeHtml(e)}</a></div>`).join('')
