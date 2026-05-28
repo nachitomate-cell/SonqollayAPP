@@ -66,6 +66,11 @@ const daysUntil = (iso) => {
   const x = new Date(iso); x.setHours(0,0,0,0);
   return Math.round((x - t) / 86400000);
 };
+function daysSinceUpdated(q) {
+  if (q.updatedAt?.toDate) return Math.round((Date.now() - q.updatedAt.toDate().getTime()) / 86400000);
+  if (q.fecha) return Math.round((Date.now() - new Date(q.fecha).getTime()) / 86400000);
+  return 0;
+}
 const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function getSeguimientoStatus(q) {
@@ -328,6 +333,7 @@ let unsubQuotes = null;
 let unsubClients = null;
 let quotesLoaded = false;
 let clientsLoaded = false;
+let _quotesView = 'list';
 
 // ─── Activity tracking ───
 const _sessionId = uid();
@@ -381,6 +387,7 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
   currentUser = user;
+  renderGreeting();
   hideLoginScreen();
   await saveUserProfile(user);
   renderUserInfo(user);
@@ -501,6 +508,56 @@ async function setupFcm() {
   });
 }
 
+// ---------- Greeting ----------
+function renderGreeting() {
+  const grEl = document.getElementById('hoyGreeting');
+  const dtEl = document.getElementById('hoyDate');
+  if (!grEl) return;
+  const h = new Date().getHours();
+  const saludo = h < 12 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
+  const nombre = currentUser?.displayName?.split(' ')[0] || '';
+  grEl.textContent = nombre ? `${saludo}, ${nombre}` : saludo;
+  const now = new Date();
+  const dias = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  dtEl.textContent = `${dias[now.getDay()]} ${now.getDate()} ${meses[now.getMonth()]}`;
+}
+
+// ---------- Hoy Urgente ----------
+function renderHoyUrgente() {
+  const el = document.getElementById('hoy-urgente-section');
+  if (!el || !quotesLoaded) return;
+
+  const overdue = quotes.filter(q => {
+    if (!q.seguimiento) return false;
+    const e = (q.estado || '').toLowerCase();
+    if (e === 'adjudicada' || e === 'perdida') return false;
+    return daysUntil(q.seguimiento) <= 0;
+  }).sort((a, b) => a.seguimiento.localeCompare(b.seguimiento));
+
+  const sinRespuesta = quotes.filter(q => {
+    const e = (q.estado || '').toLowerCase();
+    if (e !== 'enviada' && e !== 'en revisión') return false;
+    return daysSinceUpdated(q) >= 14;
+  }).sort((a, b) => daysSinceUpdated(b) - daysSinceUpdated(a));
+
+  let html = '';
+  if (overdue.length) {
+    html += `<div class="hoy-section-header urgent">
+      <span class="hoy-dot urgent"></span>Requieren seguimiento
+    </div>
+    <div class="list">${overdue.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>`;
+  }
+  if (sinRespuesta.length) {
+    html += `<div class="hoy-section-header warn" style="margin-top:${overdue.length?16:0}px">
+      <span class="hoy-dot warn"></span>Sin respuesta +14 días
+    </div>
+    <div class="list">${sinRespuesta.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>`;
+  }
+  el.innerHTML = html;
+  if (html) bindQuoteCards(el);
+}
+
 // ---------- Render ----------
 function renderAll() {
   renderDashboard();
@@ -510,6 +567,8 @@ function renderAll() {
 }
 
 function renderDashboard() {
+  renderGreeting();
+  renderHoyUrgente();
   document.getElementById('kpi-quotes').textContent = quotes.length;
   document.getElementById('kpi-clients').textContent = clients.length;
   const total = quotes.reduce((s, q) => s + (Number(q.valor) || 0), 0);
@@ -581,7 +640,7 @@ function renderDashboard() {
   }
 }
 
-function cardQuoteHtml(q) {
+function cardQuoteHtml(q, opts = {}) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
   const sm = getSeguimientoStatus(q);
   return `
@@ -601,6 +660,7 @@ function cardQuoteHtml(q) {
         <span class="sm-date">${formatDate(q.seguimiento)}</span>
         <svg class="sm-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
       </div>` : ''}
+      ${opts.registrar ? `<button class="btn-registrar" data-registrar-id="${q.id}">📞 Registrar contacto</button>` : ''}
     </div>`;
 }
 
@@ -614,9 +674,16 @@ function bindQuoteCards(root) {
       openSeguimientoSheet(el.dataset.segId);
     });
   });
+  root.querySelectorAll('[data-registrar-id]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openSeguimientoSheet(el.dataset.registrarId);
+    });
+  });
 }
 
 function renderQuotes() {
+  if (_quotesView === 'pipeline') { renderPipeline(); return; }
   if (!quotesLoaded) { document.getElementById('quotes-list').innerHTML = skeletonCards(5); return; }
   const q = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
   let list = [...quotes].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
@@ -951,7 +1018,10 @@ document.getElementById('clientDelete').addEventListener('click', async () => {
 });
 
 // ---------- Buscadores ----------
-document.getElementById('search-quotes').addEventListener('input', renderQuotes);
+document.getElementById('search-quotes').addEventListener('input', () => {
+  if (_quotesView === 'pipeline') { renderPipeline(); return; }
+  renderQuotes();
+});
 document.getElementById('search-clients').addEventListener('input', renderClients);
 
 // ---------- Settings ----------
@@ -1032,7 +1102,8 @@ function addDays(n) {
 
 function _syncSegChips(dateVal) {
   document.querySelectorAll('#segChips .seg-chip').forEach(chip => {
-    chip.classList.toggle('active', addDays(parseInt(chip.dataset.days)) === dateVal);
+    if (chip.dataset.days === 'none') chip.classList.toggle('active', !dateVal);
+    else chip.classList.toggle('active', addDays(parseInt(chip.dataset.days)) === dateVal);
   });
 }
 
@@ -1041,7 +1112,7 @@ function openSeguimientoSheet(id) {
   if (!q) return;
   _segQuoteId = id;
 
-  document.getElementById('segSheetTitle').textContent = `${q.numero} · ${q.empresa}`;
+  document.getElementById('segSheetTitle').textContent = `Registrar contacto · ${q.numero} · ${q.empresa}`;
 
   const sm = getSeguimientoStatus(q);
   const currEl = document.getElementById('segSheetCurrent');
@@ -1053,6 +1124,18 @@ function openSeguimientoSheet(id) {
        </div>`
     : '';
 
+  const ESTADOS = ['Borrador','Enviada','En revisión','Adjudicada','Perdida'];
+  const estadoEl = document.getElementById('segEstadoChips');
+  estadoEl.innerHTML = ESTADOS.map(e =>
+    `<button class="seg-estado-chip${q.estado === e ? ' active' : ''}" data-estado="${escapeHtml(e)}">${escapeHtml(e)}</button>`
+  ).join('');
+  estadoEl.querySelectorAll('.seg-estado-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      estadoEl.querySelectorAll('.seg-estado-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+    });
+  });
+
   const defaultDate = q.seguimiento || addDays(7);
   document.getElementById('segDateInput').value = defaultDate;
   document.getElementById('segNoteInput').value = '';
@@ -1063,9 +1146,14 @@ function openSeguimientoSheet(id) {
 document.getElementById('segChips').addEventListener('click', (e) => {
   const chip = e.target.closest('.seg-chip');
   if (!chip) return;
-  const newDate = addDays(parseInt(chip.dataset.days));
-  document.getElementById('segDateInput').value = newDate;
-  _syncSegChips(newDate);
+  if (chip.dataset.days === 'none') {
+    document.getElementById('segDateInput').value = '';
+    _syncSegChips('');
+  } else {
+    const newDate = addDays(parseInt(chip.dataset.days));
+    document.getElementById('segDateInput').value = newDate;
+    _syncSegChips(newDate);
+  }
 });
 
 document.getElementById('segDateInput').addEventListener('input', (e) => {
@@ -1077,13 +1165,20 @@ document.getElementById('segCancelBtn').addEventListener('click', () => {
 });
 
 document.getElementById('segSaveBtn').addEventListener('click', async () => {
-  const newDate = document.getElementById('segDateInput').value;
   const note = document.getElementById('segNoteInput').value.trim();
-  if (!newDate || !_segQuoteId) return;
+  const newDate = document.getElementById('segDateInput').value;
+  const newEstado = document.getElementById('segEstadoChips')?.querySelector('.seg-estado-chip.active')?.dataset.estado;
+  if (!_segQuoteId) return;
   const q = quotes.find(x => x.id === _segQuoteId);
   if (!q) return;
 
-  const updates = { seguimiento: newDate, updatedAt: serverTimestamp(), updatedBy: currentUser.uid };
+  const estadoCambio = newEstado && newEstado !== q.estado;
+  if (!note && !newDate && !estadoCambio) { showToast('Sin cambios'); return; }
+
+  const updates = { updatedAt: serverTimestamp(), updatedBy: currentUser.uid };
+  if (newDate) updates.seguimiento = newDate;
+  if (newDate === '') updates.seguimiento = '';
+  if (estadoCambio) updates.estado = newEstado;
   if (note) {
     const now = new Date();
     const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -1094,9 +1189,10 @@ document.getElementById('segSaveBtn').addEventListener('click', async () => {
   }
   try {
     await setDoc(doc(quotesCol(), _segQuoteId), updates, { merge: true });
-    logActivity('quote_seguimiento', `${q.numero}: → ${newDate}`).catch(() => {});
+    const actions = [note && 'nota', estadoCambio && `→ ${newEstado}`, newDate && `seg. ${formatDate(newDate)}`].filter(Boolean);
+    logActivity('quote_contacto', `${q.numero}: ${actions.join(', ')}`).catch(() => {});
     document.getElementById('seguimientoSheet').classList.add('hidden');
-    showToast('Seguimiento actualizado');
+    showToast('Guardado');
     if (detailQuoteId === _segQuoteId) openQuoteDetail(_segQuoteId);
   } catch (e) {
     showToast('Error: ' + e.message);
@@ -1287,6 +1383,58 @@ document.addEventListener('visibilitychange', () => {
     _viewStart = Date.now();
     _scheduleFlush();
   }
+});
+
+// ---------- Pipeline view ----------
+function renderPipeline() {
+  const el = document.getElementById('pipeline-view');
+  if (!el) return;
+  const PIPELINE = [
+    { estado: 'En revisión', dot: 'warn',    open: true  },
+    { estado: 'Enviada',     dot: 'accent',   open: true  },
+    { estado: 'Borrador',    dot: 'muted',    open: false },
+    { estado: 'Adjudicada',  dot: 'success',  open: false },
+    { estado: 'Perdida',     dot: 'danger',   open: false },
+  ];
+  const searchVal = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
+  el.innerHTML = PIPELINE.map(({ estado, dot, open }) => {
+    let group = quotes.filter(q => (q.estado || 'Borrador') === estado);
+    if (searchVal) group = group.filter(q =>
+      (q.empresa||'').toLowerCase().includes(searchVal) ||
+      (q.numero||'').toLowerCase().includes(searchVal) ||
+      (q.descripcion||'').toLowerCase().includes(searchVal)
+    );
+    const total = group.reduce((s, q) => s + (Number(q.valor) || 0), 0);
+    return `<div class="pipeline-group${open ? ' open' : ''}" data-pg="${escapeHtml(estado)}">
+      <div class="pipeline-group-header">
+        <span class="pg-dot ${dot}"></span>
+        <span class="pg-name">${escapeHtml(estado)}</span>
+        <span class="pg-count">${group.length}</span>
+        ${total ? `<span class="pg-total">${formatCLP(total)}</span>` : ''}
+        <svg class="pg-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+      </div>
+      <div class="pipeline-group-body">
+        ${group.length ? group.map(q => cardQuoteHtml(q)).join('') : '<div class="pg-empty">Sin cotizaciones</div>'}
+      </div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.pipeline-group-header').forEach(h => {
+    h.addEventListener('click', () => h.closest('.pipeline-group').classList.toggle('open'));
+  });
+  bindQuoteCards(el);
+}
+
+document.getElementById('quotesViewToggle')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-vtoggle]');
+  if (!btn) return;
+  _quotesView = btn.dataset.vtoggle;
+  document.querySelectorAll('#quotesViewToggle .vtoggle-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.vtoggle === _quotesView));
+  document.getElementById('quotes-list').classList.toggle('hidden', _quotesView === 'pipeline');
+  document.getElementById('pipeline-view').classList.toggle('hidden', _quotesView === 'list');
+  if (_quotesView === 'pipeline') renderPipeline();
+  else renderQuotes();
 });
 
 // ---------- PWA service worker ----------

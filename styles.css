@@ -687,6 +687,94 @@ main { padding: 14px 14px 20px; }
 }
 .seg-note:focus { outline: none; border-color: rgba(56,189,248,.6); }
 
+/* ── Greeting ── */
+.hoy-greeting { padding: 4px 2px 16px; }
+.greeting-text { font-family: var(--font-title); font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: -.02em; }
+.greeting-date { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* ── Hoy urgente ── */
+.hoy-section-header {
+  display: flex; align-items: center; gap: 7px;
+  margin: 18px 0 8px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+}
+.hoy-section-header.urgent { color: var(--danger); }
+.hoy-section-header.warn   { color: var(--warn); }
+.hoy-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.hoy-dot.urgent { background: var(--danger); animation: smPulse 1.4s ease-in-out infinite; }
+.hoy-dot.warn   { background: var(--warn); }
+
+/* ── Registrar button on cards ── */
+.btn-registrar {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  width: 100%; margin-top: 4px;
+  background: rgba(56,189,248,.07); border: 1px solid rgba(56,189,248,.18);
+  color: var(--accent); border-radius: var(--radius-sm);
+  padding: 7px 12px; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all var(--transition);
+}
+.btn-registrar:hover { background: rgba(56,189,248,.14); }
+.btn-registrar:active { transform: scale(.98); }
+
+/* ── Estado chips inside seguimiento sheet ── */
+.seg-estado-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg-estado-chip {
+  border: 1.5px solid var(--border); background: transparent; color: var(--muted);
+  border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all var(--transition);
+}
+.seg-estado-chip:hover { border-color: var(--accent); color: var(--accent); }
+.seg-estado-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(56,189,248,.1); }
+.seg-estado-chip[data-estado="Adjudicada"].active { border-color: var(--success); color: var(--success); background: rgba(52,211,153,.1); }
+.seg-estado-chip[data-estado="Perdida"].active    { border-color: var(--danger);  color: var(--danger);  background: rgba(248,113,113,.1); }
+.seg-chip[data-days="none"] { color: var(--muted); font-size: 12px; }
+.seg-chip[data-days="none"].active { border-color: var(--muted); background: rgba(107,140,173,.1); color: var(--text); }
+
+/* ── Pipeline view ── */
+.view-toggle {
+  display: flex; background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 3px; gap: 3px; margin-bottom: 12px;
+}
+.vtoggle-btn {
+  flex: 1; border: none; background: transparent; color: var(--muted);
+  border-radius: calc(var(--radius-sm) - 3px); padding: 7px 10px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  transition: all var(--transition);
+}
+.vtoggle-btn.active { background: var(--card-2); color: var(--text); box-shadow: var(--shadow-sm); }
+.pipeline-group { margin-bottom: 8px; }
+.pipeline-group-header {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+  cursor: pointer; user-select: none;
+  transition: background var(--transition);
+}
+.pipeline-group-header:hover { background: var(--card-2); }
+.pipeline-group.open .pipeline-group-header {
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.pg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.pg-dot.accent  { background: var(--accent); }
+.pg-dot.warn    { background: var(--warn); }
+.pg-dot.success { background: var(--success); }
+.pg-dot.danger  { background: var(--danger); }
+.pg-dot.muted   { background: var(--muted); }
+.pg-name { font-weight: 700; font-size: 14px; flex: 1; }
+.pg-count { font-size: 12px; color: var(--muted); background: var(--bg); border-radius: 999px; padding: 2px 8px; }
+.pg-total { font-size: 12px; font-weight: 700; color: var(--accent); }
+.pg-arrow { color: var(--muted); transition: transform var(--transition); flex-shrink: 0; }
+.pipeline-group.open .pg-arrow { transform: rotate(180deg); }
+.pipeline-group-body {
+  display: none;
+  background: var(--bg-2); border: 1px solid var(--border); border-top: none;
+  border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius);
+  padding: 10px; flex-direction: column; gap: 8px;
+}
+.pipeline-group.open .pipeline-group-body { display: flex; }
+.pg-empty { font-size: 13px; color: var(--muted); padding: 8px 4px; }
+
 /* ── Voice Dictation ── */
 .dictate-wrap { position: relative; }
 .dictate-wrap textarea { padding-right: 38px; }
