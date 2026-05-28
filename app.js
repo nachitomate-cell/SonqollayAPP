@@ -1,7 +1,8 @@
 // SonqollayAPP - Firestore + FCM + Google Auth
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDoc, onSnapshot, setDoc, deleteDoc,
@@ -368,6 +369,81 @@ document.getElementById('googleSignInBtn').addEventListener('click', async () =>
   } catch (e) {
     console.error('Google sign-in error', e);
     showToast('Error al iniciar sesión');
+  }
+});
+
+// ---------- Email/Password Auth ----------
+let _emailAuthMode = 'login'; // 'login' | 'register'
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function hideLoginError() {
+  document.getElementById('loginError').classList.add('hidden');
+}
+
+function emailAuthError(code) {
+  const map = {
+    'auth/user-not-found': 'No existe una cuenta con ese correo.',
+    'auth/wrong-password': 'Contraseña incorrecta.',
+    'auth/invalid-email': 'El correo no es válido.',
+    'auth/email-already-in-use': 'Ya existe una cuenta con ese correo.',
+    'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
+    'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde.',
+    'auth/invalid-credential': 'Correo o contraseña incorrectos.',
+    'auth/network-request-failed': 'Error de conexión. Revisa tu internet.',
+  };
+  return map[code] || 'Error al iniciar sesión. Intenta de nuevo.';
+}
+
+document.getElementById('emailAuthForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  hideLoginError();
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const btn = document.getElementById('emailAuthBtn');
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    if (_emailAuthMode === 'register') {
+      const name = document.getElementById('loginName').value.trim();
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      if (name) await updateProfile(cred.user, { displayName: name });
+    } else {
+      await signInWithEmailAndPassword(auth, email, password);
+    }
+  } catch (err) {
+    showLoginError(emailAuthError(err.code));
+    btn.disabled = false;
+    btn.textContent = _emailAuthMode === 'register' ? 'Crear cuenta' : 'Iniciar sesión';
+  }
+});
+
+document.getElementById('switchModeBtn').addEventListener('click', () => {
+  hideLoginError();
+  _emailAuthMode = _emailAuthMode === 'login' ? 'register' : 'login';
+  const isRegister = _emailAuthMode === 'register';
+  document.getElementById('nameField').classList.toggle('hidden', !isRegister);
+  document.getElementById('emailAuthBtn').textContent = isRegister ? 'Crear cuenta' : 'Iniciar sesión';
+  document.getElementById('switchText').textContent = isRegister ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?';
+  document.getElementById('switchModeBtn').textContent = isRegister ? 'Inicia sesión' : 'Regístrate';
+  document.getElementById('forgotPasswordBtn').style.display = isRegister ? 'none' : '';
+  const pwInput = document.getElementById('loginPassword');
+  pwInput.autocomplete = isRegister ? 'new-password' : 'current-password';
+});
+
+document.getElementById('forgotPasswordBtn').addEventListener('click', async () => {
+  const email = document.getElementById('loginEmail').value.trim();
+  if (!email) { showLoginError('Ingresa tu correo para restablecer la contraseña.'); return; }
+  hideLoginError();
+  try {
+    await sendPasswordResetEmail(auth, email);
+    showToast('Correo de restablecimiento enviado');
+  } catch (err) {
+    showLoginError(emailAuthError(err.code));
   }
 });
 

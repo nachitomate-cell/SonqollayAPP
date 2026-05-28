@@ -35,6 +35,30 @@
       <img src="logo.png" alt="SonqollayAPP" class="login-logo" />
       <h1 class="login-title">SonqollayAPP</h1>
       <p class="login-sub">Gestión de clientes y cotizaciones</p>
+
+      <!-- Email / password form -->
+      <form id="emailAuthForm" class="login-email-form" novalidate>
+        <p id="loginError" class="login-error hidden"></p>
+        <div id="nameField" class="login-field hidden">
+          <input id="loginName" type="text" placeholder="Tu nombre" autocomplete="name" />
+        </div>
+        <div class="login-field">
+          <input id="loginEmail" type="email" placeholder="Correo electrónico" autocomplete="email" />
+        </div>
+        <div class="login-field">
+          <input id="loginPassword" type="password" placeholder="Contraseña" autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn btn-block login-submit" id="emailAuthBtn">Iniciar sesión</button>
+        <button type="button" class="login-forgot" id="forgotPasswordBtn">¿Olvidaste tu contraseña?</button>
+      </form>
+
+      <p class="login-switch">
+        <span id="switchText">¿No tienes cuenta?</span>
+        <button type="button" class="login-switch-btn" id="switchModeBtn">Regístrate</button>
+      </p>
+
+      <div class="login-divider"><span>o</span></div>
+
       <button id="googleSignInBtn" class="btn-google">
         <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
           <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 2.9l5.7-5.7C34.5 6.5 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
