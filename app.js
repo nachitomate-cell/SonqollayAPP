@@ -937,18 +937,24 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
     const text = await file.text();
     const data = JSON.parse(text);
     if (!data.quotes || !data.clients) throw new Error('Archivo inválido');
-    if (!confirm(`Importar ${data.quotes.length} cotizaciones y ${data.clients.length} clientes? Se agregarán a los existentes.`)) return;
-    const batch = writeBatch(dbf);
-    for (const q of data.quotes) {
-      const id = q.id || uid();
-      batch.set(doc(quotesCol(), id), { ...q, id, importedAt: serverTimestamp() }, { merge: true });
+    if (!confirm(`Importar ${data.quotes.length} cotizaciones y ${data.clients.length} contactos?\nSe agregarán a los existentes.`)) return;
+
+    // Firestore max 500 ops/batch — split into chunks of 490
+    const CHUNK = 490;
+    const allOps = [
+      ...data.quotes.map(q => ({ col: quotesCol, doc: q })),
+      ...data.clients.map(c => ({ col: clientsCol, doc: c })),
+    ];
+    showToast('Importando…');
+    for (let i = 0; i < allOps.length; i += CHUNK) {
+      const batch = writeBatch(dbf);
+      allOps.slice(i, i + CHUNK).forEach(({ col, doc: item }) => {
+        const id = item.id || uid();
+        batch.set(doc(col(), id), { ...item, id, importedAt: serverTimestamp() }, { merge: true });
+      });
+      await batch.commit();
     }
-    for (const c of data.clients) {
-      const id = c.id || uid();
-      batch.set(doc(clientsCol(), id), { ...c, id, importedAt: serverTimestamp() }, { merge: true });
-    }
-    await batch.commit();
-    showToast('Respaldo importado');
+    showToast(`Importados: ${data.quotes.length} cotiz. y ${data.clients.length} contactos`);
   } catch (err) {
     showToast('Error: ' + err.message);
   }
