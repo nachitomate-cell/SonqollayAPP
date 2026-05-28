@@ -1291,6 +1291,26 @@ document.addEventListener('visibilitychange', () => {
 // ---------- PWA service worker ----------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      // Detectar nueva versión instalándose
+      const hadController = !!navigator.serviceWorker.controller;
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'activated' && hadController) {
+            document.getElementById('updateBanner')?.classList.remove('hidden');
+          }
+        });
+      });
+    }).catch(() => {});
+
+    // El SW también avisa vía postMessage al activarse
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data?.type === 'SW_UPDATED') {
+        document.getElementById('updateBanner')?.classList.remove('hidden');
+      }
+    });
   });
 }
+
+document.getElementById('updateReload')?.addEventListener('click', () => window.location.reload());
