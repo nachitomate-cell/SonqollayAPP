@@ -76,12 +76,33 @@ function showToast(msg) {
   showToast._t = setTimeout(() => t.classList.add('hidden'), 2400);
 }
 
+function hideSplash() {
+  const el = document.getElementById('splashScreen');
+  if (!el || el.classList.contains('hidden')) return;
+  el.classList.add('hiding');
+  setTimeout(() => el.classList.add('hidden'), 350);
+}
+
+function skeletonCards(n = 3) {
+  const widths = [[68, 52, 38], [62, 59, 38], [74, 45, 38], [56, 66, 38], [70, 50, 38]];
+  return Array.from({ length: n }, (_, i) => {
+    const [w1, w2] = widths[i % widths.length];
+    return `<div class="skeleton-card">
+      <div class="skeleton-line" style="width:${w1}%"></div>
+      <div class="skeleton-line" style="width:${w2}%;animation-delay:.15s"></div>
+      <div class="skeleton-line" style="width:38%;animation-delay:.3s"></div>
+    </div>`;
+  }).join('');
+}
+
 // ---------- Estado en memoria ----------
 let currentUser = null;
 let quotes = [];
 let clients = [];
 let unsubQuotes = null;
 let unsubClients = null;
+let quotesLoaded = false;
+let clientsLoaded = false;
 
 // Colecciones compartidas (toda la empresa)
 const quotesCol = () => collection(dbf, 'quotes');
@@ -111,6 +132,9 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubQuotes) { unsubQuotes(); unsubQuotes = null; }
     if (unsubClients) { unsubClients(); unsubClients = null; }
     currentUser = null;
+    quotesLoaded = false;
+    clientsLoaded = false;
+    hideSplash();
     showLoginScreen();
     return;
   }
@@ -119,6 +143,7 @@ onAuthStateChanged(auth, async (user) => {
   await saveUserProfile(user);
   renderUserInfo(user);
   await maybeSeed();
+  renderAll();
   subscribe();
   setupFcm().catch(e => console.warn('FCM setup', e));
 });
@@ -182,12 +207,16 @@ function subscribe() {
   if (unsubClients) unsubClients();
   unsubQuotes = onSnapshot(query(quotesCol(), orderBy('fecha', 'desc')), (snap) => {
     quotes = snap.docs.map(d => d.data());
+    quotesLoaded = true;
+    if (clientsLoaded) hideSplash();
     renderAll();
   }, (err) => {
     console.error(err); showToast('Error leyendo cotizaciones');
   });
   unsubClients = onSnapshot(query(clientsCol(), orderBy('empresa')), (snap) => {
     clients = snap.docs.map(d => d.data());
+    clientsLoaded = true;
+    if (quotesLoaded) hideSplash();
     renderAll();
   });
 }
@@ -247,7 +276,9 @@ function renderDashboard() {
     .sort((a, b) => a.seguimiento.localeCompare(b.seguimiento))
     .slice(0, 5);
   const fuEl = document.getElementById('follow-ups');
-  if (!followUps.length) {
+  if (!quotesLoaded) {
+    fuEl.innerHTML = skeletonCards(2);
+  } else if (!followUps.length) {
     fuEl.innerHTML = '<div class="empty">Sin seguimientos programados</div>';
   } else {
     fuEl.innerHTML = followUps.map(q => {
@@ -261,14 +292,18 @@ function renderDashboard() {
     bindQuoteCards(fuEl);
   }
 
-  const recent = [...quotes]
-    .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
-    .slice(0, 5);
   const recEl = document.getElementById('recent-quotes');
-  recEl.innerHTML = recent.length
-    ? recent.map(q => cardQuoteHtml(q)).join('')
-    : '<div class="empty">Aún no hay cotizaciones</div>';
-  bindQuoteCards(recEl);
+  if (!quotesLoaded) {
+    recEl.innerHTML = skeletonCards(3);
+  } else {
+    const recent = [...quotes]
+      .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
+      .slice(0, 5);
+    recEl.innerHTML = recent.length
+      ? recent.map(q => cardQuoteHtml(q)).join('')
+      : '<div class="empty">Aún no hay cotizaciones</div>';
+    bindQuoteCards(recEl);
+  }
 }
 
 function cardQuoteHtml(q, extra) {
@@ -294,6 +329,7 @@ function bindQuoteCards(root) {
 }
 
 function renderQuotes() {
+  if (!quotesLoaded) { document.getElementById('quotes-list').innerHTML = skeletonCards(5); return; }
   const q = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
   let list = [...quotes].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
   if (q) {
@@ -312,6 +348,7 @@ function renderQuotes() {
 }
 
 function renderClients() {
+  if (!clientsLoaded) { document.getElementById('clients-list').innerHTML = skeletonCards(4); return; }
   const q = (document.getElementById('search-clients').value || '').toLowerCase().trim();
   let list = [...clients].sort((a, b) => a.empresa.localeCompare(b.empresa));
   if (q) {
