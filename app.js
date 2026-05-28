@@ -595,10 +595,11 @@ function cardQuoteHtml(q) {
         <span class="card-meta">${formatDate(q.fecha)}</span>
         <span class="card-meta"><strong style="color:var(--text)">${formatCLP(q.valor)}</strong></span>
       </div>
-      ${sm ? `<div class="sm-row">
+      ${sm ? `<div class="sm-row tappable" data-seg-id="${q.id}">
         <span class="sm-dot ${sm.key}${sm.key === 'red' ? ' pulse' : ''}"></span>
         <span class="sm-label ${sm.key}">${sm.label}</span>
         <span class="sm-date">${formatDate(q.seguimiento)}</span>
+        <svg class="sm-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
       </div>` : ''}
     </div>`;
 }
@@ -606,6 +607,12 @@ function cardQuoteHtml(q) {
 function bindQuoteCards(root) {
   root.querySelectorAll('[data-quote-id]').forEach(el => {
     el.addEventListener('click', () => openQuoteDetail(el.dataset.quoteId));
+  });
+  root.querySelectorAll('[data-seg-id]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openSeguimientoSheet(el.dataset.segId);
+    });
   });
 }
 
@@ -803,19 +810,34 @@ function openQuoteDetail(id) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
   const sm = getSeguimientoStatus(q);
 
+  const ESTADOS = ['Borrador','Enviada','En revisión','Adjudicada','Perdida'];
   document.getElementById('detailBody').innerHTML = `
     <h3>${escapeHtml(q.numero)}</h3>
     <div class="det-company">${escapeHtml(q.empresa)}</div>
-    <span class="tag estado-${escapeHtml(estadoClass)}">${escapeHtml(q.estado || 'Borrador')}</span>
+
+    <div class="estado-chips" id="estadoChips">
+      ${ESTADOS.map(e => `<button class="estado-chip${q.estado === e ? ' active' : ''}" data-estado="${escapeHtml(e)}">${escapeHtml(e)}</button>`).join('')}
+    </div>
 
     <div class="detail-row"><span class="lbl">Fecha</span><span class="val">${formatDate(q.fecha)}</span></div>
     <div class="detail-row"><span class="lbl">Valor</span><span class="val"><strong>${formatCLP(q.valor)}</strong></span></div>
     <div class="detail-row"><span class="lbl">Descripción</span><span class="val">${escapeHtml(q.descripcion || '—')}</span></div>
-    <div class="detail-row"><span class="lbl">Seguimiento</span><span class="val">${
-      q.seguimiento
-        ? formatDate(q.seguimiento) + (sm ? ` <span class="semaforo-tag ${sm.key}">${sm.label}</span>` : '')
-        : '—'
-    }</span></div>
+
+    <div class="seg-detail-box">
+      <div class="seg-detail-header">
+        <span class="lbl">Seguimiento</span>
+        <button class="btn-seg-link" id="segUpdateBtn">${sm ? '↻ Actualizar' : '＋ Programar'}</button>
+      </div>
+      ${sm
+        ? `<div class="sm-row" style="margin:0">
+             <span class="sm-dot ${sm.key}${sm.key === 'red' ? ' pulse' : ''}"></span>
+             <span class="sm-label ${sm.key}">${sm.label}</span>
+             <span class="sm-date">${formatDate(q.seguimiento)}</span>
+           </div>`
+        : `<span class="seg-no-date">Sin fecha programada</span>`
+      }
+    </div>
+
     <div class="detail-row"><span class="lbl">Contactos</span><span class="val">${
       emails.length
         ? emails.map(e => `<div><a href="mailto:${escapeHtml(e)}">${escapeHtml(e)}</a></div>`).join('')
@@ -826,15 +848,37 @@ function openQuoteDetail(id) {
     <div class="detail-actions">
       ${emails.length ? `<a class="btn" href="mailto:${escapeHtml(emails.join(','))}?subject=${encodeURIComponent('Cotización ' + q.numero + ' - ' + q.empresa)}">✉ Enviar correo</a>` : ''}
       <button class="btn btn-outline" id="detailShare">Compartir</button>
+      <button class="btn btn-outline" id="detailDictate">🎤 Dictar avance</button>
     </div>
   `;
   detailModal.classList.remove('hidden');
+
+  // Estado chips — instant save
+  document.getElementById('estadoChips')?.querySelectorAll('.estado-chip').forEach(chip => {
+    chip.addEventListener('click', async () => {
+      const newEstado = chip.dataset.estado;
+      if (newEstado === q.estado) return;
+      try {
+        await setDoc(doc(quotesCol(), id), { estado: newEstado, updatedAt: serverTimestamp(), updatedBy: currentUser.uid }, { merge: true });
+        logActivity('quote_estado', `${q.numero}: ${newEstado}`).catch(() => {});
+        showToast(`Estado: ${newEstado}`);
+      } catch (e) { showToast('Error: ' + e.message); }
+    });
+  });
+
+  // Seguimiento update button
+  document.getElementById('segUpdateBtn')?.addEventListener('click', () => openSeguimientoSheet(id));
 
   const shareBtn = document.getElementById('detailShare');
   if (shareBtn) shareBtn.addEventListener('click', async () => {
     const text = `${q.numero} · ${q.empresa}\n${q.descripcion || ''}\nFecha: ${formatDate(q.fecha)}\nValor: ${formatCLP(q.valor)}\nEstado: ${q.estado || ''}`;
     if (navigator.share) { try { await navigator.share({ title: q.numero, text }); } catch {} }
     else { try { await navigator.clipboard.writeText(text); showToast('Copiado'); } catch { showToast('No se pudo compartir'); } }
+  });
+
+  document.getElementById('detailDictate')?.addEventListener('click', () => {
+    _dictateTarget = { type: 'quote', id };
+    openDictateSheet('Dictar avance · ' + q.numero);
   });
 }
 
@@ -975,6 +1019,259 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
     showToast('Error: ' + e.message);
   }
 });
+
+// ---------- Seguimiento Sheet ----------
+let _segQuoteId = null;
+
+function addDays(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function _syncSegChips(dateVal) {
+  document.querySelectorAll('#segChips .seg-chip').forEach(chip => {
+    chip.classList.toggle('active', addDays(parseInt(chip.dataset.days)) === dateVal);
+  });
+}
+
+function openSeguimientoSheet(id) {
+  const q = quotes.find(x => x.id === id);
+  if (!q) return;
+  _segQuoteId = id;
+
+  document.getElementById('segSheetTitle').textContent = `${q.numero} · ${q.empresa}`;
+
+  const sm = getSeguimientoStatus(q);
+  const currEl = document.getElementById('segSheetCurrent');
+  currEl.innerHTML = sm
+    ? `<div class="sm-row" style="margin:0">
+         <span class="sm-dot ${sm.key}${sm.key === 'red' ? ' pulse' : ''}"></span>
+         <span class="sm-label ${sm.key}">${sm.label}</span>
+         <span class="sm-date">${formatDate(q.seguimiento)}</span>
+       </div>`
+    : '';
+
+  const defaultDate = q.seguimiento || addDays(7);
+  document.getElementById('segDateInput').value = defaultDate;
+  document.getElementById('segNoteInput').value = '';
+  _syncSegChips(defaultDate);
+  document.getElementById('seguimientoSheet').classList.remove('hidden');
+}
+
+document.getElementById('segChips').addEventListener('click', (e) => {
+  const chip = e.target.closest('.seg-chip');
+  if (!chip) return;
+  const newDate = addDays(parseInt(chip.dataset.days));
+  document.getElementById('segDateInput').value = newDate;
+  _syncSegChips(newDate);
+});
+
+document.getElementById('segDateInput').addEventListener('input', (e) => {
+  _syncSegChips(e.target.value);
+});
+
+document.getElementById('segCancelBtn').addEventListener('click', () => {
+  document.getElementById('seguimientoSheet').classList.add('hidden');
+});
+
+document.getElementById('segSaveBtn').addEventListener('click', async () => {
+  const newDate = document.getElementById('segDateInput').value;
+  const note = document.getElementById('segNoteInput').value.trim();
+  if (!newDate || !_segQuoteId) return;
+  const q = quotes.find(x => x.id === _segQuoteId);
+  if (!q) return;
+
+  const updates = { seguimiento: newDate, updatedAt: serverTimestamp(), updatedBy: currentUser.uid };
+  if (note) {
+    const now = new Date();
+    const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const pad = n => String(n).padStart(2, '0');
+    const stamp = `[${pad(now.getDate())} ${months[now.getMonth()]} ${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}]`;
+    const existing = q.notas || '';
+    updates.notas = existing ? `${existing}\n${stamp} ${note}` : `${stamp} ${note}`;
+  }
+  try {
+    await setDoc(doc(quotesCol(), _segQuoteId), updates, { merge: true });
+    logActivity('quote_seguimiento', `${q.numero}: → ${newDate}`).catch(() => {});
+    document.getElementById('seguimientoSheet').classList.add('hidden');
+    showToast('Seguimiento actualizado');
+    if (detailQuoteId === _segQuoteId) openQuoteDetail(_segQuoteId);
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  }
+});
+
+// ---------- Voice Dictation ----------
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function attachMicToTextarea(ta) {
+  if (!SpeechRec) return;
+  if (ta.parentNode.classList.contains('dictate-wrap')) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'dictate-wrap';
+  ta.parentNode.insertBefore(wrap, ta);
+  wrap.appendChild(ta);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'dictate-btn';
+  btn.setAttribute('aria-label', 'Dictar');
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg>`;
+  wrap.appendChild(btn);
+
+  let rec = null;
+  let listening = false;
+  let baseValue = '';
+
+  btn.addEventListener('click', () => {
+    if (listening) { rec.stop(); return; }
+    rec = new SpeechRec();
+    rec.lang = 'es-CL';
+    rec.continuous = true;
+    rec.interimResults = true;
+    baseValue = ta.value;
+
+    rec.onresult = (e) => {
+      let final = '', interim = '';
+      for (const r of e.results) {
+        if (r.isFinal) final += r[0].transcript + ' ';
+        else interim += r[0].transcript;
+      }
+      final = final.trim();
+      const sep = baseValue && final ? '\n' : '';
+      ta.value = baseValue + sep + final + (final && interim ? ' ' : '') + interim;
+    };
+
+    rec.onend = () => {
+      listening = false;
+      btn.classList.remove('listening');
+    };
+
+    rec.onerror = () => {
+      listening = false;
+      btn.classList.remove('listening');
+      showToast('Error de micrófono');
+    };
+
+    rec.start();
+    listening = true;
+    btn.classList.add('listening');
+  });
+}
+
+function initDictation() {
+  document.querySelectorAll('textarea[data-dictate]').forEach(attachMicToTextarea);
+}
+
+let _dictateTarget = null;
+let _dictateRec = null;
+let _dictateListening = false;
+let _dictateTranscript = '';
+let _dictateInterim = '';
+
+function openDictateSheet(title) {
+  if (!SpeechRec) { showToast('Tu navegador no soporta dictado por voz'); return; }
+  document.getElementById('dictateSheetTitle').textContent = title || 'Dictar avance';
+  document.getElementById('dictatePreview').innerHTML = 'Presiona el micrófono para comenzar…';
+  document.getElementById('dictateStatusText').textContent = 'Listo';
+  document.getElementById('dictateSaveBtn').disabled = true;
+  document.getElementById('dictateMicBtn').classList.remove('listening');
+  _dictateTranscript = '';
+  _dictateInterim = '';
+  _dictateListening = false;
+  if (_dictateRec) { try { _dictateRec.abort(); } catch {} _dictateRec = null; }
+  document.getElementById('dictateSheet').classList.remove('hidden');
+}
+
+function _startDictateRec() {
+  _dictateRec = new SpeechRec();
+  _dictateRec.lang = 'es-CL';
+  _dictateRec.continuous = true;
+  _dictateRec.interimResults = true;
+
+  _dictateRec.onresult = (e) => {
+    let final = '', interim = '';
+    for (const r of e.results) {
+      if (r.isFinal) final += r[0].transcript + ' ';
+      else interim += r[0].transcript;
+    }
+    _dictateTranscript = final.trim();
+    _dictateInterim = interim.trim();
+    const preview = document.getElementById('dictatePreview');
+    if (preview) {
+      preview.innerHTML = `<span>${escapeHtml(_dictateTranscript)}</span>${_dictateInterim ? ` <span class="dictate-interim">${escapeHtml(_dictateInterim)}</span>` : ''}`;
+    }
+    const saveBtn = document.getElementById('dictateSaveBtn');
+    if (saveBtn) saveBtn.disabled = !_dictateTranscript && !_dictateInterim;
+  };
+
+  _dictateRec.onend = () => {
+    _dictateListening = false;
+    document.getElementById('dictateMicBtn')?.classList.remove('listening');
+    document.getElementById('dictateStatusText').textContent = _dictateTranscript ? 'Dictado listo — guarda o continúa' : 'Listo';
+  };
+
+  _dictateRec.onerror = () => {
+    _dictateListening = false;
+    document.getElementById('dictateMicBtn')?.classList.remove('listening');
+    showToast('Error de micrófono');
+  };
+
+  _dictateRec.start();
+  _dictateListening = true;
+}
+
+async function saveDictateNote() {
+  const text = (_dictateTranscript + (_dictateInterim ? ' ' + _dictateInterim : '')).trim();
+  if (!text || !_dictateTarget) return;
+  const now = new Date();
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const pad = n => String(n).padStart(2, '0');
+  const stamp = `[${pad(now.getDate())} ${months[now.getMonth()]} ${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}]`;
+  const entry = `${stamp} ${text}`;
+  const { type, id } = _dictateTarget;
+  try {
+    const colRef = type === 'quote' ? quotesCol() : clientsCol();
+    const ref = doc(colRef, id);
+    const snap = await getDoc(ref);
+    const existing = snap.exists() ? (snap.data().notas || '') : '';
+    await setDoc(ref, {
+      notas: existing ? existing + '\n' + entry : entry,
+      updatedAt: serverTimestamp(),
+      updatedBy: currentUser.uid,
+    }, { merge: true });
+    logActivity(type === 'quote' ? 'quote_note' : 'client_note', `${id}: ${text.slice(0, 80)}`).catch(() => {});
+    document.getElementById('dictateSheet').classList.add('hidden');
+    showToast('Nota guardada');
+    if (type === 'quote' && detailQuoteId === id) openQuoteDetail(id);
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+document.getElementById('dictateMicBtn').addEventListener('click', () => {
+  if (_dictateListening) {
+    if (_dictateRec) _dictateRec.stop();
+    _dictateListening = false;
+    document.getElementById('dictateMicBtn').classList.remove('listening');
+    document.getElementById('dictateStatusText').textContent = 'Pausado';
+  } else {
+    _startDictateRec();
+    document.getElementById('dictateMicBtn').classList.add('listening');
+    document.getElementById('dictateStatusText').textContent = 'Escuchando…';
+  }
+});
+
+document.getElementById('dictateCancelBtn').addEventListener('click', () => {
+  if (_dictateRec) { try { _dictateRec.abort(); } catch {} _dictateRec = null; }
+  _dictateListening = false;
+  document.getElementById('dictateSheet').classList.add('hidden');
+});
+
+document.getElementById('dictateSaveBtn').addEventListener('click', saveDictateNote);
+
+initDictation();
 
 // ---------- Admin navigation ----------
 document.getElementById('adminNavBtn')?.addEventListener('click', () => showView('admin'));

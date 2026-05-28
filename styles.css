@@ -550,4 +550,139 @@ main { padding: 14px 14px 20px; }
 .semaforo-tag.red    { background: rgba(248,113,113,.15); color: var(--danger); }
 .semaforo-tag.yellow { background: rgba(251,191,36,.15);  color: var(--warn); }
 .semaforo-tag.green  { background: rgba(52,211,153,.15);  color: var(--success); }
+
+/* ── Sheets over modal ── */
+#seguimientoSheet, #dictateSheet { z-index: 30; }
+
+/* ── Estado chips (detail view) ── */
+.estado-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin: 10px 0 16px;
+}
+.estado-chip {
+  border: 1.5px solid var(--border);
+  background: transparent; color: var(--muted);
+  border-radius: 999px; padding: 4px 12px;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.estado-chip:hover { border-color: var(--accent); color: var(--accent); }
+.estado-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(56,189,248,.1); }
+.estado-chip[data-estado="Adjudicada"].active { border-color: var(--success); color: var(--success); background: rgba(52,211,153,.1); }
+.estado-chip[data-estado="Perdida"].active    { border-color: var(--danger);  color: var(--danger);  background: rgba(248,113,113,.1); }
+
+/* ── Seguimiento detail box ── */
+.seg-detail-box {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px; margin: 4px 0 10px;
+}
+.seg-detail-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.seg-detail-header .lbl { margin: 0; }
+.btn-seg-link {
+  background: none; border: none; cursor: pointer;
+  color: var(--accent); font-size: 13px; font-weight: 700;
+  padding: 2px 0; text-decoration: none;
+}
+.seg-no-date { font-size: 13px; color: var(--muted); display: block; }
+
+/* ── Tappable sm-row on cards ── */
+.sm-row.tappable {
+  cursor: pointer; border-radius: 8px;
+  margin: 0 -6px; padding: 6px 6px;
+  transition: background var(--transition);
+}
+.sm-row.tappable:hover, .sm-row.tappable:active { background: var(--card-2); }
+.sm-caret { color: var(--muted); flex-shrink: 0; margin-left: auto; }
+
+/* ── Seguimiento sheet ── */
+.seg-sheet-head { margin-bottom: 16px; }
+.seg-sheet-title { display: block; font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.seg-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.seg-chip {
+  border: 1.5px solid var(--border); background: transparent; color: var(--muted);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all var(--transition);
+}
+.seg-chip:hover { border-color: var(--accent); color: var(--accent); }
+.seg-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(56,189,248,.12); }
+.seg-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin: 0 0 8px; display: block; }
+.seg-date-input {
+  display: block; width: 100%;
+  background: var(--card-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 14px; font-size: 15px; -webkit-appearance: none;
+  transition: border-color var(--transition);
+}
+.seg-date-input:focus { outline: none; border-color: rgba(56,189,248,.6); }
+.seg-note {
+  display: block; width: 100%; resize: none;
+  background: var(--card-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 14px; font-size: 15px; font-family: inherit; line-height: 1.5;
+  transition: border-color var(--transition);
+}
+.seg-note:focus { outline: none; border-color: rgba(56,189,248,.6); }
+
+/* ── Voice Dictation ── */
+.dictate-wrap { position: relative; }
+.dictate-wrap textarea { padding-right: 38px; }
+.dictate-btn {
+  position: absolute; right: 8px; bottom: 8px;
+  width: 28px; height: 28px;
+  border: none; background: transparent;
+  color: var(--muted); cursor: pointer;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; transition: color var(--transition), background var(--transition);
+}
+.dictate-btn:hover { color: var(--accent); background: rgba(56,189,248,.12); }
+.dictate-btn.listening {
+  color: var(--danger);
+  animation: dictBtnPulse 1s ease-in-out infinite;
+}
+@keyframes dictBtnPulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.25); }
+}
+
+.dictate-center {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 10px;
+  margin: 20px 0;
+}
+.dictate-main-btn {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--transition);
+}
+.dictate-main-btn:hover { border-color: var(--accent); color: var(--accent); }
+.dictate-main-btn.listening {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(248,113,113,.12);
+  animation: dictPulseOuter 1.4s ease-in-out infinite;
+}
+@keyframes dictPulseOuter {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,.4); }
+  50%       { box-shadow: 0 0 0 18px rgba(248,113,113,0); }
+}
+.dictate-status { font-size: 13px; color: var(--muted); }
+.dictate-preview-wrap {
+  background: var(--bg); border-radius: var(--radius-sm);
+  padding: 12px 14px; min-height: 56px; max-height: 130px; overflow-y: auto;
+}
+.dictate-preview { font-size: 15px; color: var(--text); margin: 0; line-height: 1.55; }
+.dictate-interim { color: var(--muted); font-style: italic; }
+.sheet-actions { display: flex; gap: 10px; margin-top: 8px; }
+.sheet-actions .btn { flex: 1; }
 .semaforo-tag.muted  { background: rgba(107,140,173,.1);  color: var(--muted); }
