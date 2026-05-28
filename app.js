@@ -465,10 +465,9 @@ onAuthStateChanged(auth, async (user) => {
   currentUser = user;
   renderGreeting();
   hideLoginScreen();
-  await saveUserProfile(user);
   renderUserInfo(user);
-  await checkAdminStatus();
-  await maybeSeed();
+  saveUserProfile(user).catch(() => {});
+  await Promise.all([checkAdminStatus(), maybeSeed()]);
   renderAll();
   subscribe();
   startActivitySession().catch(() => {});
@@ -503,8 +502,10 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 
 // ---------- Seed global (solo si la colección está vacía) ----------
 async function maybeSeed() {
+  const seedKey = 'sqy_seeded_' + currentUser.uid;
+  if (localStorage.getItem(seedKey)) return;
   const snap = await getDocs(quotesCol());
-  if (!snap.empty) return;
+  if (!snap.empty) { localStorage.setItem(seedKey, '1'); return; }
   const batch = writeBatch(dbf);
   for (const q of seedQuotes) {
     const id = uid();
@@ -527,6 +528,7 @@ async function maybeSeed() {
     });
   }
   await batch.commit();
+  localStorage.setItem('sqy_seeded_' + currentUser.uid, '1');
 }
 
 function subscribe() {
