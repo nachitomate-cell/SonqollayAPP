@@ -97,26 +97,47 @@
         <div id="hoyGreeting" class="greeting-text"></div>
         <div id="hoyDate" class="greeting-date"></div>
       </div>
-      <div class="kpis">
-        <div class="kpi">
-          <span class="kpi-label">Cotizaciones</span>
-          <span class="kpi-value" id="kpi-quotes">0</span>
-        </div>
-        <div class="kpi">
-          <span class="kpi-label">Clientes</span>
-          <span class="kpi-value" id="kpi-clients">0</span>
-        </div>
-        <div class="kpi kpi-wide">
-          <span class="kpi-label">Valor total cotizado</span>
-          <span class="kpi-value" id="kpi-total">$ 0</span>
-        </div>
+
+      <!-- Sub-tabs: Resumen / Semana -->
+      <div class="dashboard-tabs" id="dashboardTabs">
+        <button class="dtab active" data-dtab="resumen">Resumen</button>
+        <button class="dtab" data-dtab="semana">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true" style="vertical-align:middle;margin-right:4px"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5m-9-6h.008v.008H12V9zm0 3.75h.008v.008H12v-.008zM12 16.5h.008v.008H12V16.5zm-3.75-3h.008v.008H8.25V13.5zm0 3h.008v.008H8.25v-.008zm7.5-3h.008v.008H15.75V13.5zm0 3h.008v.008H15.75v-.008z"/></svg>
+          Semana
+        </button>
       </div>
-      <div id="hoy-urgente-section"></div>
-      <h2 class="section-title">Próximos seguimientos</h2>
-      <div id="semaforo-summary"></div>
-      <div id="follow-ups" class="list"></div>
-      <h2 class="section-title">Últimas cotizaciones</h2>
-      <div id="recent-quotes" class="list"></div>
+
+      <!-- ── Tab: Resumen ── -->
+      <div id="dashResumen">
+        <div class="kpis">
+          <div class="kpi">
+            <span class="kpi-label">Cotizaciones</span>
+            <span class="kpi-value" id="kpi-quotes">0</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Clientes</span>
+            <span class="kpi-value" id="kpi-clients">0</span>
+          </div>
+          <div class="kpi kpi-wide">
+            <span class="kpi-label">Valor total cotizado</span>
+            <span class="kpi-value" id="kpi-total">$ 0</span>
+          </div>
+        </div>
+        <div id="hoy-urgente-section"></div>
+        <h2 class="section-title">Próximos seguimientos</h2>
+        <div id="semaforo-summary"></div>
+        <div id="follow-ups" class="list"></div>
+        <h2 class="section-title">Últimas cotizaciones</h2>
+        <div id="recent-quotes" class="list"></div>
+      </div>
+
+      <!-- ── Tab: Semana (Planner) ── -->
+      <div id="dashSemana" class="hidden">
+        <div id="plannerTodayCard"></div>
+        <h2 class="section-title" style="margin-top:18px">Esta semana</h2>
+        <div id="plannerWeekStrip"></div>
+        <div id="plannerDaysList"></div>
+      </div>
     </section>
 
     <!-- ── Cotizaciones ── -->

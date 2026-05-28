@@ -637,6 +637,7 @@ function renderHoyUrgente() {
 // ---------- Render ----------
 function renderAll() {
   renderDashboard();
+  renderPlanner();
   renderQuotes();
   renderClients();
   renderCompaniesDatalist();
@@ -715,6 +716,168 @@ function renderDashboard() {
     bindQuoteCards(recEl);
   }
 }
+
+// ---------- Planner semanal ----------
+function renderPlanner() {
+  const todayCardEl = document.getElementById('plannerTodayCard');
+  const weekStripEl = document.getElementById('plannerWeekStrip');
+  const daysListEl  = document.getElementById('plannerDaysList');
+  if (!todayCardEl) return;
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const todayISO = toISO(today);
+
+  const DAYS_ES   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const MONTHS_ES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const MONTHS_NOTE = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+  // 7-day window: today … today+6
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    return d;
+  });
+
+  // Active quotes (not won/lost)
+  const active = quotes.filter(q => {
+    if (!q.seguimiento) return false;
+    const e = (q.estado || '').toLowerCase();
+    return e !== 'adjudicada' && e !== 'perdida';
+  });
+
+  // Overdue (seguimiento before today)
+  const overdue = active.filter(q => daysUntil(q.seguimiento) < 0)
+    .sort((a, b) => a.seguimiento.localeCompare(b.seguimiento));
+
+  // Group by day for the 7-day window
+  const byDay = {};
+  days.forEach(d => {
+    const key = toISO(d);
+    byDay[key] = active.filter(q => q.seguimiento === key);
+  });
+
+  // Contacted today: notes have a timestamp from today
+  const pad = n => String(n).padStart(2, '0');
+  const todayNotePrefix = `[${pad(today.getDate())} ${MONTHS_NOTE[today.getMonth()]} ${today.getFullYear()}`;
+  const contactedToday = quotes.filter(q => q.notas && q.notas.includes(todayNotePrefix));
+
+  // ── Today summary card ──
+  if (!quotesLoaded) {
+    todayCardEl.innerHTML = `<div class="planner-today-card">${skeletonCards(1)}</div>`;
+  } else {
+    const todayScheduled  = (byDay[todayISO] || []).length;
+    const overdueCount    = overdue.length;
+    const totalPending    = todayScheduled + overdueCount;
+    const contactedCount  = contactedToday.length;
+    const dayLabel = `${DAYS_ES[today.getDay()]} ${today.getDate()} ${MONTHS_ES[today.getMonth()]}`;
+    const pendingColor = overdueCount > 0 ? 'red' : todayScheduled > 0 ? 'warn' : 'success';
+
+    todayCardEl.innerHTML = `
+      <div class="planner-today-card">
+        <div class="planner-today-label">Hoy · ${escapeHtml(dayLabel)}</div>
+        <div class="planner-today-stats">
+          <div class="planner-stat${totalPending === 0 ? ' zero' : ''}">
+            <span class="planner-stat-num ${pendingColor}">${totalPending}</span>
+            <span class="planner-stat-lbl">pendiente${totalPending !== 1 ? 's' : ''}<br>hoy</span>
+          </div>
+          <div class="planner-stat-div"></div>
+          <div class="planner-stat${contactedCount === 0 ? ' zero' : ''}">
+            <span class="planner-stat-num success">${contactedCount}</span>
+            <span class="planner-stat-lbl">contactado${contactedCount !== 1 ? 's' : ''}<br>hoy</span>
+          </div>
+        </div>
+        ${overdueCount > 0 ? `<div class="planner-overdue-hint">
+          <span class="sm-dot red pulse"></span>
+          ${overdueCount} seguimiento${overdueCount !== 1 ? 's' : ''} vencido${overdueCount !== 1 ? 's' : ''} sin atender
+        </div>` : ''}
+      </div>`;
+  }
+
+  // ── Week strip ──
+  if (!quotesLoaded) {
+    weekStripEl.innerHTML = `<div class="planner-week-row">${Array.from({length:7}, () =>
+      '<div class="planner-day-pill empty"><div class="skeleton-line" style="width:70%;height:10px;margin:2px auto"></div></div>'
+    ).join('')}</div>`;
+  } else {
+    weekStripEl.innerHTML = `<div class="planner-week-row">` +
+      days.map(d => {
+        const key = toISO(d);
+        const isToday = key === todayISO;
+        const count = (byDay[key] || []).length + (isToday ? overdue.length : 0);
+        const intensity = count === 0 ? '' : count <= 2 ? ' low' : count <= 4 ? ' mid' : ' high';
+        return `<div class="planner-day-pill${isToday ? ' today' : ''}${count === 0 ? ' empty' : ''}">
+          <span class="planner-pill-name">${DAYS_ES[d.getDay()]}</span>
+          <span class="planner-pill-date">${d.getDate()}</span>
+          <span class="planner-pill-count${intensity}">${count || '·'}</span>
+        </div>`;
+      }).join('') +
+    `</div>`;
+  }
+
+  // ── Day sections ──
+  if (!quotesLoaded) {
+    daysListEl.innerHTML = skeletonCards(3);
+    return;
+  }
+
+  let html = '';
+
+  // Overdue section
+  if (overdue.length) {
+    html += `<div class="planner-day-block overdue">
+      <div class="planner-day-header">
+        <span class="sm-dot red pulse"></span>
+        <span class="planner-day-name">Vencidos</span>
+        <span class="planner-day-badge red">${overdue.length} seg.</span>
+      </div>
+      <div class="list">${overdue.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>
+    </div>`;
+  }
+
+  // One section per day
+  days.forEach(d => {
+    const key = toISO(d);
+    const dayQuotes = byDay[key] || [];
+    if (!dayQuotes.length) return;
+
+    const isToday    = key === todayISO;
+    const isTomorrow = daysUntil(key) === 1;
+    let label;
+    if (isToday)         label = `Hoy · ${DAYS_ES[d.getDay()]} ${d.getDate()} ${MONTHS_ES[d.getMonth()]}`;
+    else if (isTomorrow) label = `Mañana · ${DAYS_ES[d.getDay()]} ${d.getDate()} ${MONTHS_ES[d.getMonth()]}`;
+    else                 label = `${DAYS_ES[d.getDay()]} ${d.getDate()} ${MONTHS_ES[d.getMonth()]}`;
+
+    html += `<div class="planner-day-block">
+      <div class="planner-day-header">
+        <span class="planner-day-name">${escapeHtml(label)}</span>
+        <span class="planner-day-badge">${dayQuotes.length} seg.</span>
+      </div>
+      <div class="list">${dayQuotes.map(q => cardQuoteHtml(q)).join('')}</div>
+    </div>`;
+  });
+
+  if (!html) {
+    html = `<div class="empty" style="margin-top:20px">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5m-9-6h.008v.008H12V9zm0 3.75h.008v.008H12v-.008zM12 16.5h.008v.008H12V16.5zm-3.75-3h.008v.008H8.25V13.5zm0 3h.008v.008H8.25v-.008zm7.5-3h.008v.008H15.75V13.5zm0 3h.008v.008H15.75v-.008z"/></svg>
+      <span>Sin seguimientos esta semana</span>
+      <p class="hint">Asigna fechas de seguimiento a tus cotizaciones para planificar tu semana</p>
+    </div>`;
+  }
+
+  daysListEl.innerHTML = html;
+  bindQuoteCards(daysListEl);
+}
+
+// ---------- Dashboard sub-tabs ----------
+document.getElementById('dashboardTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.dtab');
+  if (!btn) return;
+  const tab = btn.dataset.dtab;
+  document.querySelectorAll('.dtab').forEach(b => b.classList.toggle('active', b.dataset.dtab === tab));
+  document.getElementById('dashResumen').classList.toggle('hidden', tab !== 'resumen');
+  document.getElementById('dashSemana').classList.toggle('hidden', tab !== 'semana');
+});
 
 function cardQuoteHtml(q, opts = {}) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
