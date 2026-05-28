@@ -941,6 +941,9 @@ function renderQuotes() {
   bindQuoteCards(el);
 }
 
+const CLIENTS_PER_PAGE = 10;
+let clientsPage = 0;
+
 function renderClients() {
   if (!clientsLoaded) { document.getElementById('clients-list').innerHTML = skeletonCards(4); return; }
   const q = (document.getElementById('search-clients').value || '').toLowerCase().trim();
@@ -954,7 +957,12 @@ function renderClients() {
   }
   const el = document.getElementById('clients-list');
   if (!list.length) { el.innerHTML = '<div class="empty">Sin clientes</div>'; return; }
-  el.innerHTML = list.map(c => {
+
+  const totalPages = Math.ceil(list.length / CLIENTS_PER_PAGE);
+  if (clientsPage >= totalPages) clientsPage = Math.max(0, totalPages - 1);
+  const page = list.slice(clientsPage * CLIENTS_PER_PAGE, (clientsPage + 1) * CLIENTS_PER_PAGE);
+
+  let html = page.map(c => {
     const count = quotes.filter(qq => qq.empresa === c.empresa).length;
     return `
       <div class="card" data-client-id="${c.id}">
@@ -966,9 +974,21 @@ function renderClients() {
         ${c.email ? `<div class="card-meta">${escapeHtml(c.email)}</div>` : ''}
       </div>`;
   }).join('');
+
+  if (totalPages > 1) {
+    html += `<div class="pagination">
+      <button class="pg-btn" id="pgPrev" ${clientsPage === 0 ? 'disabled' : ''}>← Anterior</button>
+      <span class="pg-info">${clientsPage + 1} / ${totalPages}</span>
+      <button class="pg-btn" id="pgNext" ${clientsPage >= totalPages - 1 ? 'disabled' : ''}>Siguiente →</button>
+    </div>`;
+  }
+
+  el.innerHTML = html;
   el.querySelectorAll('[data-client-id]').forEach(node => {
     node.addEventListener('click', () => openClientForm(node.dataset.clientId));
   });
+  document.getElementById('pgPrev')?.addEventListener('click', () => { clientsPage--; renderClients(); });
+  document.getElementById('pgNext')?.addEventListener('click', () => { clientsPage++; renderClients(); });
 }
 
 function renderCompaniesDatalist() {
@@ -1198,10 +1218,87 @@ document.getElementById('detailEdit').addEventListener('click', () => {
 const clientModal = document.getElementById('clientModal');
 const clientForm = document.getElementById('clientForm');
 let editingClientId = null;
+let clientNotasArr = [];
+
+function parseNotes(notasStr) {
+  if (!notasStr || !notasStr.trim()) return [];
+  const tsRe = /^\[\d{2} \w+ \d{4} \d{2}:\d{2}\]/;
+  const lines = notasStr.split('\n');
+  if (!lines.some(l => tsRe.test(l))) return [notasStr.trim()];
+  const notes = [];
+  let cur = null;
+  for (const line of lines) {
+    if (tsRe.test(line)) { if (cur !== null) notes.push(cur.trim()); cur = line; }
+    else if (cur !== null) cur += '\n' + line;
+  }
+  if (cur !== null && cur.trim()) notes.push(cur.trim());
+  return notes;
+}
+
+function renderClientNotes() {
+  const el = document.getElementById('clientNotesList');
+  if (!el) return;
+  if (!clientNotasArr.length) {
+    el.innerHTML = '<div class="notes-empty">Sin notas aún</div>';
+    return;
+  }
+  const tsRe = /^(\[\d{2} \w+ \d{4} \d{2}:\d{2}\]) ([\s\S]+)$/;
+  el.innerHTML = clientNotasArr.map((note, i) => {
+    const m = note.match(tsRe);
+    const ts = m ? m[1] : '';
+    const text = m ? m[2] : note;
+    return `<div class="note-item">
+      <div class="note-meta">
+        <span class="note-ts">${escapeHtml(ts)}</span>
+        <div class="note-actions">
+          <button type="button" class="icon-btn note-edit-btn" data-idx="${i}" aria-label="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"/></svg>
+          </button>
+          <button type="button" class="icon-btn note-del-btn" data-idx="${i}" aria-label="Eliminar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.021-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="note-text" id="nt-text-${i}">${escapeHtml(text).replace(/\n/g,'<br>')}</div>
+      <div class="note-edit-area hidden" id="nt-edit-${i}">
+        <textarea rows="2">${escapeHtml(text)}</textarea>
+        <div class="note-edit-btns">
+          <button type="button" class="btn btn-sm btn-ghost note-cancel-btn" data-idx="${i}">Cancelar</button>
+          <button type="button" class="btn btn-sm note-ok-btn" data-idx="${i}">Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.note-edit-btn').forEach(b => b.addEventListener('click', () => {
+    const i = b.dataset.idx;
+    document.getElementById(`nt-text-${i}`).classList.add('hidden');
+    document.getElementById(`nt-edit-${i}`).classList.remove('hidden');
+    document.querySelector(`#nt-edit-${i} textarea`).focus();
+  }));
+  el.querySelectorAll('.note-cancel-btn').forEach(b => b.addEventListener('click', () => {
+    const i = b.dataset.idx;
+    document.getElementById(`nt-text-${i}`).classList.remove('hidden');
+    document.getElementById(`nt-edit-${i}`).classList.add('hidden');
+  }));
+  el.querySelectorAll('.note-ok-btn').forEach(b => b.addEventListener('click', () => {
+    const i = parseInt(b.dataset.idx);
+    const newText = document.querySelector(`#nt-edit-${i} textarea`).value.trim();
+    if (!newText) return;
+    const m = clientNotasArr[i].match(/^(\[\d{2} \w+ \d{4} \d{2}:\d{2}\]) /);
+    clientNotasArr[i] = m ? `${m[0]}${newText}` : newText;
+    renderClientNotes();
+  }));
+  el.querySelectorAll('.note-del-btn').forEach(b => b.addEventListener('click', () => {
+    clientNotasArr.splice(parseInt(b.dataset.idx), 1);
+    renderClientNotes();
+  }));
+}
 
 function openClientForm(id) {
   editingClientId = id || null;
   clientForm.reset();
+  clientNotasArr = [];
   document.getElementById('clientTitle').textContent = id ? 'Editar cliente' : 'Nuevo cliente';
   document.getElementById('clientDelete').hidden = !id;
   if (id) {
@@ -1212,13 +1309,27 @@ function openClientForm(id) {
       clientForm.email.value = c.email || '';
       clientForm.telefono.value = c.telefono || '';
       clientForm.cargo.value = c.cargo || '';
-      clientForm.notas.value = c.notas || '';
+      clientNotasArr = parseNotes(c.notas || '');
     }
   }
+  renderClientNotes();
   clientModal.classList.remove('hidden');
 }
 
 document.getElementById('clientClose').addEventListener('click', () => clientModal.classList.add('hidden'));
+
+document.getElementById('clientNoteAdd').addEventListener('click', () => {
+  const input = document.getElementById('clientNoteInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const now = new Date();
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const pad = n => String(n).padStart(2, '0');
+  const ts = `[${pad(now.getDate())} ${months[now.getMonth()]} ${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}]`;
+  clientNotasArr.push(`${ts} ${text}`);
+  input.value = '';
+  renderClientNotes();
+});
 
 document.getElementById('clientSave').addEventListener('click', async () => {
   const data = {
@@ -1227,7 +1338,7 @@ document.getElementById('clientSave').addEventListener('click', async () => {
     email: clientForm.email.value.trim(),
     telefono: clientForm.telefono.value.trim(),
     cargo: clientForm.cargo.value.trim(),
-    notas: clientForm.notas.value.trim(),
+    notas: clientNotasArr.join('\n'),
   };
   if (!data.empresa) { showToast('La empresa es obligatoria'); return; }
   try {
@@ -1261,7 +1372,7 @@ document.getElementById('search-quotes').addEventListener('input', () => {
   if (_quotesView === 'pipeline') { renderPipeline(); return; }
   renderQuotes();
 });
-document.getElementById('search-clients').addEventListener('input', renderClients);
+document.getElementById('search-clients').addEventListener('input', () => { clientsPage = 0; renderClients(); });
 
 // ---------- Settings ----------
 document.getElementById('exportBtn').addEventListener('click', () => {

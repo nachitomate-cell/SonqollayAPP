@@ -26,6 +26,8 @@
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+.hidden { display: none !important; }
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 html, body {
@@ -853,6 +855,51 @@ main { padding: 14px 14px 20px; }
 .sheet-actions { display: flex; gap: 10px; margin-top: 8px; }
 .sheet-actions .btn { flex: 1; }
 .semaforo-tag.muted  { background: rgba(107,140,173,.1);  color: var(--muted); }
+
+/* ─── Pagination ─── */
+.pagination {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; margin-top: 16px; padding: 10px 0 4px;
+}
+.pg-btn {
+  background: var(--card-2); border: 1px solid var(--border);
+  color: var(--text); border-radius: var(--radius-sm);
+  padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all var(--transition);
+}
+.pg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pg-btn:not(:disabled):hover { background: var(--card-hover); border-color: var(--accent); color: var(--accent); }
+.pg-info { color: var(--muted); font-size: 13px; min-width: 56px; text-align: center; }
+
+/* ─── Client Notes ─── */
+.btn-sm { padding: 7px 14px; font-size: 13px; border-radius: var(--radius-sm); }
+.notes-list { display: flex; flex-direction: column; gap: 8px; min-height: 4px; }
+.notes-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 10px 0; }
+.note-item {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.note-meta { display: flex; align-items: center; justify-content: space-between; min-height: 20px; }
+.note-ts { color: var(--muted); font-size: 11px; letter-spacing: .02em; }
+.note-actions { display: flex; gap: 2px; margin-left: auto; }
+.note-text { font-size: 13px; color: var(--text); line-height: 1.45; margin-top: 4px; }
+.note-edit-area { margin-top: 8px; }
+.note-edit-area textarea {
+  width: 100%; background: var(--card); color: var(--text);
+  border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-size: 13px; font-family: inherit;
+  resize: vertical; outline: none;
+}
+.note-edit-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.notes-add { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.notes-add textarea {
+  background: var(--card-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 13px; font-family: inherit;
+  resize: vertical; min-height: 56px; outline: none;
+  transition: border-color var(--transition);
+}
+.notes-add textarea:focus { border-color: var(--accent); }
 
 /* ─── Dashboard sub-tabs ─── */
 .dashboard-tabs {
