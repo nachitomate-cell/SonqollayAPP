@@ -1031,3 +1031,63 @@ main { padding: 14px 14px 20px; }
 .planner-day-block .card { padding: 12px 14px; gap: 5px; }
 .planner-day-block .card-title { font-size: 14px; }
 .planner-day-block .card-sub { font-size: 12px; }
+
+/* ─── Metrics ─── */
+.metrics-row { display: flex; gap: 10px; margin: 16px 0 8px; }
+.metric-card {
+  flex: 1; background: var(--card-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 10px; text-align: center;
+}
+.metric-val { font-family: var(--font-title); font-size: 16px; font-weight: 700; color: var(--accent); }
+.metric-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .04em; }
+.chart-section { margin: 8px 0 16px; }
+.chart-title { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.mini-chart { display: flex; gap: 6px; align-items: flex-end; height: 64px; }
+.chart-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+.chart-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.chart-bar { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 0; transition: height .3s ease; opacity: 0.8; }
+.chart-label { font-size: 10px; color: var(--muted); }
+
+/* ─── Filters ─── */
+.filter-bar {
+  background: var(--card-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.filter-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-right: 4px; }
+.fchip {
+  display: inline-flex; align-items: center; padding: 5px 12px;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12px; color: var(--muted); cursor: pointer; transition: all var(--transition);
+}
+.fchip.active { background: rgba(56,189,248,.15); border-color: var(--accent); color: var(--accent); }
+.filter-clear { align-self: flex-end; background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 2px 0; }
+.filter-clear:hover { color: var(--danger); }
+.filter-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; background: var(--accent); color: #001a2e;
+  border-radius: 50%; font-size: 10px; font-weight: 700; margin-left: 3px;
+}
+
+/* ─── Extra Contacts ─── */
+.extra-contact-item {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 8px;
+}
+.extra-contact-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.extra-contact-row:last-of-type { margin-bottom: 0; }
+.ec-input {
+  flex: 1; background: var(--card); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 7px 10px; font-size: 13px; font-family: inherit; outline: none;
+  transition: border-color var(--transition);
+}
+.ec-input:focus { border-color: var(--accent); }
+
+/* ─── History ─── */
+.history-row .val { display: flex; flex-direction: column; gap: 6px; }
+.history-entry { font-size: 12px; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; background: var(--bg-2); border-radius: var(--radius-sm); }
+.history-user { font-weight: 600; color: var(--accent); font-size: 11px; }
+.history-desc { color: var(--text); line-height: 1.4; }
+.history-ts { color: var(--muted); font-size: 10px; }

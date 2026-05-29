@@ -7,7 +7,7 @@ import {
 import {
   getFirestore, collection, doc, getDoc, onSnapshot, setDoc, deleteDoc,
   serverTimestamp, query, orderBy, limit, writeBatch, getDocs,
-  enableIndexedDbPersistence
+  enableIndexedDbPersistence, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import {
   getMessaging, getToken, onMessage, isSupported
@@ -336,6 +336,18 @@ let quotesLoaded = false;
 let clientsLoaded = false;
 let _quotesView = 'list';
 
+// ---------- Filtros Cotizaciones ----------
+let quotesFilters = { estados: [], sinSeg: false };
+
+// ---------- Templates ----------
+let templates = [];
+let templatesLoaded = false;
+let unsubTemplates = null;
+const templatesCol = () => collection(dbf, 'templates');
+
+// ---------- Extra Contactos por cliente ----------
+let clientExtraContactos = [];
+
 // ─── Activity tracking ───
 const _sessionId = uid();
 let _sessionStart = null;
@@ -454,6 +466,7 @@ onAuthStateChanged(auth, async (user) => {
     unsubscribeAdmin();
     if (unsubQuotes) { unsubQuotes(); unsubQuotes = null; }
     if (unsubClients) { unsubClients(); unsubClients = null; }
+    if (unsubTemplates) { unsubTemplates(); unsubTemplates = null; }
     currentUser = null;
     quotesLoaded = false;
     clientsLoaded = false;
@@ -534,6 +547,7 @@ async function maybeSeed() {
 function subscribe() {
   if (unsubQuotes) unsubQuotes();
   if (unsubClients) unsubClients();
+  if (unsubTemplates) unsubTemplates();
   unsubQuotes = onSnapshot(query(quotesCol(), orderBy('fecha', 'desc')), (snap) => {
     quotes = snap.docs.map(d => d.data());
     quotesLoaded = true;
@@ -547,6 +561,10 @@ function subscribe() {
     clientsLoaded = true;
     if (quotesLoaded) hideSplash();
     renderAll();
+  });
+  unsubTemplates = onSnapshot(query(templatesCol()), snap => {
+    templates = snap.docs.map(d => d.data());
+    templatesLoaded = true;
   });
 }
 
@@ -717,6 +735,70 @@ function renderDashboard() {
       : '<div class="empty">Aún no hay cotizaciones</div>';
     bindQuoteCards(recEl);
   }
+  renderMetrics();
+}
+
+function renderMetrics() {
+  const el = document.getElementById('kpi-metrics');
+  if (!el || !quotesLoaded) return;
+
+  const closed = quotes.filter(q => {
+    const e = (q.estado||'').toLowerCase();
+    return e === 'adjudicada' || e === 'perdida';
+  });
+  const won = quotes.filter(q => (q.estado||'').toLowerCase() === 'adjudicada');
+  const winRate = closed.length ? Math.round(won.length / closed.length * 100) : null;
+
+  const active = quotes.filter(q => {
+    const e = (q.estado||'').toLowerCase();
+    return e !== 'adjudicada' && e !== 'perdida';
+  });
+  const pipeline = active.reduce((s, q) => s + (Number(q.valor)||0), 0);
+
+  const withValue = quotes.filter(q => q.valor != null && q.valor !== '' && !isNaN(q.valor));
+  const avgTicket = withValue.length ? Math.round(withValue.reduce((s,q) => s + Number(q.valor), 0) / withValue.length) : null;
+
+  // Monthly chart: last 6 months
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = d.toLocaleDateString('es-CL', { month: 'short' });
+    const count = quotes.filter(q => (q.fecha||'').startsWith(key)).length;
+    months.push({ label, count });
+  }
+  const maxCount = Math.max(...months.map(m => m.count), 1);
+
+  el.innerHTML = `
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-val">${winRate !== null ? winRate + '%' : '—'}</div>
+        <div class="metric-lbl">Tasa de cierre</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">${avgTicket !== null ? formatCLP(avgTicket) : '—'}</div>
+        <div class="metric-lbl">Ticket promedio</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val">${formatCLP(pipeline)}</div>
+        <div class="metric-lbl">Pipeline activo</div>
+      </div>
+    </div>
+    <div class="chart-section">
+      <div class="chart-title">Cotizaciones por mes</div>
+      <div class="mini-chart">
+        ${months.map(m => `
+          <div class="chart-col">
+            <div class="chart-bar-wrap">
+              <div class="chart-bar" style="height:${m.count ? Math.max(Math.round(m.count/maxCount*100), 8) : 0}%"></div>
+            </div>
+            <div class="chart-label">${m.label}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
 }
 
 // ---------- Planner semanal ----------
@@ -923,6 +1005,25 @@ function bindQuoteCards(root) {
   });
 }
 
+function applyQuotesFilters(list) {
+  if (quotesFilters.estados.length) {
+    list = list.filter(q => quotesFilters.estados.includes(q.estado || 'Borrador'));
+  }
+  if (quotesFilters.sinSeg) {
+    list = list.filter(q => !q.seguimiento);
+  }
+  return list;
+}
+
+function updateFilterBadge() {
+  const count = quotesFilters.estados.length + (quotesFilters.sinSeg ? 1 : 0);
+  const badge = document.getElementById('filterBadge');
+  if (!badge) return;
+  badge.textContent = count;
+  badge.classList.toggle('hidden', count === 0);
+  document.getElementById('quotesFilterToggle')?.classList.toggle('active', count > 0);
+}
+
 function renderQuotes() {
   if (_quotesView === 'pipeline') { renderPipeline(); return; }
   if (!quotesLoaded) { document.getElementById('quotes-list').innerHTML = skeletonCards(5); return; }
@@ -936,6 +1037,7 @@ function renderQuotes() {
       (x.contactos||'').toLowerCase().includes(q)
     );
   }
+  list = applyQuotesFilters(list);
   const el = document.getElementById('quotes-list');
   el.innerHTML = list.length
     ? list.map(x => cardQuoteHtml(x)).join('')
@@ -1039,7 +1141,7 @@ const quoteModal = document.getElementById('quoteModal');
 const quoteForm = document.getElementById('quoteForm');
 let editingQuoteId = null;
 
-function openQuoteForm(id) {
+function openQuoteForm(id, prefill = null) {
   editingQuoteId = id || null;
   quoteForm.reset();
   document.getElementById('quoteTitle').textContent = id ? 'Editar cotización' : 'Nueva cotización';
@@ -1057,6 +1159,16 @@ function openQuoteForm(id) {
       quoteForm.seguimiento.value = q.seguimiento || '';
       quoteForm.notas.value = q.notas || '';
     }
+  } else if (prefill) {
+    quoteForm.empresa.value = prefill.empresa || '';
+    quoteForm.numero.value = prefill.numero || '';
+    quoteForm.fecha.value = prefill.fecha || new Date().toISOString().slice(0,10);
+    quoteForm.descripcion.value = prefill.descripcion || '';
+    quoteForm.valor.value = prefill.valor != null ? prefill.valor : '';
+    quoteForm.contactos.value = prefill.contactos || '';
+    quoteForm.estado.value = prefill.estado || 'Borrador';
+    quoteForm.seguimiento.value = prefill.seguimiento || '';
+    quoteForm.notas.value = prefill.notas || '';
   } else {
     quoteForm.fecha.value = new Date().toISOString().slice(0,10);
     quoteForm.estado.value = 'Borrador';
@@ -1084,11 +1196,25 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
   }
   try {
     const id = editingQuoteId || uid();
+    // Compute change log if editing
+    const logEntries = [];
+    if (editingQuoteId) {
+      const prev = quotes.find(x => x.id === editingQuoteId);
+      if (prev) {
+        const fields = { empresa:'Empresa', numero:'N°', fecha:'Fecha', descripcion:'Descripción', valor:'Valor', estado:'Estado', seguimiento:'Seguimiento' };
+        const changes = Object.entries(fields)
+          .filter(([k]) => String(prev[k]||'') !== String(data[k]||''))
+          .map(([k, label]) => `${label}: ${prev[k]||'—'} → ${data[k]||'—'}`);
+        if (changes.length) logEntries.push({ t: new Date().toISOString(), u: currentUser.displayName || currentUser.email, d: changes.join(' · ') });
+      }
+    }
     await setDoc(doc(quotesCol(), id), {
       id, ...data,
       updatedAt: serverTimestamp(),
       updatedBy: currentUser.uid,
-      ...(editingQuoteId ? {} : { createdAt: serverTimestamp(), createdBy: currentUser.uid })
+      ...(editingQuoteId
+        ? (logEntries.length ? { _log: arrayUnion(...logEntries) } : {})
+        : { createdAt: serverTimestamp(), createdBy: currentUser.uid, _log: [] })
     }, { merge: true });
     logActivity(editingQuoteId ? 'quote_edit' : 'quote_new', `${data.numero} · ${data.empresa}`).catch(() => {});
     await ensureClientForCompany(data.empresa, data.contactos);
@@ -1173,9 +1299,25 @@ function openQuoteDetail(id) {
     }</span></div>
     ${q.notas ? `<div class="detail-row"><span class="lbl">Notas</span><span class="val">${escapeHtml(q.notas).replace(/\n/g,'<br>')}</span></div>` : ''}
 
+    ${q._log && q._log.length ? `
+    <div class="detail-row history-row">
+      <span class="lbl">Historial</span>
+      <div class="val">
+        ${[...q._log].reverse().slice(0,10).map(e => `
+          <div class="history-entry">
+            <span class="history-user">${escapeHtml(e.u||'')}</span>
+            <span class="history-desc">${escapeHtml(e.d||'')}</span>
+            <span class="history-ts">${new Date(e.t).toLocaleDateString('es-CL', {day:'2-digit', month:'short', year:'2-digit'})}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : ''}
+
     <div class="detail-actions">
       ${emails.length ? `<a class="btn" href="mailto:${escapeHtml(emails.join(','))}?subject=${encodeURIComponent('Cotización ' + q.numero + ' - ' + q.empresa)}">✉ Enviar correo</a>` : ''}
       <button class="btn btn-outline" id="detailShare">Compartir</button>
+      <button class="btn btn-outline" id="detailDuplicate">Duplicar</button>
+      <button class="btn btn-outline" id="detailSaveTemplate">Guardar plantilla</button>
       <button class="btn btn-outline" id="detailDictate">🎤 Dictar avance</button>
     </div>
   `;
@@ -1199,10 +1341,42 @@ function openQuoteDetail(id) {
 
   const shareBtn = document.getElementById('detailShare');
   if (shareBtn) shareBtn.addEventListener('click', async () => {
-    const text = `${q.numero} · ${q.empresa}\n${q.descripcion || ''}\nFecha: ${formatDate(q.fecha)}\nValor: ${formatCLP(q.valor)}\nEstado: ${q.estado || ''}`;
-    if (navigator.share) { try { await navigator.share({ title: q.numero, text }); } catch {} }
-    else { try { await navigator.clipboard.writeText(text); showToast('Copiado'); } catch { showToast('No se pudo compartir'); } }
+    const sm = getSeguimientoStatus(q);
+    const lines = [
+      `📋 *COTIZACIÓN ${q.numero}*`,
+      `🏢 *${q.empresa}*`,
+      q.descripcion ? `📝 ${q.descripcion}` : null,
+      `💰 Valor: *${formatCLP(q.valor)}*`,
+      `📊 Estado: ${q.estado || 'Borrador'}`,
+      `📅 Fecha: ${formatDate(q.fecha)}`,
+      q.seguimiento ? `📌 Seguimiento: ${formatDate(q.seguimiento)}` : null,
+      q.contactos ? `✉ Contactos: ${q.contactos}` : null,
+    ].filter(Boolean).join('\n');
+
+    if (navigator.share) {
+      try { await navigator.share({ title: `Cotización ${q.numero}`, text: lines }); return; }
+      catch {}
+    }
+    try { await navigator.clipboard.writeText(lines); showToast('Copiado al portapapeles'); }
+    catch { showToast('No se pudo copiar'); }
   });
+
+  document.getElementById('detailDuplicate')?.addEventListener('click', () => {
+    detailModal.classList.add('hidden');
+    openQuoteForm(null, {
+      empresa: q.empresa,
+      descripcion: q.descripcion,
+      valor: q.valor,
+      contactos: q.contactos,
+      estado: 'Borrador',
+      fecha: new Date().toISOString().slice(0,10),
+      numero: '',
+      seguimiento: '',
+      notas: ''
+    });
+  });
+
+  document.getElementById('detailSaveTemplate')?.addEventListener('click', () => saveAsTemplate(q));
 
   document.getElementById('detailDictate')?.addEventListener('click', () => {
     _dictateTarget = { type: 'quote', id };
@@ -1301,6 +1475,7 @@ function openClientForm(id) {
   editingClientId = id || null;
   clientForm.reset();
   clientNotasArr = [];
+  clientExtraContactos = [];
   document.getElementById('clientTitle').textContent = id ? 'Editar cliente' : 'Nuevo cliente';
   document.getElementById('clientDelete').hidden = !id;
   if (id) {
@@ -1312,13 +1487,55 @@ function openClientForm(id) {
       clientForm.telefono.value = c.telefono || '';
       clientForm.cargo.value = c.cargo || '';
       clientNotasArr = parseNotes(c.notas || '');
+      clientExtraContactos = Array.isArray(c.extraContactos) ? c.extraContactos.map(x => ({ ...x })) : [];
     }
   }
   renderClientNotes();
+  renderExtraContactos();
   clientModal.classList.remove('hidden');
 }
 
 document.getElementById('clientClose').addEventListener('click', () => clientModal.classList.add('hidden'));
+
+function renderExtraContactos() {
+  const el = document.getElementById('extraContactosList');
+  if (!el) return;
+  if (!clientExtraContactos.length) { el.innerHTML = ''; return; }
+  el.innerHTML = clientExtraContactos.map((c, i) => `
+    <div class="extra-contact-item">
+      <div class="extra-contact-row">
+        <input class="ec-input" placeholder="Nombre" value="${escapeHtml(c.nombre||'')}" data-ec-idx="${i}" data-ec-field="nombre">
+        <input class="ec-input" placeholder="Email" value="${escapeHtml(c.email||'')}" data-ec-idx="${i}" data-ec-field="email">
+      </div>
+      <div class="extra-contact-row">
+        <input class="ec-input" placeholder="Cargo" value="${escapeHtml(c.cargo||'')}" data-ec-idx="${i}" data-ec-field="cargo">
+        <input class="ec-input" placeholder="Teléfono" value="${escapeHtml(c.telefono||'')}" data-ec-idx="${i}" data-ec-field="telefono">
+      </div>
+      <button type="button" class="icon-btn ec-del-btn" data-ec-idx="${i}" aria-label="Eliminar contacto" style="margin-top:4px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.021-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+      </button>
+    </div>
+  `).join('');
+
+  el.querySelectorAll('.ec-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const idx = parseInt(inp.dataset.ecIdx);
+      const field = inp.dataset.ecField;
+      clientExtraContactos[idx][field] = inp.value;
+    });
+  });
+  el.querySelectorAll('.ec-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      clientExtraContactos.splice(parseInt(btn.dataset.ecIdx), 1);
+      renderExtraContactos();
+    });
+  });
+}
+
+document.getElementById('addExtraContacto')?.addEventListener('click', () => {
+  clientExtraContactos.push({ nombre: '', email: '', cargo: '', telefono: '' });
+  renderExtraContactos();
+});
 
 document.getElementById('clientNoteAdd').addEventListener('click', () => {
   const input = document.getElementById('clientNoteInput');
@@ -1341,6 +1558,7 @@ document.getElementById('clientSave').addEventListener('click', async () => {
     telefono: clientForm.telefono.value.trim(),
     cargo: clientForm.cargo.value.trim(),
     notas: clientNotasArr.join('\n'),
+    extraContactos: clientExtraContactos,
   };
   if (!data.empresa) { showToast('La empresa es obligatoria'); return; }
   try {
@@ -1375,6 +1593,91 @@ document.getElementById('search-quotes').addEventListener('input', () => {
   renderQuotes();
 });
 document.getElementById('search-clients').addEventListener('input', () => { clientsPage = 0; renderClients(); });
+
+// ---------- Filtros event listeners ----------
+document.getElementById('quotesFilterToggle')?.addEventListener('click', () => {
+  document.getElementById('quotesFilterBar').classList.toggle('hidden');
+});
+
+document.getElementById('filterEstadoChips')?.querySelectorAll('.fchip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const e = chip.dataset.estado;
+    const idx = quotesFilters.estados.indexOf(e);
+    if (idx >= 0) { quotesFilters.estados.splice(idx, 1); chip.classList.remove('active'); }
+    else { quotesFilters.estados.push(e); chip.classList.add('active'); }
+    updateFilterBadge();
+    renderQuotes();
+  });
+});
+
+document.getElementById('filterSinSeg')?.addEventListener('click', () => {
+  quotesFilters.sinSeg = !quotesFilters.sinSeg;
+  document.getElementById('filterSinSeg').classList.toggle('active', quotesFilters.sinSeg);
+  updateFilterBadge();
+  renderQuotes();
+});
+
+document.getElementById('filterClearBtn')?.addEventListener('click', () => {
+  quotesFilters = { estados: [], sinSeg: false };
+  document.querySelectorAll('#filterEstadoChips .fchip, #filterSinSeg').forEach(c => c.classList.remove('active'));
+  updateFilterBadge();
+  renderQuotes();
+});
+
+// ---------- Templates ----------
+function openTemplatePicker(onSelect) {
+  const listEl = document.getElementById('templateList');
+  const sheet = document.getElementById('templateSheet');
+  if (!listEl || !sheet) return;
+  if (!templates.length) {
+    listEl.innerHTML = '<div class="empty">Sin plantillas guardadas</div>';
+  } else {
+    listEl.innerHTML = templates.map(t => `
+      <div class="card template-card" data-tpl-id="${escapeHtml(t.id)}">
+        <div class="card-title">${escapeHtml(t.nombre)}</div>
+        ${t.descripcion ? `<div class="card-sub">${escapeHtml(t.descripcion.slice(0,80))}</div>` : ''}
+        ${t.valor ? `<div class="card-meta">${formatCLP(t.valor)}</div>` : ''}
+      </div>
+    `).join('');
+    listEl.querySelectorAll('.template-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const tpl = templates.find(t => t.id === card.dataset.tplId);
+        if (tpl) onSelect(tpl);
+        sheet.classList.add('hidden');
+      });
+    });
+  }
+  sheet.classList.remove('hidden');
+}
+
+async function saveAsTemplate(q) {
+  const nombre = prompt('Nombre de la plantilla:', q.descripcion?.slice(0,30) || q.numero || '');
+  if (!nombre) return;
+  const id = uid();
+  await setDoc(doc(templatesCol(), id), {
+    id, nombre: nombre.trim(),
+    descripcion: q.descripcion || '',
+    valor: q.valor ?? '',
+    estado: 'Borrador',
+    contactos: q.contactos || '',
+    createdAt: serverTimestamp(),
+    createdBy: currentUser.uid,
+  });
+  showToast('Plantilla guardada');
+}
+
+document.getElementById('useTemplateBtn')?.addEventListener('click', () => {
+  openTemplatePicker(tpl => {
+    quoteForm.descripcion.value = tpl.descripcion || '';
+    quoteForm.valor.value = tpl.valor || '';
+    quoteForm.estado.value = tpl.estado || 'Borrador';
+    quoteForm.contactos.value = tpl.contactos || '';
+  });
+});
+
+document.getElementById('templateSheetClose')?.addEventListener('click', () => {
+  document.getElementById('templateSheet').classList.add('hidden');
+});
 
 // ---------- Settings ----------
 document.getElementById('exportBtn').addEventListener('click', () => {
@@ -1756,6 +2059,7 @@ function renderPipeline() {
       (q.numero||'').toLowerCase().includes(searchVal) ||
       (q.descripcion||'').toLowerCase().includes(searchVal)
     );
+    group = applyQuotesFilters(group);
     const total = group.reduce((s, q) => s + (Number(q.valor) || 0), 0);
     return `<div class="pipeline-group${open ? ' open' : ''}" data-pg="${escapeHtml(estado)}">
       <div class="pipeline-group-header">
@@ -1781,7 +2085,7 @@ document.getElementById('quotesViewToggle')?.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-vtoggle]');
   if (!btn) return;
   _quotesView = btn.dataset.vtoggle;
-  document.querySelectorAll('#quotesViewToggle .vtoggle-btn').forEach(b =>
+  document.querySelectorAll('#quotesViewToggle [data-vtoggle]').forEach(b =>
     b.classList.toggle('active', b.dataset.vtoggle === _quotesView));
   document.getElementById('quotes-list').classList.toggle('hidden', _quotesView === 'pipeline');
   document.getElementById('pipeline-view').classList.toggle('hidden', _quotesView === 'list');
