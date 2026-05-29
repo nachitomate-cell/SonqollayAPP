@@ -1963,6 +1963,17 @@ document.getElementById('segSaveBtn').addEventListener('click', async () => {
 
 // ---------- Voice Dictation ----------
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let _dictateLang = 'es-CL';
+
+function _applyVoiceCmds(text) {
+  return text
+    .replace(/\bpunto\b/gi, '.').replace(/\bcoma\b/gi, ',')
+    .replace(/\bnueva\s+l[ií]nea\b/gi, '\n').replace(/\bdos\s+puntos\b/gi, ':')
+    .replace(/\bsigno\s+de\s+interrogaci[oó]n\b/gi, '?').replace(/\bsigno\s+de\s+exclamaci[oó]n\b/gi, '!')
+    .replace(/\bperiod\b/gi, '.').replace(/\bcomma\b/gi, ',')
+    .replace(/\bnew\s+line\b/gi, '\n').replace(/\bcolon\b/gi, ':')
+    .replace(/\bquestion\s+mark\b/gi, '?').replace(/\bexclamation\s+mark\b/gi, '!');
+}
 
 function attachMicToTextarea(ta) {
   if (!SpeechRec) return;
@@ -1971,51 +1982,40 @@ function attachMicToTextarea(ta) {
   wrap.className = 'dictate-wrap';
   ta.parentNode.insertBefore(wrap, ta);
   wrap.appendChild(ta);
-
   const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'dictate-btn';
-  btn.setAttribute('aria-label', 'Dictar');
+  btn.type = 'button'; btn.className = 'dictate-btn'; btn.setAttribute('aria-label', 'Dictar');
   btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg>`;
   wrap.appendChild(btn);
+  let rec = null, shouldRun = false, baseValue = '', sessionFinal = '';
 
-  let rec = null;
-  let listening = false;
-  let baseValue = '';
-
-  btn.addEventListener('click', () => {
-    if (listening) { rec.stop(); return; }
+  function startInline() {
     rec = new SpeechRec();
-    rec.lang = 'es-CL';
-    rec.continuous = true;
-    rec.interimResults = true;
-    baseValue = ta.value;
-
+    rec.lang = _dictateLang; rec.continuous = true; rec.interimResults = true;
     rec.onresult = (e) => {
       let final = '', interim = '';
       for (const r of e.results) {
-        if (r.isFinal) final += r[0].transcript + ' ';
+        if (r.isFinal) final += _applyVoiceCmds(r[0].transcript) + ' ';
         else interim += r[0].transcript;
       }
-      final = final.trim();
-      const sep = baseValue && final ? '\n' : '';
-      ta.value = baseValue + sep + final + (final && interim ? ' ' : '') + interim;
+      sessionFinal = final.trim();
+      const sep = baseValue && sessionFinal ? '\n' : '';
+      ta.value = baseValue + sep + sessionFinal + (sessionFinal && interim ? ' ' : '') + interim;
     };
-
     rec.onend = () => {
-      listening = false;
+      if (shouldRun) { setTimeout(() => { if (shouldRun) startInline(); }, 200); return; }
       btn.classList.remove('listening');
     };
-
-    rec.onerror = () => {
-      listening = false;
-      btn.classList.remove('listening');
-      showToast('Error de micrófono');
+    rec.onerror = (ev) => {
+      if (ev.error === 'no-speech' && shouldRun) { setTimeout(() => { if (shouldRun) startInline(); }, 300); return; }
+      shouldRun = false; btn.classList.remove('listening');
+      if (ev.error !== 'aborted') showToast('Error de micrófono');
     };
+    rec.start(); btn.classList.add('listening');
+  }
 
-    rec.start();
-    listening = true;
-    btn.classList.add('listening');
+  btn.addEventListener('click', () => {
+    if (shouldRun) { shouldRun = false; if (rec) rec.stop(); return; }
+    shouldRun = true; baseValue = ta.value; sessionFinal = ''; startInline();
   });
 }
 
@@ -2023,66 +2023,138 @@ function initDictation() {
   document.querySelectorAll('textarea[data-dictate]').forEach(attachMicToTextarea);
 }
 
+// ---------- Dictation Sheet ----------
 let _dictateTarget = null;
 let _dictateRec = null;
 let _dictateListening = false;
-let _dictateTranscript = '';
-let _dictateInterim = '';
+let _dictateAutoRestart = false;
+let _dictateChunks = [];
+let _dictateResultIdx = 0;
+let _dictateAudioCtx = null;
+let _dictateAnalyser = null;
+let _dictateAnimFrame = null;
+let _dictateMicStream = null;
+
+async function _startVolumeMeter() {
+  try {
+    _dictateMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    _dictateAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    _dictateAnalyser = _dictateAudioCtx.createAnalyser();
+    _dictateAnalyser.fftSize = 64;
+    _dictateAudioCtx.createMediaStreamSource(_dictateMicStream).connect(_dictateAnalyser);
+    const canvas = document.getElementById('dictateVolCanvas');
+    const ctx = canvas.getContext('2d');
+    const bins = _dictateAnalyser.frequencyBinCount;
+    const data = new Uint8Array(bins);
+    const BARS = 20, gap = 2, bw = (canvas.width - gap * (BARS - 1)) / BARS;
+    (function draw() {
+      _dictateAnimFrame = requestAnimationFrame(draw);
+      _dictateAnalyser.getByteFrequencyData(data);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < BARS; i++) {
+        const val = data[Math.floor(i * bins / BARS)] / 255;
+        const h = Math.max(3, val * canvas.height);
+        ctx.fillStyle = val > 0.5 ? '#38bdf8' : 'rgba(56,189,248,0.35)';
+        ctx.fillRect(i * (bw + gap), (canvas.height - h) / 2, bw, h);
+      }
+    })();
+  } catch {}
+}
+
+function _stopVolumeMeter() {
+  if (_dictateAnimFrame) { cancelAnimationFrame(_dictateAnimFrame); _dictateAnimFrame = null; }
+  if (_dictateMicStream) { _dictateMicStream.getTracks().forEach(t => t.stop()); _dictateMicStream = null; }
+  if (_dictateAudioCtx) { _dictateAudioCtx.close().catch(() => {}); _dictateAudioCtx = null; }
+  _dictateAnalyser = null;
+  const canvas = document.getElementById('dictateVolCanvas');
+  if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function _rebuildDictatePreview() {
+  const el = document.getElementById('dictatePreview');
+  if (!el) return;
+  if (!_dictateChunks.length) {
+    el.innerHTML = '<span class="dictate-placeholder">Presiona el micrófono para comenzar…</span>';
+  } else {
+    el.innerHTML = _dictateChunks.map(c => c.html).join('');
+  }
+}
 
 function openDictateSheet(title) {
   if (!SpeechRec) { showToast('Tu navegador no soporta dictado por voz'); return; }
   document.getElementById('dictateSheetTitle').textContent = title || 'Dictar avance';
-  document.getElementById('dictatePreview').innerHTML = 'Presiona el micrófono para comenzar…';
+  document.getElementById('dictateInterim').textContent = '';
   document.getElementById('dictateStatusText').textContent = 'Listo';
   document.getElementById('dictateSaveBtn').disabled = true;
   document.getElementById('dictateMicBtn').classList.remove('listening');
-  _dictateTranscript = '';
-  _dictateInterim = '';
-  _dictateListening = false;
+  _dictateChunks = []; _dictateResultIdx = 0; _dictateListening = false; _dictateAutoRestart = false;
   if (_dictateRec) { try { _dictateRec.abort(); } catch {} _dictateRec = null; }
+  _rebuildDictatePreview();
   document.getElementById('dictateSheet').classList.remove('hidden');
 }
 
 function _startDictateRec() {
+  _dictateResultIdx = 0;
   _dictateRec = new SpeechRec();
-  _dictateRec.lang = 'es-CL';
-  _dictateRec.continuous = true;
-  _dictateRec.interimResults = true;
+  _dictateRec.lang = _dictateLang; _dictateRec.continuous = true; _dictateRec.interimResults = true;
 
   _dictateRec.onresult = (e) => {
-    let final = '', interim = '';
-    for (const r of e.results) {
-      if (r.isFinal) final += r[0].transcript + ' ';
-      else interim += r[0].transcript;
+    for (let i = _dictateResultIdx; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (!r.isFinal) continue;
+      _dictateResultIdx = i + 1;
+      const raw = r[0].transcript.trim();
+      const conf = r[0].confidence;
+      if (/^(borrar|delete|erase)$/i.test(raw)) {
+        _dictateChunks.pop(); _rebuildDictatePreview();
+        document.getElementById('dictateSaveBtn').disabled = _dictateChunks.length === 0;
+        continue;
+      }
+      if (/^(guardar|save)$/i.test(raw)) {
+        _dictateAutoRestart = false; setTimeout(saveDictateNote, 80); return;
+      }
+      const processed = _applyVoiceCmds(raw) + ' ';
+      const html = conf > 0 && conf < 0.7
+        ? `<span class="dictate-lowconf" title="Confianza ${Math.round(conf * 100)}%">${escapeHtml(processed)}</span>`
+        : escapeHtml(processed);
+      _dictateChunks.push({ text: processed, html });
+      _rebuildDictatePreview();
+      document.getElementById('dictateSaveBtn').disabled = false;
     }
-    _dictateTranscript = final.trim();
-    _dictateInterim = interim.trim();
-    const preview = document.getElementById('dictatePreview');
-    if (preview) {
-      preview.innerHTML = `<span>${escapeHtml(_dictateTranscript)}</span>${_dictateInterim ? ` <span class="dictate-interim">${escapeHtml(_dictateInterim)}</span>` : ''}`;
+    let interim = '';
+    for (let i = 0; i < e.results.length; i++) {
+      if (!e.results[i].isFinal) interim += e.results[i][0].transcript;
     }
-    const saveBtn = document.getElementById('dictateSaveBtn');
-    if (saveBtn) saveBtn.disabled = !_dictateTranscript && !_dictateInterim;
+    const interimEl = document.getElementById('dictateInterim');
+    if (interimEl) interimEl.textContent = interim;
   };
 
   _dictateRec.onend = () => {
+    if (_dictateAutoRestart) { setTimeout(() => { if (_dictateAutoRestart) _startDictateRec(); }, 150); return; }
     _dictateListening = false;
     document.getElementById('dictateMicBtn')?.classList.remove('listening');
-    document.getElementById('dictateStatusText').textContent = _dictateTranscript ? 'Dictado listo — guarda o continúa' : 'Listo';
+    document.getElementById('dictateStatusText').textContent = _dictateChunks.length ? 'Listo — edita o guarda' : 'Listo';
+    _stopVolumeMeter();
   };
 
-  _dictateRec.onerror = () => {
-    _dictateListening = false;
+  _dictateRec.onerror = (ev) => {
+    if (ev.error === 'no-speech' && _dictateAutoRestart) { setTimeout(() => { if (_dictateAutoRestart) _startDictateRec(); }, 300); return; }
+    _dictateAutoRestart = false; _dictateListening = false;
     document.getElementById('dictateMicBtn')?.classList.remove('listening');
-    showToast('Error de micrófono');
+    document.getElementById('dictateStatusText').textContent = 'Error';
+    if (ev.error !== 'aborted') showToast('Error de micrófono');
+    _stopVolumeMeter();
   };
 
-  _dictateRec.start();
-  _dictateListening = true;
+  _dictateRec.start(); _dictateListening = true;
 }
 
 async function saveDictateNote() {
-  const text = (_dictateTranscript + (_dictateInterim ? ' ' + _dictateInterim : '')).trim();
+  const preview = document.getElementById('dictatePreview');
+  const text = (preview
+    ? preview.textContent.replace(/Presiona el micrófono para comenzar…/g, '')
+    : _dictateChunks.map(c => c.text).join('')
+  ).trim();
   if (!text || !_dictateTarget) return;
   const now = new Date();
   const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -2101,6 +2173,8 @@ async function saveDictateNote() {
       updatedBy: currentUser.uid,
     }, { merge: true });
     logActivity(type === 'quote' ? 'quote_note' : 'client_note', `${id}: ${text.slice(0, 80)}`).catch(() => {});
+    if (_dictateRec) { try { _dictateRec.abort(); } catch {} }
+    _stopVolumeMeter();
     document.getElementById('dictateSheet').classList.add('hidden');
     showToast('Nota guardada');
     if (type === 'quote' && detailQuoteId === id) openQuoteDetail(id);
@@ -2111,24 +2185,41 @@ async function saveDictateNote() {
 
 document.getElementById('dictateMicBtn').addEventListener('click', () => {
   if (_dictateListening) {
+    _dictateAutoRestart = false;
     if (_dictateRec) _dictateRec.stop();
     _dictateListening = false;
     document.getElementById('dictateMicBtn').classList.remove('listening');
     document.getElementById('dictateStatusText').textContent = 'Pausado';
+    _stopVolumeMeter();
   } else {
+    _dictateAutoRestart = true;
     _startDictateRec();
+    _startVolumeMeter();
     document.getElementById('dictateMicBtn').classList.add('listening');
     document.getElementById('dictateStatusText').textContent = 'Escuchando…';
   }
 });
 
 document.getElementById('dictateCancelBtn').addEventListener('click', () => {
+  _dictateAutoRestart = false;
   if (_dictateRec) { try { _dictateRec.abort(); } catch {} _dictateRec = null; }
   _dictateListening = false;
+  _stopVolumeMeter();
   document.getElementById('dictateSheet').classList.add('hidden');
 });
 
 document.getElementById('dictateSaveBtn').addEventListener('click', saveDictateNote);
+
+document.querySelectorAll('.dlang-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    _dictateLang = btn.dataset.lang;
+    document.querySelectorAll('.dlang-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const hint = document.querySelector('.dictate-hint');
+    if (hint) hint.textContent = _dictateLang === 'es-CL'
+      ? 'Comandos: "punto" "coma" "nueva línea" "borrar" "guardar"'
+      : 'Commands: "period" "comma" "new line" "delete" "save"';
+  });
+});
 
 initDictation();
 
