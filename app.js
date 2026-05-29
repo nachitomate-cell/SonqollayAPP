@@ -5,9 +5,9 @@ import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
-  getFirestore, collection, doc, getDoc, onSnapshot, setDoc, deleteDoc,
-  serverTimestamp, query, orderBy, limit, writeBatch, getDocs,
-  enableIndexedDbPersistence, arrayUnion
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, doc, getDoc, onSnapshot, setDoc, deleteDoc,
+  serverTimestamp, query, orderBy, limit, writeBatch, getDocs, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import {
   getMessaging, getToken, onMessage, isSupported
@@ -20,14 +20,10 @@ import { firebaseConfig, VAPID_KEY } from './firebase-config.js';
 // ---------- Init Firebase ----------
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const dbf = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
-
-enableIndexedDbPersistence(dbf).catch(err => {
-  if (err.code === 'failed-precondition' || err.code === 'unimplemented') {
-    console.warn('Persistencia offline no disponible:', err.code);
-  }
+const dbf = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
+const googleProvider = new GoogleAuthProvider();
 
 analyticsSupported().then(ok => { if (ok) getAnalytics(app); }).catch(() => {});
 
