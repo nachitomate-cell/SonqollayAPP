@@ -1090,4 +1090,52 @@ main { padding: 14px 14px 20px; }
 .history-entry { font-size: 12px; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; background: var(--bg-2); border-radius: var(--radius-sm); }
 .history-user { font-weight: 600; color: var(--accent); font-size: 11px; }
 .history-desc { color: var(--text); line-height: 1.4; }
+
+/* ─── Tipo de servicio / Industria chips ─── */
+.tipo-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+.tipo-chip {
+  padding: 5px 14px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--bg-2); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: all var(--transition);
+}
+.tipo-chip[data-tipo].active { background: rgba(129,140,248,.15); border-color: var(--accent-2); color: var(--accent-2); }
+.tipo-chip[data-ind].active { background: rgba(52,211,153,.12); border-color: var(--success); color: var(--success); }
+.tag-tipo { font-size: 10px; padding: 2px 7px; border-radius: 999px; background: rgba(129,140,248,.12); color: var(--accent-2); border: 1px solid rgba(129,140,248,.25); white-space: nowrap; }
+.tag-industria { font-size: 10px; padding: 2px 7px; border-radius: 999px; background: rgba(52,211,153,.1); color: var(--success); border: 1px solid rgba(52,211,153,.2); white-space: nowrap; }
+
+/* ─── Proyectos ─── */
+.proyecto-card { border-left-color: var(--success) !important; }
+.proyecto-progress { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.proyecto-progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--success)); border-radius: 2px; transition: width .4s ease; }
+.hitos-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.hito-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.hito-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.hito-item.done .hito-dot { background: var(--success); }
+.hito-item.done .hito-titulo { text-decoration: line-through; color: var(--muted); }
+.hito-titulo { flex: 1; }
+.hito-fecha { color: var(--muted); font-size: 11px; }
+.hito-edit-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.hito-check-btn { background: none; border: none; cursor: pointer; color: var(--muted); padding: 0; display: flex; }
+.hito-check-btn.done { color: var(--success); }
+.hito-titulo.done { text-decoration: line-through; color: var(--muted); font-size: 13px; flex: 1; }
+.hito-titulo:not(.done) { font-size: 13px; flex: 1; color: var(--text); }
+
+/* ─── Quote Items ─── */
+.quote-item-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.qi-nums { display: flex; gap: 6px; align-items: center; }
+.qi-input { background: var(--card-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px; font-family: inherit; outline: none; transition: border-color var(--transition); }
+.qi-input:focus { border-color: var(--accent); }
+.qi-desc { width: 100%; }
+.qi-cant { width: 60px; }
+.qi-val { flex: 1; }
+.items-table { display: flex; flex-direction: column; gap: 6px; }
+.items-table-row { display: flex; flex-direction: column; padding: 6px 8px; background: var(--bg-2); border-radius: var(--radius-sm); }
+.items-desc { font-size: 13px; color: var(--text); }
+.items-meta { font-size: 12px; color: var(--muted); }
+.items-table-total { font-weight: 700; color: var(--accent); font-size: 13px; text-align: right; padding-top: 4px; border-top: 1px solid var(--border); }
+
+/* ─── Tipo metric rows ─── */
+.tipo-metric-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.tipo-metric-count { font-size: 12px; color: var(--muted); }
+.tipo-metric-val { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--text); }
 .history-ts { color: var(--muted); font-size: 10px; }

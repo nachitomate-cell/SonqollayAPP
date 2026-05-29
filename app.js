@@ -659,6 +659,7 @@ function renderAll() {
   renderDashboard();
   renderPlanner();
   renderQuotes();
+  renderProyectos();
   renderClients();
   renderCompaniesDatalist();
 }
@@ -770,6 +771,15 @@ function renderMetrics() {
   }
   const maxCount = Math.max(...months.map(m => m.count), 1);
 
+  // Tipo breakdown
+  const TIPOS = ['Consultoría', 'Academia', 'AURA'];
+  const tipoRows = TIPOS.map(tipo => {
+    const list = active.filter(q => q.tipoServicio === tipo);
+    if (!list.length) return '';
+    const val = list.reduce((s, q) => s + (Number(q.valor)||0), 0);
+    return `<div class="tipo-metric-row"><span class="tag-tipo">${escapeHtml(tipo)}</span><span class="tipo-metric-count">${list.length} cot.</span><span class="tipo-metric-val">${formatCLP(val)}</span></div>`;
+  }).filter(Boolean).join('');
+
   el.innerHTML = `
     <div class="metrics-row">
       <div class="metric-card">
@@ -785,6 +795,7 @@ function renderMetrics() {
         <div class="metric-lbl">Pipeline activo</div>
       </div>
     </div>
+    ${tipoRows ? `<div class="chart-section"><div class="chart-title">Pipeline por tipo de servicio</div>${tipoRows}</div>` : ''}
     <div class="chart-section">
       <div class="chart-title">Cotizaciones por mes</div>
       <div class="mini-chart">
@@ -966,16 +977,24 @@ document.getElementById('dashboardTabs').addEventListener('click', (e) => {
 function cardQuoteHtml(q, opts = {}) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
   const sm = getSeguimientoStatus(q);
+  const academiaCupos = q.tipoServicio === 'Academia' && q.cursoCupos ? `${q.cursoInscritos||0}/${q.cursoCupos} cupos` : '';
   return `
     <div class="card" data-quote-id="${q.id}" data-estado="${escapeHtml(q.estado || 'Borrador')}">
       <div class="card-row">
         <div class="card-title">${escapeHtml(q.numero)} · ${escapeHtml(q.empresa)}</div>
-        <span class="tag estado-${escapeHtml(estadoClass)}">${escapeHtml(q.estado || 'Borrador')}</span>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+          <span class="tag estado-${escapeHtml(estadoClass)}">${escapeHtml(q.estado || 'Borrador')}</span>
+          ${q.tipoServicio ? `<span class="tag-tipo">${escapeHtml(q.tipoServicio)}</span>` : ''}
+          ${q.industria ? `<span class="tag-industria">${escapeHtml(q.industria)}</span>` : ''}
+        </div>
       </div>
       <div class="card-sub">${escapeHtml(q.descripcion || '—')}</div>
       <div class="card-row">
         <span class="card-meta">${formatDate(q.fecha)}</span>
-        <span class="card-meta"><strong style="color:var(--text)">${formatCLP(q.valor)}</strong></span>
+        <span class="card-meta">
+          <strong style="color:var(--text)">${formatCLP(q.valor)}</strong>
+          ${academiaCupos ? ` · <span style="color:var(--muted)">${academiaCupos}</span>` : ''}
+        </span>
       </div>
       ${sm ? `<div class="sm-row tappable" data-seg-id="${q.id}">
         <span class="sm-dot ${sm.key}${sm.key === 'red' ? ' pulse' : ''}"></span>
@@ -1026,6 +1045,7 @@ function updateFilterBadge() {
 
 function renderQuotes() {
   if (_quotesView === 'pipeline') { renderPipeline(); return; }
+  if (_quotesView === 'proyectos') { renderProyectos(); return; }
   if (!quotesLoaded) { document.getElementById('quotes-list').innerHTML = skeletonCards(5); return; }
   const q = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
   let list = [...quotes].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
@@ -1072,7 +1092,11 @@ function renderClients() {
       <div class="card" data-client-id="${c.id}">
         <div class="card-row">
           <div class="card-title">${escapeHtml(c.empresa)}</div>
-          <span class="tag">${count} cot.</span>
+          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+            <span class="tag">${count} cot.</span>
+            ${c.industria ? `<span class="tag-industria">${escapeHtml(c.industria)}</span>` : ''}
+            ${c.resultados ? `<span class="tag-tipo" style="font-size:10px">Con resultados</span>` : ''}
+          </div>
         </div>
         <div class="card-sub">${escapeHtml(c.nombre || c.email || '—')}</div>
         ${c.email ? `<div class="card-meta">${escapeHtml(c.email)}</div>` : ''}
@@ -1140,6 +1164,11 @@ sheet.querySelectorAll('[data-new]').forEach(btn => {
 const quoteModal = document.getElementById('quoteModal');
 const quoteForm = document.getElementById('quoteForm');
 let editingQuoteId = null;
+let _editingTipo = '';
+let _editingIndustriaQuote = '';
+let _quoteItems = [];
+let _proyectoSheetId = null;
+let _hitosTemp = [];
 
 function openQuoteForm(id, prefill = null) {
   editingQuoteId = id || null;
@@ -1158,6 +1187,17 @@ function openQuoteForm(id, prefill = null) {
       quoteForm.estado.value = q.estado || 'Borrador';
       quoteForm.seguimiento.value = q.seguimiento || '';
       quoteForm.notas.value = q.notas || '';
+      _editingTipo = q.tipoServicio || '';
+      _editingIndustriaQuote = q.industria || '';
+      _quoteItems = q.items ? q.items.map(i => ({...i})) : [];
+      // Academia fields
+      if (q.tipoServicio === 'Academia') {
+        if (quoteForm.cursoNombre) quoteForm.cursoNombre.value = q.cursoNombre || '';
+        if (quoteForm.cursoFecha) quoteForm.cursoFecha.value = q.cursoFecha || '';
+        if (quoteForm.cursoModalidad) quoteForm.cursoModalidad.value = q.cursoModalidad || '';
+        if (quoteForm.cursoCupos) quoteForm.cursoCupos.value = q.cursoCupos != null ? q.cursoCupos : '';
+        if (quoteForm.cursoInscritos) quoteForm.cursoInscritos.value = q.cursoInscritos != null ? q.cursoInscritos : '';
+      }
     }
   } else if (prefill) {
     quoteForm.empresa.value = prefill.empresa || '';
@@ -1169,10 +1209,19 @@ function openQuoteForm(id, prefill = null) {
     quoteForm.estado.value = prefill.estado || 'Borrador';
     quoteForm.seguimiento.value = prefill.seguimiento || '';
     quoteForm.notas.value = prefill.notas || '';
+    _editingTipo = prefill.tipoServicio || '';
+    _editingIndustriaQuote = prefill.industria || '';
+    _quoteItems = prefill.items ? prefill.items.map(i => ({...i})) : [];
   } else {
     quoteForm.fecha.value = new Date().toISOString().slice(0,10);
     quoteForm.estado.value = 'Borrador';
+    _editingTipo = '';
+    _editingIndustriaQuote = '';
+    _quoteItems = [];
   }
+  updateTipoChips();
+  updateIndustriaChips('quote');
+  renderQuoteItems();
   quoteModal.classList.remove('hidden');
 }
 
@@ -1189,6 +1238,16 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     estado: quoteForm.estado.value,
     seguimiento: quoteForm.seguimiento.value || '',
     notas: quoteForm.notas.value.trim(),
+    tipoServicio: _editingTipo,
+    industria: _editingIndustriaQuote,
+    items: _quoteItems,
+    ...((_editingTipo === 'Academia') ? {
+      cursoNombre: (quoteForm.cursoNombre?.value || '').trim(),
+      cursoFecha: quoteForm.cursoFecha?.value || '',
+      cursoModalidad: quoteForm.cursoModalidad?.value || '',
+      cursoCupos: parseInt(quoteForm.cursoCupos?.value) || null,
+      cursoInscritos: parseInt(quoteForm.cursoInscritos?.value) || null,
+    } : {}),
   };
   if (!data.empresa || !data.numero || !data.fecha) {
     showToast('Empresa, N° y fecha son obligatorios');
@@ -1265,9 +1324,24 @@ function openQuoteDetail(id) {
   const sm = getSeguimientoStatus(q);
 
   const ESTADOS = ['Borrador','Enviada','En revisión','Adjudicada','Perdida'];
+  const client = clients.find(c => c.empresa.toLowerCase() === q.empresa.toLowerCase());
+  const clientPhone = client?.telefono?.replace(/\D/g,'') || '';
+  const waText = encodeURIComponent(
+    `Hola, te contacto respecto a la cotización *${q.numero}* — *${q.empresa}*\n` +
+    `${q.descripcion ? q.descripcion + '\n' : ''}` +
+    `Valor: ${formatCLP(q.valor)}\nEstado: ${q.estado || 'Borrador'}`
+  );
+  const waUrl = clientPhone
+    ? `https://wa.me/56${clientPhone.replace(/^56/,'')}?text=${waText}`
+    : `https://wa.me/?text=${waText}`;
+
   document.getElementById('detailBody').innerHTML = `
     <h3>${escapeHtml(q.numero)}</h3>
     <div class="det-company">${escapeHtml(q.empresa)}</div>
+    ${(q.tipoServicio || q.industria) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      ${q.tipoServicio ? `<span class="tag-tipo">${escapeHtml(q.tipoServicio)}</span>` : ''}
+      ${q.industria ? `<span class="tag-industria">${escapeHtml(q.industria)}</span>` : ''}
+    </div>` : ''}
 
     <div class="estado-chips" id="estadoChips">
       ${ESTADOS.map(e => `<button class="estado-chip${q.estado === e ? ' active' : ''}" data-estado="${escapeHtml(e)}">${escapeHtml(e)}</button>`).join('')}
@@ -1276,6 +1350,25 @@ function openQuoteDetail(id) {
     <div class="detail-row"><span class="lbl">Fecha</span><span class="val">${formatDate(q.fecha)}</span></div>
     <div class="detail-row"><span class="lbl">Valor</span><span class="val"><strong>${formatCLP(q.valor)}</strong></span></div>
     <div class="detail-row"><span class="lbl">Descripción</span><span class="val">${escapeHtml(q.descripcion || '—')}</span></div>
+
+    ${q.items && q.items.length ? `<div class="detail-row">
+      <span class="lbl">Servicios</span>
+      <div class="val items-table">
+        ${q.items.map(item => `
+          <div class="items-table-row">
+            <span class="items-desc">${escapeHtml(item.descripcion||'—')}</span>
+            <span class="items-meta">${item.cantidad||1} × ${formatCLP(item.valorUnit)} = ${formatCLP((item.cantidad||1)*(Number(item.valorUnit)||0))}</span>
+          </div>`).join('')}
+        <div class="items-table-total">Total: ${formatCLP(q.valor)}</div>
+      </div>
+    </div>` : ''}
+
+    ${q.tipoServicio === 'Academia' && (q.cursoNombre || q.cursoFecha || q.cursoModalidad) ? `
+    <div class="detail-row"><span class="lbl">Curso</span><span class="val">${escapeHtml(q.cursoNombre||'—')}</span></div>
+    ${q.cursoFecha ? `<div class="detail-row"><span class="lbl">Fecha curso</span><span class="val">${formatDate(q.cursoFecha)}</span></div>` : ''}
+    ${q.cursoModalidad ? `<div class="detail-row"><span class="lbl">Modalidad</span><span class="val">${escapeHtml(q.cursoModalidad)}</span></div>` : ''}
+    ${q.cursoCupos ? `<div class="detail-row"><span class="lbl">Cupos</span><span class="val">${q.cursoInscritos||0} / ${q.cursoCupos} inscritos</span></div>` : ''}
+    ` : ''}
 
     <div class="seg-detail-box">
       <div class="seg-detail-header">
@@ -1315,6 +1408,10 @@ function openQuoteDetail(id) {
 
     <div class="detail-actions">
       ${emails.length ? `<a class="btn" href="mailto:${escapeHtml(emails.join(','))}?subject=${encodeURIComponent('Cotización ' + q.numero + ' - ' + q.empresa)}">✉ Enviar correo</a>` : ''}
+      <a class="btn btn-outline" href="${waUrl}" target="_blank" rel="noopener" style="background:rgba(37,211,102,.1);border-color:rgba(37,211,102,.3);color:#25D366">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:4px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        WhatsApp
+      </a>
       <button class="btn btn-outline" id="detailShare">Compartir</button>
       <button class="btn btn-outline" id="detailDuplicate">Duplicar</button>
       <button class="btn btn-outline" id="detailSaveTemplate">Guardar plantilla</button>
@@ -1372,7 +1469,10 @@ function openQuoteDetail(id) {
       fecha: new Date().toISOString().slice(0,10),
       numero: '',
       seguimiento: '',
-      notas: ''
+      notas: '',
+      tipoServicio: q.tipoServicio || '',
+      industria: q.industria || '',
+      items: q.items ? q.items.map(i => ({...i, id: uid()})) : [],
     });
   });
 
@@ -1395,6 +1495,8 @@ const clientModal = document.getElementById('clientModal');
 const clientForm = document.getElementById('clientForm');
 let editingClientId = null;
 let clientNotasArr = [];
+let clientResultadosArr = [];
+let _editingIndustriaClient = '';
 
 function parseNotes(notasStr) {
   if (!notasStr || !notasStr.trim()) return [];
@@ -1475,7 +1577,9 @@ function openClientForm(id) {
   editingClientId = id || null;
   clientForm.reset();
   clientNotasArr = [];
+  clientResultadosArr = [];
   clientExtraContactos = [];
+  _editingIndustriaClient = '';
   document.getElementById('clientTitle').textContent = id ? 'Editar cliente' : 'Nuevo cliente';
   document.getElementById('clientDelete').hidden = !id;
   if (id) {
@@ -1487,11 +1591,15 @@ function openClientForm(id) {
       clientForm.telefono.value = c.telefono || '';
       clientForm.cargo.value = c.cargo || '';
       clientNotasArr = parseNotes(c.notas || '');
+      clientResultadosArr = parseNotes(c.resultados || '');
       clientExtraContactos = Array.isArray(c.extraContactos) ? c.extraContactos.map(x => ({ ...x })) : [];
+      _editingIndustriaClient = c.industria || '';
     }
   }
   renderClientNotes();
+  renderClientResultados();
   renderExtraContactos();
+  updateIndustriaChips('client');
   clientModal.classList.remove('hidden');
 }
 
@@ -1558,7 +1666,9 @@ document.getElementById('clientSave').addEventListener('click', async () => {
     telefono: clientForm.telefono.value.trim(),
     cargo: clientForm.cargo.value.trim(),
     notas: clientNotasArr.join('\n'),
+    resultados: clientResultadosArr.join('\n'),
     extraContactos: clientExtraContactos,
+    industria: _editingIndustriaClient,
   };
   if (!data.empresa) { showToast('La empresa es obligatoria'); return; }
   try {
@@ -1590,6 +1700,7 @@ document.getElementById('clientDelete').addEventListener('click', async () => {
 // ---------- Buscadores ----------
 document.getElementById('search-quotes').addEventListener('input', () => {
   if (_quotesView === 'pipeline') { renderPipeline(); return; }
+  if (_quotesView === 'proyectos') { renderProyectos(); return; }
   renderQuotes();
 });
 document.getElementById('search-clients').addEventListener('input', () => { clientsPage = 0; renderClients(); });
@@ -2040,6 +2151,292 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// ---------- Tipo de servicio chip helpers ----------
+function updateTipoChips() {
+  document.querySelectorAll('#tipoChips .tipo-chip').forEach(chip => {
+    chip.classList.toggle('active', chip.dataset.tipo === _editingTipo);
+  });
+  const academiaFields = document.getElementById('academiaFields');
+  if (academiaFields) academiaFields.classList.toggle('hidden', _editingTipo !== 'Academia');
+}
+
+document.getElementById('tipoChips')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.tipo-chip[data-tipo]');
+  if (!chip) return;
+  _editingTipo = _editingTipo === chip.dataset.tipo ? '' : chip.dataset.tipo;
+  updateTipoChips();
+});
+
+// ---------- Industria chip helpers ----------
+function updateIndustriaChips(which) {
+  const val = which === 'quote' ? _editingIndustriaQuote : _editingIndustriaClient;
+  const id = which === 'quote' ? 'industriaChipsQuote' : 'industriaChipsClient';
+  document.querySelectorAll(`#${id} .tipo-chip`).forEach(chip => {
+    chip.classList.toggle('active', chip.dataset.ind === val);
+  });
+}
+
+document.getElementById('industriaChipsQuote')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.tipo-chip[data-ind]');
+  if (!chip) return;
+  _editingIndustriaQuote = _editingIndustriaQuote === chip.dataset.ind ? '' : chip.dataset.ind;
+  updateIndustriaChips('quote');
+});
+
+document.getElementById('industriaChipsClient')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.tipo-chip[data-ind]');
+  if (!chip) return;
+  _editingIndustriaClient = _editingIndustriaClient === chip.dataset.ind ? '' : chip.dataset.ind;
+  updateIndustriaChips('client');
+});
+
+// ---------- Quote Items ----------
+function renderQuoteItems() {
+  const el = document.getElementById('quoteItemsList');
+  if (!el) return;
+  if (!_quoteItems.length) { el.innerHTML = ''; updateItemsTotal(); return; }
+  el.innerHTML = _quoteItems.map((item, i) => `
+    <div class="quote-item-row">
+      <input class="qi-input qi-desc" placeholder="Descripción del servicio" value="${escapeHtml(item.descripcion||'')}" data-qi="${i}" data-qif="descripcion">
+      <div class="qi-nums">
+        <input class="qi-input qi-cant" placeholder="Cant." type="number" min="1" value="${item.cantidad||1}" data-qi="${i}" data-qif="cantidad">
+        <input class="qi-input qi-val" placeholder="Valor unit." type="text" inputmode="numeric" value="${item.valorUnit!=null&&item.valorUnit!==''?item.valorUnit:''}" data-qi="${i}" data-qif="valorUnit">
+        <button type="button" class="icon-btn qi-del" data-qi="${i}">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>`).join('');
+
+  el.querySelectorAll('.qi-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = parseInt(inp.dataset.qi);
+      const f = inp.dataset.qif;
+      if (f === 'cantidad') _quoteItems[i].cantidad = parseInt(inp.value)||1;
+      else if (f === 'valorUnit') _quoteItems[i].valorUnit = parseValor(inp.value);
+      else _quoteItems[i][f] = inp.value;
+      updateItemsTotal();
+    });
+  });
+  el.querySelectorAll('.qi-del').forEach(btn => {
+    btn.addEventListener('click', () => { _quoteItems.splice(parseInt(btn.dataset.qi), 1); renderQuoteItems(); });
+  });
+  updateItemsTotal();
+}
+
+function updateItemsTotal() {
+  const total = _quoteItems.reduce((s, item) => s + ((Number(item.valorUnit)||0) * (Number(item.cantidad)||1)), 0);
+  const totalEl = document.getElementById('itemsTotal');
+  if (totalEl) totalEl.textContent = formatCLP(total);
+  if (_quoteItems.length > 0) {
+    quoteForm.valor.value = total > 0 ? total : '';
+  }
+}
+
+document.getElementById('addItemBtn')?.addEventListener('click', () => {
+  _quoteItems.push({ id: uid(), descripcion: '', cantidad: 1, valorUnit: '' });
+  renderQuoteItems();
+});
+
+// ---------- Resultados de cliente ----------
+function renderClientResultados() {
+  const el = document.getElementById('clientResultadosList');
+  if (!el) return;
+  if (!clientResultadosArr.length) {
+    el.innerHTML = '<div class="notes-empty">Sin resultados aún</div>';
+    return;
+  }
+  const tsRe = /^(\[\d{2} \w+ \d{4} \d{2}:\d{2}\]) ([\s\S]+)$/;
+  el.innerHTML = clientResultadosArr.map((note, i) => {
+    const m = note.match(tsRe);
+    const ts = m ? m[1] : '';
+    const text = m ? m[2] : note;
+    return `<div class="note-item">
+      <div class="note-meta">
+        <span class="note-ts">${escapeHtml(ts)}</span>
+        <div class="note-actions">
+          <button type="button" class="icon-btn note-edit-btn" data-idx="${i}" aria-label="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"/></svg>
+          </button>
+          <button type="button" class="icon-btn note-del-btn" data-idx="${i}" aria-label="Eliminar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.021-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="note-text" id="cr-text-${i}">${escapeHtml(text).replace(/\n/g,'<br>')}</div>
+      <div class="note-edit-area hidden" id="cr-edit-${i}">
+        <textarea rows="2">${escapeHtml(text)}</textarea>
+        <div class="note-edit-btns">
+          <button type="button" class="btn btn-sm btn-ghost note-cancel-btn" data-idx="${i}">Cancelar</button>
+          <button type="button" class="btn btn-sm note-ok-btn" data-idx="${i}">Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.note-edit-btn').forEach(b => b.addEventListener('click', () => {
+    const i = b.dataset.idx;
+    document.getElementById(`cr-text-${i}`).classList.add('hidden');
+    document.getElementById(`cr-edit-${i}`).classList.remove('hidden');
+    document.querySelector(`#cr-edit-${i} textarea`).focus();
+  }));
+  el.querySelectorAll('.note-cancel-btn').forEach(b => b.addEventListener('click', () => {
+    const i = b.dataset.idx;
+    document.getElementById(`cr-text-${i}`).classList.remove('hidden');
+    document.getElementById(`cr-edit-${i}`).classList.add('hidden');
+  }));
+  el.querySelectorAll('.note-ok-btn').forEach(b => b.addEventListener('click', () => {
+    const i = parseInt(b.dataset.idx);
+    const newText = document.querySelector(`#cr-edit-${i} textarea`).value.trim();
+    if (!newText) return;
+    const m = clientResultadosArr[i].match(/^(\[\d{2} \w+ \d{4} \d{2}:\d{2}\]) /);
+    clientResultadosArr[i] = m ? `${m[0]}${newText}` : newText;
+    renderClientResultados();
+  }));
+  el.querySelectorAll('.note-del-btn').forEach(b => b.addEventListener('click', () => {
+    clientResultadosArr.splice(parseInt(b.dataset.idx), 1);
+    renderClientResultados();
+  }));
+}
+
+document.getElementById('clientResultadoAdd')?.addEventListener('click', () => {
+  const input = document.getElementById('clientResultadoInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const now = new Date();
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const pad = n => String(n).padStart(2, '0');
+  const ts = `[${pad(now.getDate())} ${months[now.getMonth()]} ${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}]`;
+  clientResultadosArr.push(`${ts} ${text}`);
+  input.value = '';
+  renderClientResultados();
+});
+
+// ---------- Proyectos en ejecución ----------
+function renderProyectos() {
+  const el = document.getElementById('proyectos-view');
+  if (!el) return;
+  const proyectos = quotes.filter(q => (q.estado||'').toLowerCase() === 'adjudicada')
+    .sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
+  if (!proyectos.length) {
+    el.innerHTML = '<div class="empty">Sin proyectos en ejecución.<br>Los proyectos aparecen cuando una cotización pasa a "Adjudicada".</div>';
+    return;
+  }
+  el.innerHTML = proyectos.map(q => {
+    const avance = q.proyectoAvance || 0;
+    const hitos = q.hitos || [];
+    const hitosCompletos = hitos.filter(h => h.done).length;
+    return `<div class="card proyecto-card" data-proyecto-id="${q.id}">
+      <div class="card-row">
+        <div class="card-title">${escapeHtml(q.numero)} · ${escapeHtml(q.empresa)}</div>
+        ${q.tipoServicio ? `<span class="tag-tipo">${escapeHtml(q.tipoServicio)}</span>` : ''}
+      </div>
+      <div class="card-sub">${escapeHtml(q.descripcion||'—')}</div>
+      <div class="proyecto-progress">
+        <div class="proyecto-progress-bar" style="width:${avance}%"></div>
+      </div>
+      <div class="card-row" style="margin-top:4px">
+        <span class="card-meta">${avance}% completado</span>
+        ${hitos.length ? `<span class="card-meta">${hitosCompletos}/${hitos.length} hitos</span>` : ''}
+        ${q.proyectoFin ? `<span class="card-meta">Cierre: ${formatDate(q.proyectoFin)}</span>` : ''}
+      </div>
+      ${hitos.length ? `<div class="hitos-list">${hitos.map(h => `
+        <div class="hito-item${h.done ? ' done' : ''}">
+          <span class="hito-dot"></span>
+          <span class="hito-titulo">${escapeHtml(h.titulo)}</span>
+          ${h.fecha ? `<span class="hito-fecha">${formatDate(h.fecha)}</span>` : ''}
+        </div>`).join('')}</div>` : ''}
+      <button class="btn btn-outline btn-sm" style="margin-top:8px" data-gestionar-id="${q.id}">Gestionar proyecto</button>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.proyecto-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('[data-gestionar-id]')) return;
+      openQuoteDetail(card.dataset.proyectoId);
+    });
+  });
+  el.querySelectorAll('[data-gestionar-id]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openProyectoSheet(btn.dataset.gestionarId);
+    });
+  });
+}
+
+function openProyectoSheet(id) {
+  const q = quotes.find(x => x.id === id);
+  if (!q) return;
+  _proyectoSheetId = id;
+  _hitosTemp = (q.hitos || []).map(h => ({...h}));
+  document.getElementById('proyectoSheetTitle').textContent = `${q.numero} · ${q.empresa}`;
+  document.getElementById('proyectoFin').value = q.proyectoFin || '';
+  const avance = q.proyectoAvance || 0;
+  document.getElementById('proyectoAvance').value = avance;
+  document.getElementById('proyectoAvanceVal').textContent = avance + '%';
+  document.getElementById('hitoInput').value = '';
+  document.getElementById('hitoFecha').value = '';
+  renderHitosList();
+  document.getElementById('proyectoSheet').classList.remove('hidden');
+}
+
+function renderHitosList() {
+  const el = document.getElementById('hitosList');
+  if (!el) return;
+  if (!_hitosTemp.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:4px 0">Sin hitos aún</div>'; return; }
+  el.innerHTML = _hitosTemp.map((h, i) => `
+    <div class="hito-edit-item">
+      <button type="button" class="hito-check-btn${h.done ? ' done' : ''}" data-hi="${i}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">${h.done ? '<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>' : '<circle cx="12" cy="12" r="9"/>'}</svg>
+      </button>
+      <span class="hito-titulo${h.done ? ' done' : ''}">${escapeHtml(h.titulo)}</span>
+      ${h.fecha ? `<span class="hito-fecha">${formatDate(h.fecha)}</span>` : ''}
+      <button type="button" class="icon-btn hito-del-btn" data-hi="${i}" style="margin-left:auto">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>`).join('');
+
+  el.querySelectorAll('.hito-check-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _hitosTemp[parseInt(btn.dataset.hi)].done = !_hitosTemp[parseInt(btn.dataset.hi)].done;
+      renderHitosList();
+    });
+  });
+  el.querySelectorAll('.hito-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _hitosTemp.splice(parseInt(btn.dataset.hi), 1);
+      renderHitosList();
+    });
+  });
+}
+
+document.getElementById('proyectoAvance')?.addEventListener('input', e => {
+  document.getElementById('proyectoAvanceVal').textContent = e.target.value + '%';
+});
+document.getElementById('hitoAddBtn')?.addEventListener('click', () => {
+  const titulo = document.getElementById('hitoInput').value.trim();
+  if (!titulo) return;
+  _hitosTemp.push({ id: uid(), titulo, fecha: document.getElementById('hitoFecha').value || '', done: false });
+  document.getElementById('hitoInput').value = '';
+  document.getElementById('hitoFecha').value = '';
+  renderHitosList();
+});
+document.getElementById('proyectoSheetCancel')?.addEventListener('click', () => {
+  document.getElementById('proyectoSheet').classList.add('hidden');
+});
+document.getElementById('proyectoSheetSave')?.addEventListener('click', async () => {
+  if (!_proyectoSheetId) return;
+  const avance = parseInt(document.getElementById('proyectoAvance').value);
+  const fin = document.getElementById('proyectoFin').value;
+  await setDoc(doc(quotesCol(), _proyectoSheetId), {
+    proyectoAvance: avance,
+    proyectoFin: fin,
+    hitos: _hitosTemp,
+    updatedAt: serverTimestamp(), updatedBy: currentUser.uid
+  }, { merge: true });
+  document.getElementById('proyectoSheet').classList.add('hidden');
+  showToast('Proyecto actualizado');
+});
+
 // ---------- Pipeline view ----------
 function renderPipeline() {
   const el = document.getElementById('pipeline-view');
@@ -2087,9 +2484,11 @@ document.getElementById('quotesViewToggle')?.addEventListener('click', (e) => {
   _quotesView = btn.dataset.vtoggle;
   document.querySelectorAll('#quotesViewToggle [data-vtoggle]').forEach(b =>
     b.classList.toggle('active', b.dataset.vtoggle === _quotesView));
-  document.getElementById('quotes-list').classList.toggle('hidden', _quotesView === 'pipeline');
-  document.getElementById('pipeline-view').classList.toggle('hidden', _quotesView === 'list');
+  document.getElementById('quotes-list').classList.toggle('hidden', _quotesView !== 'list');
+  document.getElementById('pipeline-view').classList.toggle('hidden', _quotesView !== 'pipeline');
+  document.getElementById('proyectos-view').classList.toggle('hidden', _quotesView !== 'proyectos');
   if (_quotesView === 'pipeline') renderPipeline();
+  else if (_quotesView === 'proyectos') renderProyectos();
   else renderQuotes();
 });
 
