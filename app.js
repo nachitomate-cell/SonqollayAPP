@@ -47,6 +47,14 @@ const seedQuotes = [
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 const formatCLP = (v) => (v == null || v === '' || isNaN(v)) ? '—' : '$ ' + Number(v).toLocaleString('es-CL');
+// Compact format for summary/glanceable views: $ 1.157 MM, $ 128,5 MM, $ 850 mil
+const formatCLPShort = (v) => {
+  if (v == null || v === '' || isNaN(v)) return '—';
+  const n = Number(v), abs = Math.abs(n);
+  if (abs >= 1e6) return '$ ' + (n / 1e6).toLocaleString('es-CL', { maximumFractionDigits: abs >= 1e9 ? 0 : 1 }) + ' MM';
+  if (abs >= 1e4) return '$ ' + (n / 1e3).toLocaleString('es-CL', { maximumFractionDigits: 0 }) + ' mil';
+  return '$ ' + n.toLocaleString('es-CL');
+};
 const parseValor = (s) => {
   if (s == null || s === '') return null;
   const n = Number(String(s).replace(/[^\d.-]/g, ''));
@@ -644,7 +652,7 @@ function renderHoyUrgente() {
     html += `<div class="hoy-section-header warn" style="margin-top:${overdue.length?16:0}px">
       <span class="hoy-dot warn"></span>Sin respuesta +14 días
     </div>
-    <div class="list">${sinRespuesta.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>`;
+    <div class="list">${sinRespuesta.map(q => cardQuoteHtml(q, { registrar: true, diasSinRespuesta: daysSinceUpdated(q) })).join('')}</div>`;
   }
   el.innerHTML = html;
   if (html) bindQuoteCards(el);
@@ -664,10 +672,11 @@ function renderAll() {
 function renderDashboard() {
   renderGreeting();
   renderHoyUrgente();
-  document.getElementById('kpi-quotes').textContent = quotes.length;
-  document.getElementById('kpi-clients').textContent = clients.length;
   const total = quotes.reduce((s, q) => s + (Number(q.valor) || 0), 0);
-  document.getElementById('kpi-total').textContent = formatCLP(total);
+  const totalEl = document.getElementById('kpi-total');
+  if (totalEl) { totalEl.textContent = formatCLPShort(total); totalEl.title = formatCLP(total); }
+  const totalExactEl = document.getElementById('kpi-total-exact');
+  if (totalExactEl) totalExactEl.textContent = total > 0 ? formatCLP(total) : '';
 
   // Semáforo summary
   const smEl = document.getElementById('semaforo-summary');
@@ -777,20 +786,21 @@ function renderMetrics() {
     return `<div class="tipo-metric-row"><span class="tag-tipo">${escapeHtml(tipo)}</span><span class="tipo-metric-count">${list.length} cot.</span><span class="tipo-metric-val">${formatCLP(val)}</span></div>`;
   }).filter(Boolean).join('');
 
+  const metricCard = (value, label, emptyHint) => value !== null
+    ? `<div class="metric-card">
+        <div class="metric-val">${value}</div>
+        <div class="metric-lbl">${label}</div>
+      </div>`
+    : `<div class="metric-card is-empty">
+        <div class="metric-lbl">${label}</div>
+        <div class="metric-empty">${emptyHint}</div>
+      </div>`;
+
   el.innerHTML = `
     <div class="metrics-row">
-      <div class="metric-card">
-        <div class="metric-val">${winRate !== null ? winRate + '%' : '—'}</div>
-        <div class="metric-lbl">Tasa de cierre</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-val">${avgTicket !== null ? formatCLP(avgTicket) : '—'}</div>
-        <div class="metric-lbl">Ticket promedio</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-val">${formatCLP(pipeline)}</div>
-        <div class="metric-lbl">Pipeline activo</div>
-      </div>
+      ${metricCard(winRate !== null ? winRate + '%' : null, 'Tasa de cierre', 'Sin cierres aún')}
+      ${metricCard(avgTicket !== null ? formatCLPShort(avgTicket) : null, 'Ticket promedio', 'Sin montos')}
+      ${metricCard(pipeline > 0 ? formatCLPShort(pipeline) : null, 'Pipeline activo', 'Sin pipeline')}
     </div>
     ${tipoRows ? `<div class="chart-section"><div class="chart-title">Pipeline por tipo de servicio</div>${tipoRows}</div>` : ''}
     <div class="chart-section">
@@ -954,11 +964,20 @@ function renderPlanner() {
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5m-9-6h.008v.008H12V9zm0 3.75h.008v.008H12v-.008zM12 16.5h.008v.008H12V16.5zm-3.75-3h.008v.008H8.25V13.5zm0 3h.008v.008H8.25v-.008zm7.5-3h.008v.008H15.75V13.5zm0 3h.008v.008H15.75v-.008z"/></svg>
       <span>Sin seguimientos esta semana</span>
       <p class="hint">Asigna fechas de seguimiento a tus cotizaciones para planificar tu semana</p>
+      <button class="btn-outline empty-action" id="btnAsignarSeg" type="button">Asignar seguimientos</button>
     </div>`;
   }
 
   daysListEl.innerHTML = html;
   bindQuoteCards(daysListEl);
+  daysListEl.querySelector('#btnAsignarSeg')?.addEventListener('click', () => {
+    showView('quotes');
+    quotesFilters.sinSeg = true;
+    document.getElementById('filterSinSeg')?.classList.add('active');
+    document.getElementById('quotesFilterBar')?.classList.remove('hidden');
+    if (typeof updateFilterBadge === 'function') updateFilterBadge();
+    renderQuotes();
+  });
 }
 
 // ---------- Dashboard sub-tabs ----------
@@ -987,7 +1006,7 @@ function cardQuoteHtml(q, opts = {}) {
       </div>
       <div class="card-sub">${escapeHtml(q.descripcion || '—')}</div>
       <div class="card-row">
-        <span class="card-meta">${formatDate(q.fecha)}</span>
+        <span class="card-meta">${formatDate(q.fecha)}${opts.diasSinRespuesta ? ` · <span class="aging-days">hace ${opts.diasSinRespuesta} días</span>` : ''}</span>
         <span class="card-meta">
           <strong style="color:var(--text)">${formatCLP(q.valor)}</strong>
           ${academiaCupos ? ` · <span style="color:var(--muted)">${academiaCupos}</span>` : ''}
@@ -1168,6 +1187,17 @@ document.getElementById('themeToggle')?.addEventListener('change', (e) => {
   localStorage.setItem('theme', light ? 'light' : 'dark');
   applyTheme(light);
 });
+
+// ---------- Estado de conexión ----------
+function updateOnlineStatus(announce) {
+  const online = navigator.onLine;
+  const badge = document.getElementById('offlineBadge');
+  if (badge) badge.classList.toggle('hidden', online);
+  if (announce) showToast(online ? 'Conexión restablecida' : 'Sin conexión — los cambios se guardan y sincronizan luego');
+}
+window.addEventListener('online',  () => updateOnlineStatus(true));
+window.addEventListener('offline', () => updateOnlineStatus(true));
+updateOnlineStatus(false);
 
 // ---------- Quick Access Tiles ----------
 document.getElementById('quickTileQuotes')?.addEventListener('click', () => showView('quotes'));

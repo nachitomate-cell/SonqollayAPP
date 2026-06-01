@@ -80,6 +80,9 @@
         <p class="subtitle">Clientes y cotizaciones</p>
       </div>
     </div>
+    <span id="offlineBadge" class="offline-badge hidden" role="status" aria-live="polite">
+      <span class="offline-dot"></span>Sin conexión
+    </span>
     <button id="menuBtn" class="icon-btn" aria-label="Menú">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
         <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none"/>
@@ -150,17 +153,10 @@
       <!-- ── Tab: Resumen ── -->
       <div id="dashResumen">
         <div class="kpis">
-          <div class="kpi">
-            <span class="kpi-label">Cotizaciones</span>
-            <span class="kpi-value" id="kpi-quotes">0</span>
-          </div>
-          <div class="kpi">
-            <span class="kpi-label">Clientes</span>
-            <span class="kpi-value" id="kpi-clients">0</span>
-          </div>
-          <div class="kpi kpi-wide">
+          <div class="kpi kpi-hero kpi-wide">
             <span class="kpi-label">Valor total cotizado</span>
             <span class="kpi-value" id="kpi-total">$ 0</span>
+            <span class="kpi-sub" id="kpi-total-exact"></span>
           </div>
         </div>
         <div id="kpi-metrics"></div>
