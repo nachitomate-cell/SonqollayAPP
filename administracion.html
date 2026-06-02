@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Administración — SonqollayAPP</title>
+  <link rel="icon" type="image/png" href="logo.png" />
+  <script>!function(){var t=localStorage.getItem('adm_theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}()</script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sidebar-w: 240px;
+      --bg:        #0a1628;
+      --bg-2:      #0f1e35;
+      --sidebar:   #071120;
+      --card:      #122035;
+      --card-2:    #1a2e48;
+      --border:    #1e3554;
+      --text:      #eef4ff;
+      --muted:     #6b8cad;
+      --accent:    #f97316;
+      --accent-2:  #94a3b8;
+      --success:   #34d399;
+      --warn:      #fbbf24;
+      --danger:    #f87171;
+      --indigo:    #818cf8;
+      --radius:    12px;
+      --shadow:    0 4px 24px rgba(0,0,0,.4);
+      --transition: .18s ease;
+    }
+
+    [data-theme="light"] {
+      --bg:      #f0f4fa;
+      --bg-2:    #e4ecf7;
+      --sidebar: #1e3a5f;
+      --card:    #ffffff;
+      --card-2:  #f5f8ff;
+      --border:  #cdd9ee;
+      --text:    #0f1e35;
+      --muted:   #5a7599;
+      --shadow:  0 4px 24px rgba(0,0,0,.10);
+    }
+
+    /* ── Animated theme toggle (sidebar) ── */
+    .sidebar-theme-btn {
+      display: flex; align-items: center; gap: 10px;
+      width: calc(100% - 24px); margin: 0 12px 8px;
+      padding: 9px 12px; border-radius: 8px; border: none; cursor: pointer;
+      background: transparent; color: var(--muted);
+      font-size: 13px; font-weight: 500; font-family: inherit;
+      transition: background .15s, color .15s;
+    }
+    .sidebar-theme-btn:hover { background: var(--card); color: var(--text); }
+    .adm-theme-wrap {
+      width: 28px; height: 28px; position: relative;
+      display: grid; place-items: center; flex-shrink: 0;
+    }
+    .adm-icon-moon, .adm-icon-sun {
+      position: absolute;
+      transition: transform .45s cubic-bezier(.34,1.56,.64,1), opacity .35s ease;
+    }
+    [data-theme="dark"]  .adm-icon-moon { opacity: 1; transform: scale(1) rotate(0deg); }
+    [data-theme="dark"]  .adm-icon-sun  { opacity: 0; transform: scale(0) rotate(120deg); }
+    [data-theme="light"] .adm-icon-moon { opacity: 0; transform: scale(0) rotate(-120deg); }
+    [data-theme="light"] .adm-icon-sun  { opacity: 1; transform: scale(1) rotate(0deg); }
+    @keyframes adm-spin { 0%{transform:scale(1) rotate(0deg)} 40%{transform:scale(.7) rotate(180deg)} 100%{transform:scale(1) rotate(360deg)} }
+    .adm-spin { animation: adm-spin .45s cubic-bezier(.34,1.56,.64,1); }
+    .adm-theme-label { flex: 1; text-align: left; }
+    .adm-pill {
+      width: 36px; height: 20px; border-radius: 10px; background: var(--border);
+      position: relative; transition: background .25s; flex-shrink: 0;
+    }
+    .adm-pill.on { background: var(--accent); }
+    .adm-thumb {
+      position: absolute; width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; top: 2px; left: 2px;
+      transition: transform .25s cubic-bezier(.34,1.56,.64,1);
+      box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    }
+    .adm-pill.on .adm-thumb { transform: translateX(16px); }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      z-index: 100;
+    }
+
+    .sidebar-logo {
+      padding: 24px 20px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; }
+    .sidebar-logo-text { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: .02em; }
+    .sidebar-logo-sub  { font-size: 10px; color: var(--muted); font-weight: 500; letter-spacing: .04em; text-transform: uppercase; }
+
+    .sidebar-nav { flex: 1; padding: 16px 12px; display: flex; flex-direction: column; gap: 2px; }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px; font-weight: 500;
+      transition: background var(--transition), color var(--transition);
+      border: none; background: none; width: 100%; text-align: left;
+      text-decoration: none;
+    }
+    .nav-item svg { flex-shrink: 0; }
+    .nav-item:hover { background: var(--card); color: var(--text); }
+    .nav-item.active { background: rgba(249,115,22,.12); color: var(--accent); }
+    .nav-item.active svg { stroke: var(--accent); }
+
+    .sidebar-bottom {
+      padding: 16px 12px;
+      border-top: 1px solid var(--border);
+    }
+    .sidebar-user {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+    }
+    .sidebar-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: #fff;
+      flex-shrink: 0; overflow: hidden;
+    }
+    .sidebar-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .sidebar-user-info { flex: 1; min-width: 0; }
+    .sidebar-user-name { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-user-role { font-size: 11px; color: var(--accent); font-weight: 500; }
+    .logout-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 6px;
+      border: none; background: none; cursor: pointer; color: var(--muted);
+      transition: color var(--transition), background var(--transition);
+    }
+    .logout-btn:hover { color: var(--danger); background: rgba(248,113,113,.1); }
+
+    /* ── Main ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      padding: 20px 32px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .page-title { font-size: 22px; font-weight: 700; color: var(--text); }
+    .page-sub   { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .live-dot {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--success); font-weight: 500;
+    }
+    .live-dot::before {
+      content: '';
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .3; }
+    }
+
+    .content { padding: 24px 32px 40px; }
+
+    /* ── Stat cards ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: box-shadow var(--transition);
+    }
+    .stat-card:hover { box-shadow: var(--shadow); }
+    .stat-card.hero {
+      background: linear-gradient(135deg, rgba(249,115,22,.18) 0%, rgba(249,115,22,.06) 100%);
+      border-color: rgba(249,115,22,.3);
+    }
+    .stat-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .stat-icon.orange { background: rgba(249,115,22,.15); color: var(--accent); }
+    .stat-icon.green  { background: rgba(52,211,153,.12);  color: var(--success); }
+    .stat-icon.blue   { background: rgba(129,140,248,.12); color: var(--indigo); }
+    .stat-icon.warn   { background: rgba(251,191,36,.12);  color: var(--warn); }
+
+    .stat-number {
+      font-size: 40px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1;
+      letter-spacing: -.02em;
+    }
+    .stat-card.hero .stat-number { color: var(--accent); }
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    /* ── Section ── */
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-title-lg { font-size: 16px; font-weight: 700; color: var(--text); }
+    .section-count { font-size: 12px; color: var(--muted); background: var(--card-2); padding: 2px 8px; border-radius: 99px; }
+
+    /* ── User table ── */
+    .user-table {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .user-table-head {
+      display: grid;
+      grid-template-columns: 2fr 80px 2fr 1fr 1fr 1fr 1fr;
+      padding: 10px 20px;
+      background: var(--card-2);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .user-row {
+      display: grid;
+      grid-template-columns: 2fr 80px 2fr 1fr 1fr 1fr 1fr;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      transition: background var(--transition);
+    }
+    .user-row:last-child { border-bottom: none; }
+    .user-row:hover { background: var(--card-2); }
+    .user-ident { display: flex; align-items: center; gap: 10px; }
+    .u-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: var(--card-2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: var(--accent);
+      overflow: hidden; flex-shrink: 0;
+    }
+    .u-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .u-name  { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .u-email { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .u-cell  { font-size: 13px; color: var(--text); }
+    .u-cell.muted { color: var(--muted); font-size: 12px; }
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600;
+    }
+    .badge.online  { background: rgba(52,211,153,.15); color: var(--success); }
+    .badge.offline { background: rgba(107,140,173,.12); color: var(--muted); }
+    .rol-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+    .rol-admin { background: rgba(129,140,248,.18); color: var(--indigo); }
+    .rol-user  { background: rgba(107,140,173,.12); color: var(--muted); }
+
+    /* ── Recordatorios ── */
+    .rec-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      display: flex; gap: 16px; align-items: flex-start;
+      transition: background var(--transition); margin-bottom: 10px;
+    }
+    .rec-card:last-child { margin-bottom: 0; }
+    .rec-card:hover { background: var(--card-2); }
+    .rec-card-left { width: 4px; border-radius: 2px; flex-shrink: 0; align-self: stretch; min-height: 48px; }
+    .rec-line-urgente { background: var(--danger); }
+    .rec-line-normal  { background: var(--warn); }
+    .rec-line-bajo    { background: var(--muted); }
+    .rec-card-body { flex: 1; min-width: 0; }
+    .rec-card-text { font-size: 15px; font-weight: 500; color: var(--text); line-height: 1.5; margin-bottom: 10px; white-space: pre-wrap; }
+    .rec-card-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .rec-urgencia { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+    .rec-urg-urgente { background: rgba(248,113,113,.15); color: var(--danger); }
+    .rec-urg-normal  { background: rgba(251,191,36,.15); color: var(--warn); }
+    .rec-urg-bajo    { background: rgba(107,140,173,.12); color: var(--muted); }
+    .rec-delete-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); padding: 4px; border-radius: 6px;
+      transition: color .15s, background .15s; flex-shrink: 0;
+    }
+    .rec-delete-btn:hover { color: var(--danger); background: rgba(248,113,113,.1); }
+    .rec-form { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+    /* Overview notes block */
+    .rec-overview-list { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .rec-overview-item {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      border-left: 5px solid transparent;
+    }
+    .rec-overview-item:last-child { border-bottom: none; }
+    .rec-overview-text { font-size: 17px; font-weight: 600; color: var(--text); line-height: 1.45; white-space: pre-wrap; }
+    .rec-ov-urgente { border-left-color: var(--danger); background: rgba(248,113,113,.04); }
+    .rec-ov-normal  { border-left-color: var(--warn);   background: rgba(251,191,36,.04); }
+    .rec-ov-bajo    { border-left-color: var(--muted);  }
+
+    /* ── Skeleton loading ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--card-2) 25%, var(--border) 50%, var(--card-2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* ── Auth gate ── */
+    .gate {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; width: 100%;
+      flex-direction: column; gap: 16px;
+      text-align: center; padding: 32px;
+    }
+    .gate-icon { color: var(--muted); margin-bottom: 8px; }
+    .gate-title { font-size: 20px; font-weight: 700; color: var(--text); }
+    .gate-sub { font-size: 14px; color: var(--muted); max-width: 360px; }
+    .gate-btn {
+      margin-top: 8px;
+      padding: 10px 24px; border-radius: 8px;
+      background: var(--accent); color: #fff;
+      font-size: 14px; font-weight: 600;
+      border: none; cursor: pointer;
+      transition: opacity var(--transition);
+    }
+    .gate-btn:hover { opacity: .85; }
+
+    /* ── Views ── */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ── Notification form ── */
+    .notif-grid { display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start; }
+    .notif-form {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; display: flex; flex-direction: column; gap: 16px;
+    }
+    .form-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; display: block; }
+    .form-input, .form-textarea {
+      width: 100%; background: var(--bg-2, var(--bg)); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 14px;
+      font-family: inherit; transition: border-color var(--transition);
+      outline: none; resize: none;
+    }
+    .form-input:focus, .form-textarea:focus { border-color: var(--accent); }
+    .form-textarea { min-height: 80px; }
+    .send-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 20px; border-radius: 8px;
+      background: var(--accent); color: #fff;
+      font-size: 14px; font-weight: 600; border: none; cursor: pointer;
+      transition: opacity var(--transition); width: 100%;
+    }
+    .send-btn:hover { opacity: .85; }
+    .send-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .send-btn svg { flex-shrink: 0; }
+
+    .notif-preview {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+    }
+    .preview-phone {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px; margin-top: 12px;
+    }
+    .preview-notif {
+      background: var(--card-2); border-radius: 8px; padding: 12px;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .preview-notif-icon { width: 32px; height: 32px; border-radius: 7px; overflow: hidden; flex-shrink: 0; }
+    .preview-notif-icon img { width: 100%; height: 100%; object-fit: cover; }
+    .preview-notif-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .preview-notif-body  { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+
+    .broadcast-history { margin-top: 24px; }
+    .broadcast-item {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 14px 20px; border-bottom: 1px solid var(--border);
+    }
+    .broadcast-item:last-child { border-bottom: none; }
+    .bi-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 5px; }
+    .bi-body { flex: 1; min-width: 0; }
+    .bi-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .bi-text  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .bi-meta  { font-size: 11px; color: var(--muted); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .bi-sent  { color: var(--success); font-weight: 600; }
+    .bi-pending { color: var(--muted); font-style: italic; }
+    .bi-delete {
+      flex-shrink: 0; align-self: center;
+      width: 28px; height: 28px; border-radius: 6px;
+      border: none; background: none; cursor: pointer; color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      transition: color var(--transition), background var(--transition);
+    }
+    .bi-delete:hover { color: var(--danger); background: rgba(248,113,113,.1); }
+    .bi-delete:disabled { opacity: .3; cursor: not-allowed; }
+
+    /* ── Activity filters ── */
+    .act-toolbar {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      margin-bottom: 16px;
+    }
+    .act-search {
+      flex: 1; min-width: 200px; max-width: 280px;
+      display: flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0 12px; height: 36px;
+    }
+    .act-search svg { flex-shrink: 0; color: var(--muted); }
+    .act-search input {
+      flex: 1; border: none; background: none; color: var(--text);
+      font-size: 13px; font-family: inherit; outline: none;
+    }
+    .act-search input::placeholder { color: var(--muted); }
+    .act-select {
+      height: 36px; padding: 0 10px; border-radius: 8px;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); font-size: 13px; font-family: inherit;
+      cursor: pointer; outline: none;
+    }
+    .act-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .act-chip {
+      padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 500;
+      border: 1px solid var(--border); background: var(--card);
+      color: var(--muted); cursor: pointer; transition: all var(--transition);
+      white-space: nowrap;
+    }
+    .act-chip.active { background: rgba(249,115,22,.15); border-color: rgba(249,115,22,.4); color: var(--accent); }
+    .act-chip:hover:not(.active) { border-color: var(--muted); color: var(--text); }
+    .act-clear {
+      font-size: 12px; color: var(--muted); cursor: pointer; padding: 4px 8px;
+      border-radius: 6px; border: none; background: none;
+      transition: color var(--transition);
+    }
+    .act-clear:hover { color: var(--danger); }
+
+    /* date range */
+    .act-date { display: flex; align-items: center; gap: 6px; }
+    .act-date input[type="date"] {
+      height: 36px; padding: 0 8px; border-radius: 8px;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); font-size: 12px; font-family: inherit;
+      cursor: pointer; outline: none;
+      color-scheme: dark;
+    }
+    .act-date span { font-size: 12px; color: var(--muted); }
+
+    /* activity rows */
+    .act-row {
+      display: grid;
+      grid-template-columns: 36px 1fr auto auto;
+      gap: 0 14px;
+      align-items: center;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition);
+    }
+    .act-row:last-child { border-bottom: none; }
+    .act-row:hover { background: var(--card-2); }
+    .act-avatar-sm {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--card-2); overflow: hidden; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: var(--accent);
+    }
+    .act-avatar-sm img { width: 100%; height: 100%; object-fit: cover; }
+    .act-main { min-width: 0; }
+    .act-main-line { font-size: 13px; color: var(--text); }
+    .act-main-line strong { font-weight: 600; }
+    .act-detail-line { font-size: 11px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .act-badge {
+      padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .act-time-cell { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; min-width: 110px; }
+
+    /* Pagination */
+    .pagination {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--card-2);
+      border-radius: 0 0 var(--radius) var(--radius);
+    }
+    .pag-info { font-size: 12px; color: var(--muted); }
+    .pag-controls { display: flex; gap: 4px; align-items: center; }
+    .pag-btn {
+      height: 30px; min-width: 30px; padding: 0 8px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--card);
+      color: var(--text); font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all var(--transition);
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .pag-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .pag-btn:disabled { opacity: .35; cursor: not-allowed; }
+    .pag-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .pag-dots { font-size: 13px; color: var(--muted); padding: 0 4px; }
+
+    /* ── Quotes / Clients toolbar ── */
+    .section-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .section-search {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0 12px; height: 36px;
+      flex: 1; max-width: 320px;
+    }
+    .section-search svg { flex-shrink: 0; color: var(--muted); }
+    .section-search input {
+      flex: 1; border: none; background: none; color: var(--text);
+      font-size: 13px; font-family: inherit; outline: none;
+    }
+    .section-search input::placeholder { color: var(--muted); }
+    .new-btn {
+      display: flex; align-items: center; gap: 7px;
+      padding: 8px 16px; border-radius: 8px;
+      background: var(--accent); color: #fff;
+      font-size: 13px; font-weight: 600; border: none; cursor: pointer;
+      transition: opacity var(--transition); white-space: nowrap;
+    }
+    .new-btn:hover { opacity: .85; }
+
+    .export-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 8px;
+      background: var(--card-2); border: 1px solid var(--border);
+      color: var(--text); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: border-color .15s, color .15s; white-space: nowrap;
+    }
+    .export-btn:hover { border-color: var(--success); color: var(--success); }
+
+    /* ── Filters panel ── */
+    .filter-open-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 8px;
+      background: var(--card-2); border: 1px solid var(--border);
+      color: var(--text); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: border-color .15s; position: relative;
+    }
+    .filter-open-btn:hover { border-color: var(--accent); }
+    .filter-badge { color: var(--accent); font-size: 10px; margin-left: 2px; }
+    .act-filters-panel {
+      width: 360px; max-width: 95vw; min-height: 100vh;
+      background: var(--card); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .3s cubic-bezier(.32,0,.15,1);
+    }
+    .act-filters-panel.open { transform: translateX(0); }
+    .act-filters-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 20px 16px; border-bottom: 1px solid var(--border);
+    }
+    .act-filters-body { flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+    .act-filters-footer {
+      padding: 16px 20px; border-top: 1px solid var(--border);
+      display: flex; gap: 10px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .m-act-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .m-act-chip {
+      padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+      border: 1px solid var(--border); background: var(--card-2); color: var(--muted);
+      cursor: pointer; transition: all .15s;
+    }
+    .m-act-chip:hover { border-color: var(--accent); color: var(--accent); }
+    .m-act-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .synap-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 8px;
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%);
+      border: 1px solid var(--indigo); color: var(--indigo);
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: opacity .15s, box-shadow .15s; white-space: nowrap;
+      box-shadow: 0 0 0 0 rgba(129,140,248,.3);
+    }
+    .synap-btn:hover { opacity: .9; box-shadow: 0 0 12px 2px rgba(129,140,248,.25); }
+
+    /* ── Synaptech analysis card ── */
+    .synap-kpi-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 14px; margin-bottom: 24px; }
+    .synap-kpi { background: var(--card-2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 14px; text-align: center; }
+    .synap-kpi-val { font-size: 26px; font-weight: 700; color: var(--accent); line-height: 1.1; }
+    .synap-kpi-lbl { font-size: 11px; color: var(--muted); margin-top: 5px; }
+    .synap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .synap-section { margin-bottom: 24px; }
+    .synap-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .synap-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .synap-row:last-child { border-bottom: none; }
+    .synap-row-label { color: var(--text); }
+    .synap-row-val { font-weight: 600; color: var(--accent); }
+    .synap-bar-wrap { height: 6px; background: var(--border); border-radius: 3px; margin-top: 6px; }
+    .synap-bar { height: 6px; border-radius: 3px; background: var(--accent); transition: width .6s; }
+    .synap-insight { background: rgba(129,140,248,.08); border: 1px solid rgba(129,140,248,.2); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; font-size: 13px; line-height: 1.55; }
+    .synap-insight-label { font-size: 11px; font-weight: 700; color: var(--indigo); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 4px; }
+    .synap-alert { background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.2); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; font-size: 13px; line-height: 1.55; }
+    .synap-alert-label { font-size: 11px; font-weight: 700; color: var(--danger); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 4px; }
+
+    /* ── Quotes table ── */
+    .quotes-table-head {
+      display: grid;
+      grid-template-columns: 120px 110px 1.5fr 110px 120px 1fr;
+      padding: 10px 20px;
+      background: var(--card-2);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+    .quote-row {
+      display: grid;
+      grid-template-columns: 120px 110px 1.5fr 110px 120px 1fr;
+      padding: 13px 20px;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    .quote-row:last-child { border-bottom: none; }
+    .quote-row:hover { background: var(--card-2); }
+
+    /* ── Clients table ── */
+    .clients-table-head {
+      display: grid;
+      grid-template-columns: 1.5fr 1.5fr 1.5fr 1fr 1fr;
+      padding: 10px 20px;
+      background: var(--card-2);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+    .client-row {
+      display: grid;
+      grid-template-columns: 1.5fr 1.5fr 1.5fr 1fr 1fr;
+      padding: 13px 20px;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+    .client-row:last-child { border-bottom: none; }
+    .client-row:hover { background: var(--card-2); }
+
+    /* estado badges */
+    .estado-badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .estado-borrador  { background: rgba(107,140,173,.15); color: var(--muted); }
+    .estado-enviada   { background: rgba(129,140,248,.15); color: var(--indigo); }
+    .estado-revision  { background: rgba(251,191,36,.15);  color: var(--warn); }
+    .estado-adjudicada{ background: rgba(52,211,153,.15);  color: var(--success); }
+    .estado-perdida   { background: rgba(248,113,113,.15); color: var(--danger); }
+
+    /* ── Admin modal ── */
+    .admin-modal {
+      position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,.6);
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .admin-modal-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: 100%; max-width: 560px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow);
+    }
+    .admin-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px 0;
+      margin-bottom: 20px;
+    }
+    .admin-modal-title { font-size: 16px; font-weight: 700; color: var(--text); }
+    .admin-modal-close {
+      width: 28px; height: 28px; border-radius: 6px;
+      border: none; background: none; cursor: pointer; color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      transition: color var(--transition), background var(--transition);
+    }
+    .admin-modal-close:hover { color: var(--danger); background: rgba(248,113,113,.1); }
+    .admin-form-body { padding: 0 24px; }
+    .admin-form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .admin-form-grid .full-width { grid-column: 1 / -1; }
+    .admin-form-group {
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .admin-form-group label {
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+    .admin-input, .admin-select, .admin-textarea {
+      width: 100%; background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: 13px;
+      font-family: inherit; transition: border-color var(--transition);
+      outline: none;
+    }
+    .admin-input:focus, .admin-select:focus, .admin-textarea:focus { border-color: var(--accent); }
+    .admin-textarea { min-height: 80px; resize: vertical; }
+    .admin-select { cursor: pointer; }
+    .admin-modal-footer {
+      display: flex; align-items: center; justify-content: flex-end;
+      gap: 8px; padding: 20px 24px;
+      border-top: 1px solid var(--border);
+      margin-top: 20px;
+    }
+    .admin-modal-footer .spacer { flex: 1; }
+    .btn-save {
+      padding: 9px 20px; border-radius: 8px;
+      background: var(--accent); color: #fff;
+      font-size: 13px; font-weight: 600; border: none; cursor: pointer;
+      transition: opacity var(--transition);
+    }
+    .btn-save:hover { opacity: .85; }
+    .btn-save:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-cancel {
+      padding: 9px 16px; border-radius: 8px;
+      background: none; color: var(--muted);
+      font-size: 13px; font-weight: 500;
+      border: 1px solid var(--border); cursor: pointer;
+      transition: color var(--transition), border-color var(--transition);
+    }
+    .btn-cancel:hover { color: var(--text); border-color: var(--muted); }
+    .btn-delete {
+      padding: 9px 16px; border-radius: 8px;
+      background: rgba(248,113,113,.1); color: var(--danger);
+      font-size: 13px; font-weight: 600;
+      border: 1px solid rgba(248,113,113,.25); cursor: pointer;
+      transition: background var(--transition);
+    }
+    .btn-delete:hover { background: rgba(248,113,113,.2); }
+
+    /* ── Academia coming soon ── */
+    .academia-coming-soon {
+      display: flex; align-items: center; justify-content: center;
+      min-height: calc(100vh - 60px);
+    }
+    .academia-inner {
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center; padding: 48px 32px; max-width: 480px;
+      animation: academia-in .5s cubic-bezier(.32,0,.15,1) both;
+    }
+    @keyframes academia-in {
+      from { opacity: 0; transform: translateY(24px) scale(.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .academia-logo {
+      width: 80px; height: 80px; border-radius: 22px;
+      object-fit: contain; margin-bottom: 24px;
+      box-shadow: 0 8px 32px rgba(249,115,22,.25);
+      animation: academia-pulse 3s ease-in-out infinite;
+    }
+    @keyframes academia-pulse {
+      0%, 100% { box-shadow: 0 8px 32px rgba(249,115,22,.2); }
+      50%       { box-shadow: 0 8px 48px rgba(249,115,22,.45); }
+    }
+    .academia-title {
+      font-size: 13px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .12em; color: var(--accent); margin-bottom: 16px;
+    }
+    .academia-phrase {
+      font-size: 34px; font-weight: 800; line-height: 1.2;
+      color: var(--text); margin-bottom: 20px;
+      background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .academia-badge {
+      display: inline-block;
+      background: rgba(129,140,248,.12); border: 1px solid rgba(129,140,248,.3);
+      color: var(--indigo); font-size: 12px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      padding: 5px 16px; border-radius: 20px; margin-bottom: 20px;
+    }
+    .academia-sub {
+      font-size: 15px; color: var(--muted); line-height: 1.65;
+      margin-bottom: 32px;
+    }
+    .academia-sub strong { color: var(--text); }
+    .academia-suggest-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 13px 28px; border-radius: 12px;
+      background: var(--accent); color: #fff;
+      font-size: 14px; font-weight: 700; text-decoration: none;
+      transition: opacity .15s, transform .15s;
+      box-shadow: 0 4px 16px rgba(249,115,22,.35);
+    }
+    .academia-suggest-btn:hover { opacity: .9; transform: translateY(-2px); }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .sidebar { transform: translateX(-100%); }
+      .main { margin-left: 0; }
+      .user-table-head, .user-row {
+        grid-template-columns: 2fr 70px 2fr;
+      }
+      .user-table-head span:nth-child(n+4),
+      .user-row > *:nth-child(n+4) { display: none; }
+      .admin-form-grid { grid-template-columns: 1fr; }
+      .admin-form-grid .full-width { grid-column: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Auth gate -->
+<div id="authGate" class="gate" style="display:none">
+  <div class="gate-icon">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
+    </svg>
+  </div>
+  <div class="gate-title">Acceso restringido</div>
+  <div class="gate-sub">Solo el administrador puede acceder a este panel.</div>
+  <button class="gate-btn" id="gateLoginBtn">Iniciar sesión con Google</button>
+</div>
+
+<!-- No-admin gate -->
+<div id="noAdminGate" class="gate" style="display:none">
+  <div class="gate-icon">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+    </svg>
+  </div>
+  <div class="gate-title">Sin permisos de administrador</div>
+  <div class="gate-sub">Tu cuenta no tiene acceso a este panel. Contacta al administrador del sistema.</div>
+  <button class="gate-btn" id="gateLogoutBtn">Cerrar sesión</button>
+</div>
+
+<!-- Loading -->
+<div id="loadingGate" class="gate">
+  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="animation:spin 1s linear infinite">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+  </svg>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+</div>
+
+<!-- Admin panel -->
+<div id="adminPanel" style="display:none; width:100%; display:none">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="logo.png" alt="Logo" />
+      <div>
+        <div class="sidebar-logo-text">SonqollayAPP</div>
+        <div class="sidebar-logo-sub">Administración</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-section="overview">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
+        </svg>
+        Resumen
+      </button>
+      <button class="nav-item" data-section="users">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
+        </svg>
+        Usuarios
+      </button>
+      <button class="nav-item" data-section="recordatorios">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/>
+        </svg>
+        Recordatorios
+      </button>
+      <button class="nav-item" data-section="activity">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z"/>
+        </svg>
+        Actividad
+      </button>
+      <button class="nav-item" data-section="notifications">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
+        </svg>
+        Notificaciones
+      </button>
+      <button class="nav-item" data-section="quotes">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+        </svg>
+        Cotizaciones
+      </button>
+      <button class="nav-item" data-section="clients">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z"/>
+        </svg>
+        Clientes
+      </button>
+      <button class="nav-item" data-section="academia">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5"/>
+        </svg>
+        Academia
+        <span style="font-size:9px;font-weight:700;background:var(--indigo);color:#fff;padding:2px 6px;border-radius:20px;margin-left:auto;letter-spacing:.04em">PRONTO</span>
+      </button>
+    </nav>
+
+    <!-- Theme toggle -->
+    <button class="sidebar-theme-btn" id="admThemeBtn" type="button">
+      <div class="adm-theme-wrap" id="admThemeWrap">
+        <svg class="adm-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+        </svg>
+        <svg class="adm-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <circle cx="12" cy="12" r="4"/>
+          <line x1="12" y1="2" x2="12" y2="4" stroke-linecap="round"/>
+          <line x1="12" y1="20" x2="12" y2="22" stroke-linecap="round"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke-linecap="round"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke-linecap="round"/>
+          <line x1="2" y1="12" x2="4" y2="12" stroke-linecap="round"/>
+          <line x1="20" y1="12" x2="22" y2="12" stroke-linecap="round"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke-linecap="round"/>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke-linecap="round"/>
+          <rect x="9" y="10.5" width="2.5" height="1.8" rx="0.9" fill="currentColor" opacity="0.75" stroke="none"/>
+          <rect x="12.5" y="10.5" width="2.5" height="1.8" rx="0.9" fill="currentColor" opacity="0.75" stroke="none"/>
+          <line x1="11.5" y1="11.4" x2="12.5" y2="11.4" stroke-width="1"/>
+        </svg>
+      </div>
+      <span class="adm-theme-label" id="admThemeLabel">Modo oscuro</span>
+      <div class="adm-pill" id="admPill"><div class="adm-thumb"></div></div>
+    </button>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-user">
+        <div class="sidebar-avatar" id="sidebarAvatar"></div>
+        <div class="sidebar-user-info">
+          <div class="sidebar-user-name" id="sidebarName">—</div>
+          <div class="sidebar-user-role">Administrador</div>
+        </div>
+        <button class="logout-btn" id="sidebarLogout" title="Cerrar sesión">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="page-title" id="pageTitle">Resumen</div>
+        <div class="page-sub" id="pageSub">Vista general de uso de la aplicación</div>
+      </div>
+      <div class="live-dot">En vivo</div>
+    </div>
+
+    <div class="content">
+
+      <!-- OVERVIEW -->
+      <div id="sectionOverview" class="view active">
+        <div class="stats-row" id="statsRow">
+          <!-- Hero: users -->
+          <div class="stat-card hero">
+            <div class="stat-icon orange">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
+              </svg>
+            </div>
+            <div class="stat-number" id="statUsers">—</div>
+            <div class="stat-label">Usuarios únicos</div>
+          </div>
+          <!-- Sessions -->
+          <div class="stat-card">
+            <div class="stat-icon green">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155"/>
+              </svg>
+            </div>
+            <div class="stat-number" id="statSessions">—</div>
+            <div class="stat-label">Sesiones totales</div>
+          </div>
+          <!-- Avg time -->
+          <div class="stat-card">
+            <div class="stat-icon blue">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </div>
+            <div class="stat-number" id="statAvgTime">—</div>
+            <div class="stat-label">Tiempo promedio</div>
+          </div>
+          <!-- Actions -->
+          <div class="stat-card">
+            <div class="stat-icon warn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+              </svg>
+            </div>
+            <div class="stat-number" id="statActions">—</div>
+            <div class="stat-label">Acciones registradas</div>
+          </div>
+        </div>
+
+        <!-- Quick user list preview -->
+        <div class="section-header">
+          <div class="section-title-lg">Usuarios</div>
+          <span class="section-count" id="overviewUserCount">0 usuarios</span>
+        </div>
+        <div class="user-table">
+          <div class="user-table-head">
+            <span>Usuario</span>
+            <span>Rol</span>
+            <span>Email</span>
+            <span>Sesiones</span>
+            <span>Tiempo total</span>
+            <span>Última vez</span>
+            <span>Estado</span>
+          </div>
+          <div id="overviewUserList"></div>
+        </div>
+
+        <!-- Recordatorios overview -->
+        <div class="section-header" style="margin-top:32px">
+          <div class="section-title-lg">Recordatorios</div>
+          <button class="new-btn" id="goRecordatoriosBtn" style="padding:6px 14px;font-size:12px">Ver todos</button>
+        </div>
+        <div class="rec-overview-list" id="overviewNotes">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Sin recordatorios aún</div>
+        </div>
+      </div>
+
+      <!-- USERS -->
+      <div id="sectionUsers" class="view">
+        <div class="section-header">
+          <div class="section-title-lg">Todos los usuarios</div>
+          <span class="section-count" id="usersCount">0 usuarios</span>
+        </div>
+        <div class="user-table">
+          <div class="user-table-head">
+            <span>Usuario</span>
+            <span>Rol</span>
+            <span>Email</span>
+            <span>Sesiones</span>
+            <span>Tiempo total</span>
+            <span>Última vez</span>
+            <span>Estado</span>
+          </div>
+          <div id="fullUserList"></div>
+        </div>
+      </div>
+
+      <!-- ACTIVITY -->
+      <div id="sectionActivity" class="view">
+        <div class="section-header">
+          <div class="section-title-lg">Actividad reciente</div>
+          <span class="section-count" id="activityCount">0 eventos</span>
+        </div>
+
+        <!-- Compact toolbar -->
+        <div class="act-toolbar">
+          <div class="act-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+            <input type="text" id="actSearch" placeholder="Buscar usuario..." autocomplete="off" />
+          </div>
+          <button class="filter-open-btn" id="actFilterBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/></svg>
+            Filtros
+            <span class="filter-badge" id="actFilterBadge" style="display:none">●</span>
+          </button>
+          <button class="act-clear" id="actClearBtn">Limpiar</button>
+        </div>
+
+        <!-- Hidden user/date selects kept for JS compat -->
+        <select id="actUserFilter" style="display:none"><option value="">Todos</option></select>
+        <input type="date" id="actDateFrom" style="display:none" />
+        <input type="date" id="actDateTo" style="display:none" />
+
+        <!-- List + pagination -->
+        <div class="user-table">
+          <div id="activityList"></div>
+          <div id="activityPagination" class="pagination" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- NOTIFICATIONS -->
+      <div id="sectionNotifications" class="view">
+        <div class="notif-grid">
+          <!-- Form -->
+          <div>
+            <div class="notif-form">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                <div class="form-label" style="margin:0">Redactar notificación</div>
+                <button class="synap-btn" id="synapNotifBtn" style="padding:6px 12px;font-size:12px">
+                  <img src="synap.png" alt="" style="width:12px;height:12px;border-radius:3px;object-fit:contain" />
+                  Sugerir con Synaptech
+                </button>
+              </div>
+              <div>
+                <label class="form-label" for="notifTitle">Título de la notificación</label>
+                <input class="form-input" id="notifTitle" type="text" placeholder="Ej: Reunión de equipo hoy a las 15:00" maxlength="100" />
+              </div>
+              <div>
+                <label class="form-label" for="notifBody">Mensaje (opcional)</label>
+                <textarea class="form-textarea" id="notifBody" placeholder="Escribe el cuerpo del mensaje..." maxlength="300"></textarea>
+              </div>
+              <button class="send-btn" id="sendNotifBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
+                </svg>
+                Enviar a todos los usuarios
+              </button>
+              <div id="notifFeedback" style="font-size:13px;text-align:center;min-height:20px;color:var(--muted)"></div>
+            </div>
+          </div>
+
+          <!-- Preview -->
+          <div class="notif-preview">
+            <div class="form-label" style="margin-bottom:0">Vista previa</div>
+            <div class="preview-phone">
+              <div class="preview-notif">
+                <div class="preview-notif-icon">
+                  <img src="logo.png" alt="" />
+                </div>
+                <div>
+                  <div class="preview-notif-title" id="previewTitle">Título de la notificación</div>
+                  <div class="preview-notif-body" id="previewBody">El mensaje aparecerá aquí...</div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.5">
+              Solo se envía a usuarios que han activado las notificaciones push en la app.
+            </div>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="broadcast-history">
+          <div class="section-header" style="margin-top:0;margin-bottom:14px">
+            <div class="section-title-lg">Historial de envíos</div>
+            <span class="section-count" id="broadcastCount">0 envíos</span>
+          </div>
+          <div class="user-table" id="broadcastList">
+            <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Sin envíos aún</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUOTES -->
+      <div id="sectionQuotes" class="view">
+        <div class="section-toolbar">
+          <div class="section-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+            </svg>
+            <input type="text" id="quotesSearch" placeholder="Buscar por empresa, N° o descripción..." autocomplete="off" />
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="section-count" id="quotesCount">0 cotizaciones</span>
+            <button class="export-btn" id="exportQuotesBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+              Excel
+            </button>
+            <button class="synap-btn" id="synapQuotesBtn">
+              <img src="synap.png" alt="" style="width:14px;height:14px;border-radius:4px;object-fit:contain" />
+              Synaptech
+            </button>
+            <button class="new-btn" id="newQuoteBtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+              </svg>
+              Nueva cotización
+            </button>
+          </div>
+        </div>
+        <div class="user-table">
+          <div class="quotes-table-head">
+            <span>Estado</span>
+            <span>N° Cotización</span>
+            <span>Empresa</span>
+            <span>Fecha</span>
+            <span>Valor</span>
+            <span>Descripción</span>
+          </div>
+          <div id="quotesList"></div>
+        </div>
+      </div>
+
+      <!-- CLIENTS -->
+      <div id="sectionClients" class="view">
+        <div class="section-toolbar">
+          <div class="section-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+            </svg>
+            <input type="text" id="clientsSearch" placeholder="Buscar por empresa, nombre o email..." autocomplete="off" />
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="section-count" id="clientsCount">0 clientes</span>
+            <button class="export-btn" id="exportClientsBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+              Excel
+            </button>
+            <button class="synap-btn" id="synapClientsBtn">
+              <img src="synap.png" alt="" style="width:14px;height:14px;border-radius:4px;object-fit:contain" />
+              Synaptech
+            </button>
+            <button class="new-btn" id="newClientBtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+              </svg>
+              Nuevo cliente
+            </button>
+          </div>
+        </div>
+        <div class="user-table">
+          <div class="clients-table-head">
+            <span>Empresa</span>
+            <span>Nombre</span>
+            <span>Email</span>
+            <span>Teléfono</span>
+            <span>Cargo</span>
+          </div>
+          <div id="clientsList"></div>
+          <div id="clientsPagination" class="pagination" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- RECORDATORIOS -->
+      <div id="sectionRecordatorios" class="view">
+        <div class="section-header">
+          <div class="section-title-lg">Recordatorios</div>
+          <span class="section-count" id="notesCount">0 notas</span>
+        </div>
+        <!-- Add note form -->
+        <div class="rec-form">
+          <div class="form-label" style="margin-bottom:10px">Nueva nota</div>
+          <textarea id="newNoteText" rows="3" style="width:100%;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;resize:vertical;line-height:1.5" placeholder="Escribe tu recordatorio aquí..."></textarea>
+          <div style="display:flex;gap:14px;align-items:center;margin-top:14px;flex-wrap:wrap">
+            <span class="form-label" style="margin:0;flex-shrink:0">Urgencia:</span>
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
+              <input type="radio" name="noteUrgencia" value="urgente" />
+              <span class="rec-urgencia rec-urg-urgente">🔴 Urgente</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
+              <input type="radio" name="noteUrgencia" value="normal" checked />
+              <span class="rec-urgencia rec-urg-normal">🟡 Normal</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
+              <input type="radio" name="noteUrgencia" value="bajo" />
+              <span class="rec-urgencia rec-urg-bajo">🔵 Bajo</span>
+            </label>
+            <button class="new-btn" id="addNoteBtn" style="margin-left:auto">Agregar nota</button>
+          </div>
+        </div>
+        <div id="notesList"></div>
+      </div>
+
+      <!-- ACADEMIA -->
+      <div id="sectionAcademia" class="view academia-coming-soon">
+        <div class="academia-inner">
+          <img src="logo.png" alt="Sonqollay" class="academia-logo" />
+          <div class="academia-title">Academia Sonqollay</div>
+          <div class="academia-phrase">El conocimiento que transforma<br>está en camino.</div>
+          <div class="academia-badge">Próximamente</div>
+          <p class="academia-sub">
+            Estamos construyendo algo especial para ti.<br>
+            ¿Tienes ideas de qué quieres aprender?<br>
+            <strong>Tus sugerencias dan forma a lo que viene.</strong>
+          </p>
+          <a href="mailto:ignaciiio.mate@gmail.com?subject=Sugerencia%20Academia%20Sonqollay" class="academia-suggest-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+            Enviar sugerencia
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- Activity Filters Modal -->
+<div id="actFiltersModal" class="admin-modal" style="display:none;align-items:flex-start;justify-content:flex-end;padding:0">
+  <div id="actFiltersPanel" class="act-filters-panel">
+    <div class="act-filters-header">
+      <div style="font-size:15px;font-weight:700;color:var(--text)">Filtros de actividad</div>
+      <button class="admin-modal-close" id="actFiltersClose" style="position:static">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="act-filters-body">
+      <div class="form-group">
+        <label class="form-label">Usuario</label>
+        <select class="form-input" id="mActUserFilter"><option value="">Todos los usuarios</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Desde</label>
+        <input class="form-input" type="date" id="mActDateFrom" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hasta</label>
+        <input class="form-input" type="date" id="mActDateTo" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo de acción</label>
+        <div class="m-act-chips" id="mActChips">
+          <button class="m-act-chip active" data-action="all">Todos</button>
+          <button class="m-act-chip" data-action="login">Inicio sesión</button>
+          <button class="m-act-chip" data-action="logout">Cierre sesión</button>
+          <button class="m-act-chip" data-action="quote_new">Nueva cotización</button>
+          <button class="m-act-chip" data-action="quote_edit">Edición cotización</button>
+          <button class="m-act-chip" data-action="quote_estado">Cambio estado</button>
+          <button class="m-act-chip" data-action="quote_contacto">Seguimiento</button>
+          <button class="m-act-chip" data-action="quote_note">Nota cotización</button>
+          <button class="m-act-chip" data-action="quote_delete">Eliminación cotización</button>
+          <button class="m-act-chip" data-action="client_new">Nuevo cliente</button>
+          <button class="m-act-chip" data-action="client_edit">Edición cliente</button>
+          <button class="m-act-chip" data-action="client_note">Nota cliente</button>
+          <button class="m-act-chip" data-action="client_delete">Eliminación cliente</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="act-filters-footer">
+      <button class="act-clear" id="actFiltersClear" style="flex:1">Limpiar todo</button>
+      <button class="new-btn" id="actFiltersApply" style="flex:1;justify-content:center">Aplicar filtros</button>
+    </div>
+  </div>
+</div>
+
+<!-- Synaptech Analysis Modal -->
+<div id="synapModal" class="admin-modal" style="display:none">
+  <div class="admin-modal-card" id="synapModalCard" style="max-width:900px;width:95vw;max-height:90vh;overflow-y:auto">
+    <div class="admin-modal-header" style="position:sticky;top:0;background:var(--card);z-index:1;border-bottom:1px solid var(--border);padding-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <img src="synap.png" alt="Synaptech" style="width:28px;height:28px;border-radius:8px;object-fit:contain" />
+        <div>
+          <div class="admin-modal-title" id="synapModalTitle">Análisis Synaptech</div>
+          <div style="font-size:11px;color:var(--muted)" id="synapModalSub">Generado automáticamente</div>
+        </div>
+      </div>
+      <button class="admin-modal-close" id="synapModalClose">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div id="synapModalBody" style="padding:20px 24px 16px"></div>
+  </div>
+</div>
+
+<!-- Quote Modal -->
+<div id="quoteModal" class="admin-modal" style="display:none">
+  <div class="admin-modal-card" id="quoteModalCard">
+    <div class="admin-modal-header">
+      <div class="admin-modal-title" id="quoteModalTitle">Nueva cotización</div>
+      <button class="admin-modal-close" id="quoteModalClose">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="admin-form-body">
+      <div class="admin-form-grid">
+        <div class="admin-form-group">
+          <label for="qEmpresa">Empresa</label>
+          <input class="admin-input" type="text" id="qEmpresa" placeholder="Nombre de la empresa" />
+        </div>
+        <div class="admin-form-group">
+          <label for="qNumero">N° Cotización</label>
+          <input class="admin-input" type="text" id="qNumero" placeholder="Ej: COT-2025-001" />
+        </div>
+        <div class="admin-form-group">
+          <label for="qFecha">Fecha</label>
+          <input class="admin-input" type="date" id="qFecha" style="color-scheme:dark" />
+        </div>
+        <div class="admin-form-group">
+          <label for="qValor">Valor (opcional)</label>
+          <input class="admin-input" type="number" id="qValor" placeholder="Valor en CLP" min="0" />
+        </div>
+        <div class="admin-form-group full-width">
+          <label for="qDescripcion">Descripción</label>
+          <input class="admin-input" type="text" id="qDescripcion" placeholder="Descripción de la cotización" />
+        </div>
+        <div class="admin-form-group full-width">
+          <label for="qContactos">Contactos (emails separados por ;)</label>
+          <input class="admin-input" type="text" id="qContactos" placeholder="email1@empresa.com; email2@empresa.com" />
+        </div>
+        <div class="admin-form-group">
+          <label for="qEstado">Estado</label>
+          <select class="admin-select" id="qEstado">
+            <option value="Borrador">Borrador</option>
+            <option value="Enviada">Enviada</option>
+            <option value="En revisión">En revisión</option>
+            <option value="Adjudicada">Adjudicada</option>
+            <option value="Perdida">Perdida</option>
+          </select>
+        </div>
+        <div class="admin-form-group">
+          <label for="qSeguimiento">Seguimiento (opcional)</label>
+          <input class="admin-input" type="date" id="qSeguimiento" style="color-scheme:dark" />
+        </div>
+        <div class="admin-form-group full-width">
+          <label for="qNotas">Notas (opcional)</label>
+          <textarea class="admin-textarea" id="qNotas" placeholder="Notas internas sobre esta cotización..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="admin-modal-footer">
+      <button class="btn-delete" id="quoteDeleteBtn" style="display:none">Eliminar</button>
+      <div class="spacer"></div>
+      <button class="btn-cancel" id="quoteModalCancel">Cancelar</button>
+      <button class="btn-save" id="quoteModalSave">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Client Modal -->
+<div id="clientModal" class="admin-modal" style="display:none">
+  <div class="admin-modal-card" id="clientModalCard">
+    <div class="admin-modal-header">
+      <div class="admin-modal-title" id="clientModalTitle">Nuevo cliente</div>
+      <button class="admin-modal-close" id="clientModalClose">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="admin-form-body">
+      <div class="admin-form-grid">
+        <div class="admin-form-group">
+          <label for="cEmpresa">Empresa <span style="color:var(--danger)">*</span></label>
+          <input class="admin-input" type="text" id="cEmpresa" placeholder="Nombre de la empresa" />
+        </div>
+        <div class="admin-form-group">
+          <label for="cNombre">Nombre</label>
+          <input class="admin-input" type="text" id="cNombre" placeholder="Nombre del contacto" />
+        </div>
+        <div class="admin-form-group">
+          <label for="cEmail">Email</label>
+          <input class="admin-input" type="text" id="cEmail" placeholder="correo@empresa.com" />
+        </div>
+        <div class="admin-form-group">
+          <label for="cTelefono">Teléfono</label>
+          <input class="admin-input" type="text" id="cTelefono" placeholder="+56 9 1234 5678" />
+        </div>
+        <div class="admin-form-group full-width">
+          <label for="cCargo">Cargo</label>
+          <input class="admin-input" type="text" id="cCargo" placeholder="Cargo en la empresa" />
+        </div>
+        <div class="admin-form-group full-width">
+          <label for="cNotas">Notas (opcional)</label>
+          <textarea class="admin-textarea" id="cNotas" placeholder="Notas sobre este cliente..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="admin-modal-footer">
+      <button class="btn-delete" id="clientDeleteBtn" style="display:none">Eliminar</button>
+      <div class="spacer"></div>
+      <button class="btn-cancel" id="clientModalCancel">Cancelar</button>
+      <button class="btn-save" id="clientModalSave">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="administracion.js"></script>
+</body>
+</html>

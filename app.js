@@ -47,6 +47,14 @@ const seedQuotes = [
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 const formatCLP = (v) => (v == null || v === '' || isNaN(v)) ? '—' : '$ ' + Number(v).toLocaleString('es-CL');
+const formatCLPShort = (v) => {
+  if (v == null || v === '' || isNaN(v)) return '—';
+  const n = Number(v);
+  if (n >= 1_000_000_000) return `$ ${(n / 1_000_000_000).toLocaleString('es-CL', { maximumFractionDigits: 2 })} MM`;
+  if (n >= 1_000_000)     return `$ ${(n / 1_000_000).toLocaleString('es-CL', { maximumFractionDigits: 1 })} M`;
+  if (n >= 1_000)         return `$ ${(n / 1_000).toLocaleString('es-CL', { maximumFractionDigits: 0 })} K`;
+  return formatCLP(n);
+};
 const parseValor = (s) => {
   if (s == null || s === '') return null;
   const n = Number(String(s).replace(/[^\d.-]/g, ''));
@@ -101,12 +109,43 @@ function skeletonCards(n = 3) {
   const widths = [[68, 52, 38], [62, 59, 38], [74, 45, 38], [56, 66, 38], [70, 50, 38]];
   return Array.from({ length: n }, (_, i) => {
     const [w1, w2] = widths[i % widths.length];
-    return `<div class="skeleton-card">
-      <div class="skeleton-line" style="width:${w1}%"></div>
-      <div class="skeleton-line" style="width:${w2}%;animation-delay:.15s"></div>
-      <div class="skeleton-line" style="width:38%;animation-delay:.3s"></div>
+    const d = (i * 0.08).toFixed(2);
+    return `<div class="skeleton-card" style="animation-delay:${d}s">
+      <div class="skeleton-row" style="justify-content:space-between;margin-bottom:8px">
+        <div class="skeleton-line" style="width:${w1}%;height:14px"></div>
+        <div class="skeleton-pill"></div>
+      </div>
+      <div class="skeleton-line" style="width:${w2}%;animation-delay:${(i*0.08+0.1).toFixed(2)}s"></div>
+      <div class="skeleton-line" style="width:40%;animation-delay:${(i*0.08+0.2).toFixed(2)}s;margin-top:4px"></div>
     </div>`;
   }).join('');
+}
+
+function skeletonClientCards(n = 4) {
+  const widths = [[70, 55], [65, 60], [75, 50], [68, 58]];
+  return Array.from({ length: n }, (_, i) => {
+    const [w1, w2] = widths[i % widths.length];
+    const d = (i * 0.08).toFixed(2);
+    return `<div class="skeleton-card" style="animation-delay:${d}s">
+      <div class="skeleton-row" style="gap:10px">
+        <div class="skeleton-avatar"></div>
+        <div style="flex:1">
+          <div class="skeleton-line" style="width:${w1}%;height:14px;margin-bottom:8px;animation-delay:${(i*0.08+0.05).toFixed(2)}s"></div>
+          <div class="skeleton-line" style="width:${w2}%;animation-delay:${(i*0.08+0.15).toFixed(2)}s"></div>
+        </div>
+        <div class="skeleton-pill" style="width:48px"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function skeletonKpis() {
+  return `<div class="kpis">
+    ${[1,2,3].map((_, i) => `<div class="kpi">
+      <div class="skeleton-line" style="width:60%;height:11px;margin-bottom:8px;animation-delay:${i*0.1}s"></div>
+      <div class="skeleton-line" style="width:75%;height:26px;border-radius:8px;animation-delay:${i*0.1+0.1}s"></div>
+    </div>`).join('')}
+  </div>`;
 }
 
 // ─── Time helpers ───
@@ -305,21 +344,43 @@ function renderAdminActivity() {
     client_edit:   { text: 'editó cliente',         color: 'var(--warn)'    },
     client_delete: { text: 'eliminó cliente',       color: 'var(--danger)'  },
   };
-  const items = _adminActivity.slice(0, 80);
-  if (!items.length) { el.innerHTML = '<div style="padding:20px 0;text-align:center;color:var(--muted);font-size:13px">Sin actividad registrada aún</div>'; return; }
-  el.innerHTML = items.map(a => {
-    const c = cfg[a.action] || { text: a.action, color: 'var(--muted)' };
-    const when = a.timestamp?.toDate ? timeAgo(a.timestamp.toDate()) : '—';
-    return `<div class="act-item">
-      <div class="act-dot" style="background:${c.color}"></div>
-      <div class="act-body">
-        <span class="act-who">${escapeHtml(a.displayName || a.email)}</span>
-        <span class="act-what">${c.text}</span>
-        ${a.detail ? `<span class="act-detail">${escapeHtml(a.detail)}</span>` : ''}
-      </div>
-      <span class="act-time">${when}</span>
-    </div>`;
-  }).join('');
+  const total = _adminActivity.length;
+  const totalPages = Math.max(1, Math.ceil(total / HOME_ACT_PAGE_SIZE));
+  if (_homeActPage >= totalPages) _homeActPage = totalPages - 1;
+  const start = _homeActPage * HOME_ACT_PAGE_SIZE;
+  const items = _adminActivity.slice(start, start + HOME_ACT_PAGE_SIZE);
+
+  if (!total) { el.innerHTML = '<div style="padding:20px 0;text-align:center;color:var(--muted);font-size:13px">Sin actividad registrada aún</div>'; }
+  else {
+    el.innerHTML = items.map(a => {
+      const c = cfg[a.action] || { text: a.action, color: 'var(--muted)' };
+      const when = a.timestamp?.toDate ? timeAgo(a.timestamp.toDate()) : '—';
+      return `<div class="act-item">
+        <div class="act-dot" style="background:${c.color}"></div>
+        <div class="act-body">
+          <span class="act-who">${escapeHtml(a.displayName || a.email)}</span>
+          <span class="act-what">${c.text}</span>
+          ${a.detail ? `<span class="act-detail">${escapeHtml(a.detail)}</span>` : ''}
+        </div>
+        <span class="act-time">${when}</span>
+      </div>`;
+    }).join('');
+  }
+
+  const pgEl = document.getElementById('admin-act-pagination');
+  if (!pgEl) return;
+  if (totalPages <= 1) { pgEl.innerHTML = ''; return; }
+  const btns = [];
+  if (_homeActPage > 0) btns.push(`<button class="hpg-btn" data-p="${_homeActPage - 1}">‹</button>`);
+  for (let i = 0; i < totalPages; i++) {
+    btns.push(`<button class="hpg-btn${i === _homeActPage ? ' hpg-active' : ''}" data-p="${i}">${i + 1}</button>`);
+  }
+  if (_homeActPage < totalPages - 1) btns.push(`<button class="hpg-btn" data-p="${_homeActPage + 1}">›</button>`);
+  pgEl.innerHTML = btns.join('');
+  pgEl.querySelectorAll('.hpg-btn').forEach(b => b.addEventListener('click', () => {
+    _homeActPage = Number(b.dataset.p);
+    renderAdminActivity();
+  }));
 }
 
 // ---------- Estado en memoria ----------
@@ -357,6 +418,8 @@ let unsubAdminActivity = null;
 let unsubAdminSessions = null;
 let _adminSessions = [];
 let _adminActivity = [];
+let _homeActPage = 0;
+const HOME_ACT_PAGE_SIZE = 15;
 
 // Colecciones compartidas (toda la empresa)
 const quotesCol = () => collection(dbf, 'quotes');
@@ -544,6 +607,9 @@ function subscribe() {
   if (unsubQuotes) unsubQuotes();
   if (unsubClients) unsubClients();
   if (unsubTemplates) unsubTemplates();
+  quotesLoaded = false;
+  clientsLoaded = false;
+  renderAll();
   unsubQuotes = onSnapshot(query(quotesCol(), orderBy('fecha', 'desc')), (snap) => {
     quotes = snap.docs.map(d => d.data());
     quotesLoaded = true;
@@ -573,6 +639,7 @@ async function setupFcm() {
   onMessage(messaging, (payload) => {
     const title = payload?.notification?.title || 'SonqollayAPP';
     const body = payload?.notification?.body || '';
+    pushNotif({ title, body });
     showToast(`${title}${body ? ' · ' + body : ''}`);
   });
 
@@ -664,10 +731,17 @@ function renderAll() {
 function renderDashboard() {
   renderGreeting();
   renderHoyUrgente();
-  document.getElementById('kpi-quotes').textContent = quotes.length;
-  document.getElementById('kpi-clients').textContent = clients.length;
-  const total = quotes.reduce((s, q) => s + (Number(q.valor) || 0), 0);
-  document.getElementById('kpi-total').textContent = formatCLP(total);
+  if (!quotesLoaded || !clientsLoaded) {
+    const kpiEl = document.getElementById('kpi-metrics')?.previousElementSibling;
+    document.getElementById('kpi-quotes').textContent = '—';
+    document.getElementById('kpi-clients').textContent = '—';
+    document.getElementById('kpi-total').textContent = '—';
+  } else {
+    document.getElementById('kpi-quotes').textContent = quotes.length;
+    document.getElementById('kpi-clients').textContent = clients.length;
+    const total = quotes.reduce((s, q) => s + (Number(q.valor) || 0), 0);
+    document.getElementById('kpi-total').textContent = formatCLPShort(total);
+  }
 
   // Semáforo summary
   const smEl = document.getElementById('semaforo-summary');
@@ -967,9 +1041,123 @@ document.getElementById('dashboardTabs').addEventListener('click', (e) => {
   if (!btn) return;
   const tab = btn.dataset.dtab;
   document.querySelectorAll('.dtab').forEach(b => b.classList.toggle('active', b.dataset.dtab === tab));
-  document.getElementById('dashResumen').classList.toggle('hidden', tab !== 'resumen');
-  document.getElementById('dashSemana').classList.toggle('hidden', tab !== 'semana');
+  ['dashResumen','dashSemana','dashNotifs'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const isActive = (id === `dash${tab.charAt(0).toUpperCase() + tab.slice(1)}`);
+    if (isActive) {
+      el.classList.add('dtab-active');
+    } else {
+      el.classList.remove('dtab-active');
+    }
+  });
+  if (tab === 'notifs') { renderNotifList(); markNotifsRead(); }
 });
+
+// ---------- Notification history ----------
+const NOTIF_KEY = 'sonqollay_notif_history';
+const NOTIF_MAX = 50;
+
+function loadNotifHistory() {
+  try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]'); } catch { return []; }
+}
+function saveNotifHistory(list) {
+  localStorage.setItem(NOTIF_KEY, JSON.stringify(list.slice(0, NOTIF_MAX)));
+}
+
+function pushNotif({ title, body = '', timestamp = Date.now() }) {
+  const list = loadNotifHistory();
+  list.unshift({ id: String(timestamp) + Math.random().toString(36).slice(2), title, body, timestamp, read: false });
+  saveNotifHistory(list);
+  renderNotifList();
+  updateNotifBadge();
+}
+
+function markNotifsRead() {
+  const list = loadNotifHistory().map(n => ({ ...n, read: true }));
+  saveNotifHistory(list);
+  updateNotifBadge();
+}
+
+function updateNotifBadge() {
+  const unread = loadNotifHistory().filter(n => !n.read).length;
+  const badge = document.getElementById('notifBadge');
+  if (!badge) return;
+  badge.textContent = unread;
+  badge.classList.toggle('hidden', unread === 0);
+}
+
+function timeAgoShort(ts) {
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60)  return 'Ahora';
+  const m = Math.round(s / 60);
+  if (m < 60)  return `Hace ${m}m`;
+  const h = Math.round(m / 60);
+  if (h < 24)  return `Hace ${h}h`;
+  const d = Math.round(h / 24);
+  if (d < 30)  return `Hace ${d}d`;
+  return new Date(ts).toLocaleDateString('es-CL');
+}
+
+function renderNotifList() {
+  const el = document.getElementById('notifList');
+  if (!el) return;
+  const list = loadNotifHistory();
+  if (!list.length) {
+    el.innerHTML = '<div class="empty"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg><span>Sin notificaciones aún</span></div>';
+    return;
+  }
+  el.innerHTML = list.map(n => `
+    <div class="notif-item${n.read ? '' : ' unread'}" data-id="${escapeHtml(n.id)}">
+      <div class="notif-dot"></div>
+      <div class="notif-content">
+        <div class="notif-title">${escapeHtml(n.title)}</div>
+        ${n.body ? `<div class="notif-preview">${escapeHtml(n.body)}</div>` : ''}
+        <div class="notif-time">${timeAgoShort(n.timestamp)}</div>
+      </div>
+      <svg class="notif-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+    </div>`).join('');
+
+  el.querySelectorAll('.notif-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const n = list.find(x => x.id === item.dataset.id);
+      if (!n) return;
+      openNotifSheet(n);
+    });
+  });
+}
+
+function openNotifSheet(n) {
+  document.getElementById('notifSheetTitle').textContent = n.title;
+  document.getElementById('notifSheetBody').textContent  = n.body || '';
+  document.getElementById('notifSheetTime').textContent  = new Date(n.timestamp).toLocaleString('es-CL', {
+    weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
+  });
+  document.getElementById('notifSheet').classList.remove('hidden');
+}
+
+document.getElementById('notifSheetClose')?.addEventListener('click', () => {
+  document.getElementById('notifSheet').classList.add('hidden');
+});
+document.getElementById('notifSheet')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) document.getElementById('notifSheet').classList.add('hidden');
+});
+
+document.getElementById('notifClearAll')?.addEventListener('click', () => {
+  saveNotifHistory([]);
+  renderNotifList();
+  updateNotifBadge();
+});
+
+// Escuchar mensajes del service worker (notificaciones en background)
+navigator.serviceWorker?.addEventListener('message', (event) => {
+  if (event.data?.type === 'PUSH_RECEIVED') {
+    pushNotif({ title: event.data.title, body: event.data.body, timestamp: event.data.timestamp });
+  }
+});
+
+// Inicializar badge al cargar
+updateNotifBadge();
 
 function cardQuoteHtml(q, opts = {}) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
@@ -1065,8 +1253,18 @@ function renderQuotes() {
 const CLIENTS_PER_PAGE = 10;
 let clientsPage = 0;
 
+let clientSemaforoFilter = 'all';
+
+function clientSemaforo(c) {
+  const fields = [c.empresa, c.nombre, c.email, c.telefono, c.cargo];
+  const filled = fields.filter(f => f && String(f).trim()).length;
+  if (filled >= 5) return 'green';
+  if (filled >= 3) return 'yellow';
+  return 'red';
+}
+
 function renderClients() {
-  if (!clientsLoaded) { document.getElementById('clients-list').innerHTML = skeletonCards(4); return; }
+  if (!clientsLoaded) { document.getElementById('clients-list').innerHTML = skeletonClientCards(4); return; }
   const q = (document.getElementById('search-clients').value || '').toLowerCase().trim();
   let list = [...clients].sort((a, b) => a.empresa.localeCompare(b.empresa));
   if (q) {
@@ -1076,6 +1274,10 @@ function renderClients() {
       (x.email||'').toLowerCase().includes(q)
     );
   }
+  if (clientSemaforoFilter !== 'all') {
+    list = list.filter(c => clientSemaforo(c) === clientSemaforoFilter);
+  }
+
   const el = document.getElementById('clients-list');
   if (!list.length) { el.innerHTML = '<div class="empty">Sin clientes</div>'; return; }
 
@@ -1084,19 +1286,33 @@ function renderClients() {
   const page = list.slice(clientsPage * CLIENTS_PER_PAGE, (clientsPage + 1) * CLIENTS_PER_PAGE);
 
   let html = page.map(c => {
-    const count = quotes.filter(qq => qq.empresa === c.empresa).length;
+    const count  = quotes.filter(qq => qq.empresa === c.empresa).length;
+    const sema   = clientSemaforo(c);
+    const notas  = parseNotes(c.notas || '');
+    const firstNota = notas[0];
+    const notaPreview = firstNota
+      ? (typeof firstNota === 'object' ? firstNota.text : firstNota)
+      : '';
     return `
       <div class="card" data-client-id="${c.id}">
         <div class="card-row">
-          <div class="card-title">${escapeHtml(c.empresa)}</div>
+          <div style="display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0">
+            <div class="sema-dot ${sema}" title="${sema==='green'?'Completo':sema==='yellow'?'Casi completo':'Incompleto'}"></div>
+            <div class="card-title" style="margin:0">${escapeHtml(c.empresa)}</div>
+          </div>
           <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
             <span class="tag">${count} cot.</span>
             ${c.industria ? `<span class="tag-industria">${escapeHtml(c.industria)}</span>` : ''}
-            ${c.resultados ? `<span class="tag-tipo" style="font-size:10px">Con resultados</span>` : ''}
           </div>
         </div>
         <div class="card-sub">${escapeHtml(c.nombre || c.email || '—')}</div>
         ${c.email ? `<div class="card-meta">${escapeHtml(c.email)}</div>` : ''}
+        ${notaPreview ? `
+        <div class="client-notes-row" data-notes-id="${escapeHtml(c.id)}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+          <span class="client-notes-preview">${escapeHtml(notaPreview)}</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+        </div>` : ''}
       </div>`;
   }).join('');
 
@@ -1110,11 +1326,53 @@ function renderClients() {
 
   el.innerHTML = html;
   el.querySelectorAll('[data-client-id]').forEach(node => {
-    node.addEventListener('click', () => openClientForm(node.dataset.clientId));
+    node.addEventListener('click', (e) => {
+      if (e.target.closest('[data-notes-id]')) return;
+      openClientForm(node.dataset.clientId);
+    });
+  });
+  el.querySelectorAll('[data-notes-id]').forEach(node => {
+    node.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const c = clients.find(x => x.id === node.dataset.notesId);
+      if (c) openClientNotesSheet(c);
+    });
   });
   document.getElementById('pgPrev')?.addEventListener('click', () => { clientsPage--; renderClients(); });
   document.getElementById('pgNext')?.addEventListener('click', () => { clientsPage++; renderClients(); });
 }
+
+function openClientNotesSheet(c) {
+  document.getElementById('clientNotesSheetTitle').textContent = `Notas · ${c.empresa}`;
+  const notas = parseNotes(c.notas || '');
+  const body  = document.getElementById('clientNotesSheetBody');
+  if (!notas.length) {
+    body.innerHTML = '<p style="color:var(--muted);font-size:14px;padding:8px 0">Sin notas registradas.</p>';
+  } else {
+    body.innerHTML = notas.map(n => {
+      const text = typeof n === 'object' ? n.text : n;
+      const ts   = typeof n === 'object' && n.ts ? `<div class="nota-ts">${escapeHtml(n.ts)}</div>` : '';
+      return `<div class="nota-item">${ts}<div class="nota-text">${escapeHtml(text)}</div></div>`;
+    }).join('');
+  }
+  document.getElementById('clientNotesSheet').classList.remove('hidden');
+}
+
+document.getElementById('clientNotesSheetClose')?.addEventListener('click', () => {
+  document.getElementById('clientNotesSheet').classList.add('hidden');
+});
+document.getElementById('clientNotesSheet')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) document.getElementById('clientNotesSheet').classList.add('hidden');
+});
+
+document.getElementById('clientSemaforoFilter')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.sfchip');
+  if (!chip) return;
+  clientSemaforoFilter = chip.dataset.sf;
+  document.querySelectorAll('.sfchip').forEach(c => c.classList.toggle('active', c === chip));
+  clientsPage = 0;
+  renderClients();
+});
 
 function renderCompaniesDatalist() {
   const dl = document.getElementById('companies');
@@ -1144,29 +1402,30 @@ function showView(name) {
 document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
 
 // ---------- Theme Toggle ----------
-function applyTheme(light) {
+function applyTheme(light, animate = false) {
   document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
-  const icon = document.getElementById('themeIcon');
   const label = document.getElementById('themeLabel');
-  const toggle = document.getElementById('themeToggle');
-  if (icon) icon.innerHTML = light
-    ? '<path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>'
-    : '<path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>';
+  const pill  = document.getElementById('themeSwitchPill');
+  const wrap  = document.getElementById('themeAnimWrap');
   if (label) label.textContent = light ? 'Modo claro' : 'Modo oscuro';
-  if (toggle) toggle.checked = light;
+  if (pill)  pill.classList.toggle('pill-on', light);
+  if (animate && wrap) {
+    wrap.classList.add('theme-spin');
+    wrap.addEventListener('animationend', () => wrap.classList.remove('theme-spin'), { once: true });
+  }
   const metaTheme = document.querySelector('meta[name="theme-color"]');
   if (metaTheme) metaTheme.content = light ? '#f5f7fa' : '#0a1628';
 }
 
 (function initTheme() {
   const saved = localStorage.getItem('theme');
-  applyTheme(saved === 'light');
+  applyTheme(saved === 'light', false);
 })();
 
-document.getElementById('themeToggle')?.addEventListener('change', (e) => {
-  const light = e.target.checked;
+document.getElementById('themeToggleBtn')?.addEventListener('click', () => {
+  const light = document.documentElement.getAttribute('data-theme') !== 'light';
   localStorage.setItem('theme', light ? 'light' : 'dark');
-  applyTheme(light);
+  applyTheme(light, true);
 });
 
 // ---------- Quick Access Tiles ----------

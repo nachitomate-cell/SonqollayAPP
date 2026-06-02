@@ -38,5 +38,15 @@ service cloud.firestore {
           : resource.data.uid == request.auth.uid);
       allow read: if isAdmin();
     }
+
+    // Broadcasts: solo admin crea/lee/elimina; la Cloud Function actualiza con Admin SDK
+    match /adminBroadcasts/{id} {
+      allow create, read, delete: if isAdmin();
+    }
+
+    // Recordatorios (bloc de notas del admin)
+    match /adminNotes/{id} {
+      allow read, write: if isAdmin();
+    }
   }
 }

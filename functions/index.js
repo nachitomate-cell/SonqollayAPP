@@ -153,7 +153,25 @@ exports.onQuoteSeguimientoToday = onDocumentWritten(
   }
 );
 
-// ---------- 3) Aviso al crear cotización ----------
+// ---------- 3) Broadcast manual desde panel de administración ----------
+exports.onAdminBroadcast = onDocumentWritten(
+  { document: 'adminBroadcasts/{id}', region: 'us-central1' },
+  async (event) => {
+    const after = event.data && event.data.after && event.data.after.data();
+    const before = event.data && event.data.before && event.data.before.data();
+    if (before || !after) return; // solo en creación
+    if (!after.title) return;
+
+    const result = await sendToAll(
+      { title: after.title, body: after.body || '' },
+      { kind: 'admin_broadcast' }
+    );
+    logger.info(`Broadcast enviado · ${result.sent} tokens · ${result.removed} limpiados`);
+    await event.data.after.ref.update({ sent: result.sent, removedTokens: result.removed, sentAt: new Date() });
+  }
+);
+
+// ---------- 4) Aviso al crear cotización ----------
 exports.notifyOnNewQuote = onDocumentWritten(
   { document: 'quotes/{quoteId}', region: 'us-central1' },
   async (event) => {

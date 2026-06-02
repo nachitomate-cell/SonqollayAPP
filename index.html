@@ -12,6 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/png" href="logo.png" />
   <link rel="apple-touch-icon" href="logo.png" />
+  <script>!function(){var t=localStorage.getItem('theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}()</script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -138,17 +139,21 @@
         </div>
       </div>
 
-      <!-- Sub-tabs: Resumen / Semana -->
+      <!-- Sub-tabs: Resumen / Semana / Notificaciones -->
       <div class="dashboard-tabs" id="dashboardTabs">
         <button class="dtab active" data-dtab="resumen">Resumen</button>
         <button class="dtab" data-dtab="semana">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true" style="vertical-align:middle;margin-right:4px"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5m-9-6h.008v.008H12V9zm0 3.75h.008v.008H12v-.008zM12 16.5h.008v.008H12V16.5zm-3.75-3h.008v.008H8.25V13.5zm0 3h.008v.008H8.25v-.008zm7.5-3h.008v.008H15.75V13.5zm0 3h.008v.008H15.75v-.008z"/></svg>
           Semana
         </button>
+        <button class="dtab" data-dtab="notifs" id="dtabNotifs">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true" style="vertical-align:middle;margin-right:4px"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg>
+          Notificaciones<span id="notifBadge" class="notif-tab-badge hidden">0</span>
+        </button>
       </div>
 
       <!-- ── Tab: Resumen ── -->
-      <div id="dashResumen">
+      <div id="dashResumen" class="dtab-panel dtab-active">
         <div class="kpis">
           <div class="kpi">
             <span class="kpi-label">Cotizaciones</span>
@@ -173,13 +178,38 @@
       </div>
 
       <!-- ── Tab: Semana (Planner) ── -->
-      <div id="dashSemana" class="hidden">
+      <div id="dashSemana" class="dtab-panel">
         <div id="plannerTodayCard"></div>
         <h2 class="section-title" style="margin-top:18px">Esta semana</h2>
         <div id="plannerWeekStrip"></div>
         <div id="plannerDaysList"></div>
       </div>
+
+      <!-- ── Tab: Notificaciones ── -->
+      <div id="dashNotifs" class="dtab-panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <h2 class="section-title" style="margin:0">Historial</h2>
+          <button id="notifClearAll" style="font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px">Limpiar todo</button>
+        </div>
+        <div id="notifList" class="list"></div>
+      </div>
     </section>
+
+    <!-- ── Bottom sheet: detalle notificación ── -->
+    <div id="notifSheet" class="bottom-sheet hidden">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2 class="sheet-title">Notificación</h2>
+        <button class="icon-btn" id="notifSheetClose" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div style="padding:0 20px 32px">
+        <div id="notifSheetTitle" style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:10px;line-height:1.35"></div>
+        <div id="notifSheetBody" style="font-size:14px;color:var(--muted);line-height:1.6;white-space:pre-wrap"></div>
+        <div id="notifSheetTime" style="font-size:12px;color:var(--muted);margin-top:16px;opacity:.7"></div>
+      </div>
+    </div>
 
     <!-- ── Cotizaciones ── -->
     <section id="view-quotes" class="view">
@@ -236,8 +266,27 @@
         </svg>
         <input id="search-clients" type="search" placeholder="Buscar cliente…" />
       </div>
+      <!-- Semáforo filtros -->
+      <div class="semaforo-filter" id="clientSemaforoFilter">
+        <button class="sfchip active" data-sf="all">Todos</button>
+        <button class="sfchip green"  data-sf="green">🟢 Completos</button>
+        <button class="sfchip yellow" data-sf="yellow">🟡 Casi</button>
+        <button class="sfchip red"    data-sf="red">🔴 Incompletos</button>
+      </div>
       <div id="clients-list" class="list"></div>
     </section>
+
+    <!-- ── Sheet: notas de cliente ── -->
+    <div id="clientNotesSheet" class="bottom-sheet hidden">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2 class="sheet-title" id="clientNotesSheetTitle">Notas</h2>
+        <button class="icon-btn" id="clientNotesSheetClose" aria-label="Cerrar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="clientNotesSheetBody" style="padding:0 20px 40px;overflow-y:auto;max-height:60vh"></div>
+    </div>
 
     <!-- ── Ajustes ── -->
     <section id="view-settings" class="view">
@@ -251,18 +300,36 @@
 
       <!-- Theme toggle -->
       <h2 class="section-title">Apariencia</h2>
-      <div class="theme-toggle-row">
-        <div class="theme-toggle-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" id="themeIcon">
+      <button class="theme-toggle-row" id="themeToggleBtn" type="button" aria-label="Cambiar tema">
+        <div class="theme-anim-wrap" id="themeAnimWrap">
+          <!-- Moon -->
+          <svg class="theme-icon-moon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+          </svg>
+          <!-- Sun with glasses -->
+          <svg class="theme-icon-sun" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <line x1="12" y1="2" x2="12" y2="4" stroke-linecap="round"/>
+            <line x1="12" y1="20" x2="12" y2="22" stroke-linecap="round"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke-linecap="round"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke-linecap="round"/>
+            <line x1="2" y1="12" x2="4" y2="12" stroke-linecap="round"/>
+            <line x1="20" y1="12" x2="22" y2="12" stroke-linecap="round"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke-linecap="round"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke-linecap="round"/>
+            <!-- glasses lenses -->
+            <rect x="8.5" y="10.5" width="3" height="2" rx="1" fill="currentColor" opacity="0.7" stroke="none"/>
+            <rect x="12.5" y="10.5" width="3" height="2" rx="1" fill="currentColor" opacity="0.7" stroke="none"/>
+            <line x1="11.5" y1="11.5" x2="12.5" y2="11.5" stroke-width="1"/>
+            <line x1="8" y1="11.5" x2="8.5" y2="11.5" stroke-width="1"/>
+            <line x1="15.5" y1="11.5" x2="16" y2="11.5" stroke-width="1"/>
           </svg>
         </div>
         <span class="theme-toggle-label" id="themeLabel">Modo oscuro</span>
-        <label class="theme-switch">
-          <input type="checkbox" id="themeToggle" />
-          <span class="theme-switch-track"></span>
-        </label>
-      </div>
+        <span class="theme-switch-pill" id="themeSwitchPill">
+          <span class="theme-switch-thumb" id="themeSwitchThumb"></span>
+        </span>
+      </button>
 
       <button class="settings-item" id="logoutBtn" style="width:100%;text-align:left;">
         <div class="settings-item-icon red">
@@ -336,6 +403,10 @@
         <span>Potenciado por</span>
         <img src="synap.png" alt="Synaptech" class="powered-logo" />
         <span class="powered-name">Synaptech</span>
+        <a href="https://www.instagram.com/synaptechspa" target="_blank" rel="noopener" class="powered-ig" aria-label="Instagram @synaptechspa">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
+          @synaptechspa
+        </a>
       </div>
     </section>
 
@@ -362,6 +433,7 @@
         <div id="admin-users" class="list"></div>
         <h2 class="section-title" style="margin-top:24px">Actividad reciente</h2>
         <div id="admin-activity" class="admin-act-list"></div>
+        <div id="admin-act-pagination" class="home-pagination"></div>
       </div>
     </section>
   </main>

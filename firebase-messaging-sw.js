@@ -11,13 +11,24 @@ try {
 
   onBackgroundMessage(messaging, (payload) => {
     const title = (payload.notification && payload.notification.title) || 'SonqollayAPP';
+    const body  = (payload.notification && payload.notification.body) || '';
     const options = {
-      body: (payload.notification && payload.notification.body) || '',
+      body,
       icon: './logo.png',
       badge: './logo.png',
       data: payload.data || {},
     };
     self.registration.showNotification(title, options);
+
+    // Notificar a clientes abiertos para que guarden en historial
+    self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(clients => {
+      clients.forEach(c => c.postMessage({
+        type: 'PUSH_RECEIVED',
+        title,
+        body,
+        timestamp: Date.now(),
+      }));
+    });
   });
 } catch (e) {
   console.warn('Firebase messaging SW init failed:', e);
