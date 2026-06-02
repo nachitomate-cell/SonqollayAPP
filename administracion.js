@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut,
-  onAuthStateChanged
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword,
+  signOut, onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDoc, addDoc, deleteDoc, setDoc, onSnapshot,
@@ -1222,6 +1222,33 @@ onAuthStateChanged(auth, async user => {
 
 // ── Events: nav ──
 el('gateLoginBtn')?.addEventListener('click', () => signInWithPopup(auth, gProvider).catch(() => {}));
+
+el('gateEmailBtn')?.addEventListener('click', async () => {
+  const email = el('gateEmail')?.value.trim();
+  const pass  = el('gatePassword')?.value;
+  const errEl = el('gateErr');
+  if (!email || !pass) { errEl.textContent = 'Ingresa correo y contraseña.'; return; }
+  errEl.textContent = '';
+  const btn = el('gateEmailBtn');
+  btn.disabled = true; btn.textContent = 'Ingresando…';
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch (e) {
+    const msgs = {
+      'auth/user-not-found':   'Usuario no encontrado.',
+      'auth/wrong-password':   'Contraseña incorrecta.',
+      'auth/invalid-credential': 'Correo o contraseña incorrectos.',
+      'auth/too-many-requests': 'Demasiados intentos. Intenta más tarde.',
+    };
+    errEl.textContent = msgs[e.code] || e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Iniciar sesión';
+  }
+});
+
+el('gatePassword')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') el('gateEmailBtn')?.click();
+});
 el('gateLogoutBtn')?.addEventListener('click', () => signOut(auth));
 el('sidebarLogout')?.addEventListener('click', () => signOut(auth));
 document.querySelectorAll('.nav-item[data-section]').forEach(btn =>
