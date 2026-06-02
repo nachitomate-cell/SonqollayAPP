@@ -2,6 +2,7 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
+    { "source": "/superadmin", "destination": "/superadmin.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
@@ -47,6 +48,14 @@
     },
     {
       "source": "/firebase-config.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/superadmin.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+    },
+    {
+      "source": "/superadmin.js",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     }
   ]

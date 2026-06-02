@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Super Admin — SonqollayAPP</title>
+  <meta name="theme-color" content="#f97316" />
+  <link rel="icon" type="image/jpeg" href="logo.jfif" />
+  <script>!function(){var t=localStorage.getItem('adm_theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}()</script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sidebar-w: 220px;
+      --bg:        #0a1628;
+      --bg-2:      #0f1e35;
+      --sidebar:   #071120;
+      --card:      #122035;
+      --card-2:    #1a2e48;
+      --border:    #1e3554;
+      --text:      #eef4ff;
+      --muted:     #6b8cad;
+      --accent:    #f97316;
+      --success:   #34d399;
+      --warn:      #fbbf24;
+      --danger:    #f87171;
+      --indigo:    #818cf8;
+      --radius:    12px;
+      --shadow:    0 4px 24px rgba(0,0,0,.4);
+    }
+    [data-theme="light"] {
+      --bg: #f0f4fa; --bg-2: #e4ecf7; --sidebar: #1e3a5f;
+      --card: #fff; --card-2: #f5f8ff; --border: #cdd9ee;
+      --text: #0f1e35; --muted: #5a7599; --shadow: 0 4px 24px rgba(0,0,0,.10);
+    }
+
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; min-height: 100dvh; }
+
+    /* ── Sidebar ── */
+    .sidebar { width: var(--sidebar-w); background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 0 16px; flex-shrink: 0; }
+    .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 0 18px 20px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+    .sidebar-logo img { width: 32px; height: 32px; border-radius: 8px; }
+    .sidebar-logo-text { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.2; }
+    .sidebar-logo-sub { font-size: 10px; color: var(--accent); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; margin: 2px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--muted); border: none; background: none; width: calc(100% - 20px); text-align: left; transition: background .15s, color .15s; }
+    .nav-item:hover { background: rgba(255,255,255,.05); color: var(--text); }
+    .nav-item.active { background: rgba(249,115,22,.15); color: var(--accent); }
+    .nav-item svg { flex-shrink: 0; }
+    .sidebar-bottom { margin-top: auto; padding: 0 10px; display: flex; flex-direction: column; gap: 4px; }
+    .sidebar-bottom a { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-radius: 8px; font-size: 13px; color: var(--muted); text-decoration: none; transition: background .15s, color .15s; }
+    .sidebar-bottom a:hover { background: rgba(255,255,255,.05); color: var(--text); }
+
+    /* ── Main ── */
+    .main { flex: 1; overflow-y: auto; }
+    .page-header { padding: 28px 32px 0; margin-bottom: 24px; }
+    .page-header h1 { font-size: 22px; font-weight: 700; }
+    .page-header p { font-size: 13px; color: var(--muted); margin-top: 4px; }
+    .content { padding: 0 32px 40px; }
+
+    /* ── Cards ── */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .card-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .card-title svg { color: var(--accent); }
+
+    /* ── Sections (hidden/visible) ── */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── Auth gate ── */
+    #authGate { display: flex; align-items: center; justify-content: center; min-height: 100dvh; width: 100%; }
+    .gate-box { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 40px 36px; text-align: center; max-width: 360px; }
+    .gate-box img { width: 56px; height: 56px; border-radius: 14px; margin-bottom: 20px; }
+    .gate-box h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .gate-box p { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
+    .gate-box .err { color: var(--danger); font-size: 13px; margin-top: 12px; }
+
+    /* ── Buttons ── */
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s; font-family: inherit; }
+    .btn:hover { opacity: .88; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-danger  { background: rgba(248,113,113,.15); color: var(--danger); border: 1px solid rgba(248,113,113,.25); }
+    .btn-success { background: rgba(52,211,153,.15); color: var(--success); border: 1px solid rgba(52,211,153,.25); }
+    .btn-google { background: #fff; color: #1f1f1f; border: 1px solid #e0e0e0; justify-content: center; width: 100%; }
+
+    /* ── Update card ── */
+    .update-hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 12px 0 8px; gap: 16px; }
+    .update-icon { width: 64px; height: 64px; background: rgba(249,115,22,.12); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .update-status { font-size: 13px; color: var(--muted); margin-top: 4px; }
+    .update-last { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .update-result { font-size: 13px; padding: 8px 14px; border-radius: 8px; margin-top: 12px; display: none; }
+    .update-result.ok  { background: rgba(52,211,153,.12); color: var(--success); display: block; }
+    .update-result.err { background: rgba(248,113,113,.12); color: var(--danger); display: block; }
+
+    /* ── Info grid ── */
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .info-tile { background: var(--card-2); border-radius: 10px; padding: 16px; text-align: center; }
+    .info-tile .val { font-size: 26px; font-weight: 700; color: var(--accent); }
+    .info-tile .lbl { font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+
+    /* ── Token table ── */
+    .token-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .token-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 0 12px 10px; }
+    .token-table td { padding: 10px 12px; border-top: 1px solid var(--border); vertical-align: middle; }
+    .token-table tr:hover td { background: rgba(255,255,255,.025); }
+    .u-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--card-2); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: var(--accent); overflow: hidden; flex-shrink: 0; }
+    .u-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .u-ident { display: flex; align-items: center; gap: 10px; }
+    .u-name { font-weight: 600; font-size: 13px; }
+    .u-email { font-size: 12px; color: var(--muted); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge-ok    { background: rgba(52,211,153,.15);  color: var(--success); }
+    .badge-none  { background: rgba(107,140,173,.12); color: var(--muted); }
+    .badge-multi { background: rgba(249,115,22,.12);  color: var(--accent); }
+    .device-ua { font-size: 11px; color: var(--muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .token-mono { font-family: monospace; font-size: 10px; color: var(--muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Loading spinner ── */
+    .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.2); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast ── */
+    #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--card-2); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px 20px; font-size: 13px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 9999; white-space: nowrap; }
+    #toast.show { opacity: 1; }
+
+    @media (max-width: 640px) {
+      body { flex-direction: column; }
+      .sidebar { width: 100%; flex-direction: row; padding: 12px 16px; border-right: none; border-bottom: 1px solid var(--border); }
+      .sidebar-logo { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+      .sidebar-bottom { display: none; }
+      .nav-item span { display: none; }
+      .content { padding: 0 16px 32px; }
+      .page-header { padding: 20px 16px 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Auth Gate ── -->
+<div id="authGate">
+  <div class="gate-box">
+    <img src="logo.jfif" alt="Sonqollay" />
+    <h2>Super Admin</h2>
+    <p>Acceso restringido. Inicia sesión con tu cuenta de administrador.</p>
+    <button class="btn btn-google" id="signInBtn">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Iniciar sesión con Google
+    </button>
+    <div class="err" id="authErr"></div>
+  </div>
+</div>
+
+<!-- ── App ── -->
+<div id="appShell" style="display:none;width:100%;display:none;flex:1;min-height:100dvh">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="logo.jfif" alt="" />
+      <div>
+        <div class="sidebar-logo-text">SonqollayAPP</div>
+        <div class="sidebar-logo-sub">Super Admin</div>
+      </div>
+    </div>
+
+    <button class="nav-item active" data-section="cache">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      <span>Caché & App</span>
+    </button>
+    <button class="nav-item" data-section="tokens">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+      <span>Push Tokens</span>
+    </button>
+    <button class="nav-item" data-section="notif">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      <span>Notificaciones</span>
+    </button>
+
+    <div class="sidebar-bottom">
+      <a href="/administracion">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
+        <span style="font-size:13px">Administración</span>
+      </a>
+      <button class="nav-item" id="signOutBtn" style="color:var(--danger);font-size:13px;margin:0">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
+        <span>Cerrar sesión</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- ── Sección: Caché ── -->
+    <div class="section active" id="sec-cache">
+      <div class="page-header">
+        <h1>Caché &amp; Versión de App</h1>
+        <p>Fuerza que todos los usuarios descarguen la última versión de la aplicación.</p>
+      </div>
+      <div class="content">
+
+        <div class="card">
+          <div class="update-hero">
+            <div class="update-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </div>
+            <div>
+              <div style="font-size:16px;font-weight:700">Actualización forzada de caché</div>
+              <div class="update-status">Al presionar el botón, todos los usuarios conectados limpiarán su caché y recargarán la app automáticamente.</div>
+              <div class="update-last" id="lastUpdateLabel">Última actualización: —</div>
+            </div>
+            <button class="btn btn-primary" id="forceUpdateBtn" style="min-width:200px">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Forzar actualización
+            </button>
+            <div class="update-result" id="updateResult"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              Estado de usuarios
+            </div>
+          </div>
+          <div class="info-grid" id="cacheStats">
+            <div class="info-tile"><div class="val" id="statTotalUsers">—</div><div class="lbl">Usuarios</div></div>
+            <div class="info-tile"><div class="val" id="statOnline">—</div><div class="lbl">En línea</div></div>
+            <div class="info-tile"><div class="val" id="statTokens">—</div><div class="lbl">Tokens FCM</div></div>
+            <div class="info-tile"><div class="val" id="statUpdates">—</div><div class="lbl">Forzadas</div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Sección: Push Tokens ── -->
+    <div class="section" id="sec-tokens">
+      <div class="page-header">
+        <h1>Push Tokens FCM</h1>
+        <p>Tokens de notificaciones registrados por usuario.</p>
+      </div>
+      <div class="content">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              Tokens registrados
+            </div>
+            <button class="btn btn-outline" id="refreshTokensBtn" style="font-size:12px;padding:6px 12px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Refrescar
+            </button>
+          </div>
+          <div id="tokenTableWrap">
+            <div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">
+              <div class="spinner"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Sección: Notificaciones ── -->
+    <div class="section" id="sec-notif">
+      <div class="page-header">
+        <h1>Enviar notificación</h1>
+        <p>Envía una notificación push a todos los usuarios con token registrado.</p>
+      </div>
+      <div class="content">
+        <div class="card" style="max-width:520px">
+          <div class="card-header" style="margin-bottom:20px">
+            <div class="card-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              Broadcast a todos los usuarios
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Título</label>
+              <input id="notifTitle" type="text" maxlength="100" placeholder="Ej: Reunión de equipo hoy a las 15:00"
+                style="width:100%;background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;outline:none" />
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Mensaje (opcional)</label>
+              <textarea id="notifBody" maxlength="300" rows="3" placeholder="Detalle adicional..."
+                style="width:100%;background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;outline:none"></textarea>
+            </div>
+            <button class="btn btn-primary" id="sendNotifBtn" style="align-self:flex-start;min-width:180px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+              Enviar a todos
+            </button>
+            <div id="notifResult" style="font-size:13px;min-height:20px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div id="toast"></div>
+<script type="module" src="superadmin.js"></script>
+</body>
+</html>

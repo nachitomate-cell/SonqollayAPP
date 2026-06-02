@@ -10,8 +10,8 @@
   <meta name="apple-mobile-web-app-title" content="SonqollayAPP" />
   <title>SonqollayAPP</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" type="image/png" href="logo.png" />
-  <link rel="apple-touch-icon" href="logo.png" />
+  <link rel="icon" type="image/jpeg" href="logo.jfif" />
+  <link rel="apple-touch-icon" href="logo.jfif" />
   <script>!function(){var t=localStorage.getItem('theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}()</script>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -25,7 +25,7 @@
 
   <!-- ── Splash / Loading Screen ── -->
   <div id="splashScreen" class="splash-screen">
-    <img src="logo.png" alt="SonqollayAPP" class="splash-logo" />
+    <img src="logo.jfif" alt="SonqollayAPP" class="splash-logo" />
     <span class="splash-name">SonqollayAPP</span>
     <div class="splash-dots"><span></span><span></span><span></span></div>
   </div>
@@ -33,7 +33,7 @@
   <!-- ── Login Screen ── -->
   <div id="loginScreen" class="login-screen">
     <div class="login-card">
-      <img src="logo.png" alt="SonqollayAPP" class="login-logo" />
+      <img src="logo.jfif" alt="SonqollayAPP" class="login-logo" />
       <h1 class="login-title">SonqollayAPP</h1>
       <p class="login-sub">Gestión de clientes y cotizaciones</p>
 
@@ -75,7 +75,7 @@
   <!-- ── Topbar ── -->
   <header class="topbar">
     <div class="brand">
-      <img class="logo" src="logo.png" alt="Sonqollay" />
+      <img class="logo" src="logo.jfif" alt="Sonqollay" />
       <div>
         <h1>SonqollayAPP</h1>
         <p class="subtitle">Clientes y cotizaciones</p>
@@ -170,11 +170,42 @@
         </div>
         <div id="kpi-metrics"></div>
         <div id="hoy-urgente-section"></div>
-        <h2 class="section-title">Próximos seguimientos</h2>
-        <div id="semaforo-summary"></div>
-        <div id="follow-ups" class="list"></div>
-        <h2 class="section-title">Últimas cotizaciones</h2>
-        <div id="recent-quotes" class="list"></div>
+
+        <!-- Sin respuesta +14 días (oculto si no hay items) -->
+        <div class="acc-wrap" id="acc-wrap-sinresp" hidden>
+          <button class="acc-btn warn" id="acc-btn-sinresp">
+            <span class="acc-dot warn"></span>
+            <span class="acc-label">Sin respuesta +14 días</span>
+            <span class="acc-badge" id="acc-ct-sinresp">0</span>
+            <svg class="acc-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="acc-body" id="acc-body-sinresp"></div>
+        </div>
+
+        <!-- Próximos seguimientos -->
+        <div class="acc-wrap" id="acc-wrap-followups">
+          <button class="acc-btn" id="acc-btn-followups">
+            <span class="acc-label">Próximos seguimientos</span>
+            <span class="acc-badge" id="acc-ct-followups">0</span>
+            <svg class="acc-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="acc-body" id="acc-body-followups">
+            <div id="semaforo-summary"></div>
+            <div id="follow-ups" class="list"></div>
+          </div>
+        </div>
+
+        <!-- Últimas cotizaciones -->
+        <div class="acc-wrap" id="acc-wrap-recent">
+          <button class="acc-btn" id="acc-btn-recent">
+            <span class="acc-label">Últimas cotizaciones</span>
+            <span class="acc-badge" id="acc-ct-recent">0</span>
+            <svg class="acc-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="acc-body" id="acc-body-recent">
+            <div id="recent-quotes" class="list"></div>
+          </div>
+        </div>
       </div>
 
       <!-- ── Tab: Semana (Planner) ── -->
@@ -265,14 +296,40 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
         </svg>
         <input id="search-clients" type="search" placeholder="Buscar cliente…" />
+        <button id="clientFilterToggle" class="toolbar-filter-btn" aria-expanded="false" title="Filtros">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z"/></svg>
+          <span id="clientFilterBadge" class="toolbar-filter-badge" hidden>0</span>
+        </button>
       </div>
-      <!-- Semáforo filtros -->
-      <div class="semaforo-filter" id="clientSemaforoFilter">
-        <button class="sfchip active" data-sf="all">Todos</button>
-        <button class="sfchip green"  data-sf="green">🟢 Completos</button>
-        <button class="sfchip yellow" data-sf="yellow">🟡 Casi</button>
-        <button class="sfchip red"    data-sf="red">🔴 Incompletos</button>
+
+      <!-- Panel de filtros -->
+      <div id="clientFilterPanel" class="client-filter-panel" hidden>
+        <div class="cf-row">
+          <span class="cf-label">Estado</span>
+          <div class="cf-chips" id="clientSemaforoFilter">
+            <button class="sfchip active" data-sf="all">Todos</button>
+            <button class="sfchip green"  data-sf="green">🟢 Completo</button>
+            <button class="sfchip yellow" data-sf="yellow">🟡 Casi</button>
+            <button class="sfchip red"    data-sf="red">🔴 Incompleto</button>
+          </div>
+        </div>
+        <div class="cf-row" id="cf-row-industria">
+          <span class="cf-label">Industria</span>
+          <div class="cf-chips" id="clientIndustriaFilter"></div>
+        </div>
+        <div class="cf-row">
+          <span class="cf-label">Otros</span>
+          <div class="cf-chips" id="clientOtrosFilter">
+            <button class="sfchip active" data-otros="all">Todos</button>
+            <button class="sfchip" data-otros="con_cot">Con cotizaciones</button>
+            <button class="sfchip" data-otros="sin_cot">Sin cotizaciones</button>
+            <button class="sfchip" data-otros="con_notas">Con notas</button>
+            <button class="sfchip" data-otros="sin_notas">Sin notas</button>
+          </div>
+        </div>
+        <button id="clientFilterClear" class="cf-clear">Limpiar filtros</button>
       </div>
+
       <div id="clients-list" class="list"></div>
     </section>
 

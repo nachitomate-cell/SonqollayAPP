@@ -14,8 +14,8 @@ try {
     const body  = (payload.notification && payload.notification.body) || '';
     const options = {
       body,
-      icon: './logo.png',
-      badge: './logo.png',
+      icon: './logo.jfif',
+      badge: './logo.jfif',
       data: payload.data || {},
     };
     self.registration.showNotification(title, options);

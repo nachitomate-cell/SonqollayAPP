@@ -4,7 +4,7 @@ const PRECACHE = [
   '/administracion.js',
   '/styles.css',
   '/firebase-config.js',
-  '/logo.png',
+  '/logo.jfif',
 ];
 
 self.addEventListener('install', e => {

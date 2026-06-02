@@ -416,6 +416,8 @@ let _flushTimer = null;
 let isAdmin = false;
 let unsubAdminActivity = null;
 let unsubAdminSessions = null;
+let unsubAppVersion    = null;
+let _appVersionKnown   = null;
 let _adminSessions = [];
 let _adminActivity = [];
 let _homeActPage = 0;
@@ -526,6 +528,8 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubQuotes) { unsubQuotes(); unsubQuotes = null; }
     if (unsubClients) { unsubClients(); unsubClients = null; }
     if (unsubTemplates) { unsubTemplates(); unsubTemplates = null; }
+    if (unsubAppVersion) { unsubAppVersion(); unsubAppVersion = null; }
+    _appVersionKnown = null;
     currentUser = null;
     quotesLoaded = false;
     clientsLoaded = false;
@@ -544,6 +548,7 @@ onAuthStateChanged(auth, async (user) => {
   subscribe();
   startActivitySession().catch(() => {});
   setupFcm().catch(e => console.warn('FCM setup', e));
+  setupAppVersionListener();
 });
 
 async function saveUserProfile(user) {
@@ -631,6 +636,29 @@ function subscribe() {
 }
 
 // ---------- FCM ----------
+// ---------- Force-update listener (dispara cuando superadmin hace update de caché) ----------
+function setupAppVersionListener() {
+  if (unsubAppVersion) return;
+  unsubAppVersion = onSnapshot(doc(dbf, 'config', 'appVersion'), snap => {
+    if (!snap.exists()) return;
+    const v = snap.data().v;
+    if (_appVersionKnown === null) { _appVersionKnown = v; return; }
+    if (v !== _appVersionKnown) {
+      _appVersionKnown = v;
+      showToast('Actualizando app…');
+      (async () => {
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+        const reg = await navigator.serviceWorker?.getRegistration('./sw.js').catch(() => null);
+        if (reg) await reg.update().catch(() => {});
+        setTimeout(() => location.reload(true), 900);
+      })();
+    }
+  }, () => {});
+}
+
 async function setupFcm() {
   if (!(await isSupported())) return;
   if (!('Notification' in window)) return;
@@ -684,8 +712,8 @@ function renderGreeting() {
 
 // ---------- Hoy Urgente ----------
 function renderHoyUrgente() {
-  const el = document.getElementById('hoy-urgente-section');
-  if (!el || !quotesLoaded) return;
+  const urgEl = document.getElementById('hoy-urgente-section');
+  if (!urgEl || !quotesLoaded) return;
 
   const overdue = quotes.filter(q => {
     if (!q.seguimiento) return false;
@@ -694,27 +722,38 @@ function renderHoyUrgente() {
     return daysUntil(q.seguimiento) <= 0;
   }).sort((a, b) => a.seguimiento.localeCompare(b.seguimiento));
 
+  // "Requieren seguimiento" — siempre visible (urgente)
+  if (overdue.length) {
+    urgEl.innerHTML = `<div class="hoy-section-header urgent">
+      <span class="hoy-dot urgent"></span>Requieren seguimiento
+    </div>
+    <div class="list">${overdue.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>`;
+    bindQuoteCards(urgEl);
+  } else {
+    urgEl.innerHTML = '';
+  }
+
+  // "Sin respuesta +14 días" — acordeón
   const sinRespuesta = quotes.filter(q => {
     const e = (q.estado || '').toLowerCase();
     if (e !== 'enviada' && e !== 'en revisión') return false;
     return daysSinceUpdated(q) >= 14;
   }).sort((a, b) => daysSinceUpdated(b) - daysSinceUpdated(a));
 
-  let html = '';
-  if (overdue.length) {
-    html += `<div class="hoy-section-header urgent">
-      <span class="hoy-dot urgent"></span>Requieren seguimiento
-    </div>
-    <div class="list">${overdue.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>`;
+  const wrap  = document.getElementById('acc-wrap-sinresp');
+  const body  = document.getElementById('acc-body-sinresp');
+  const badge = document.getElementById('acc-ct-sinresp');
+  if (wrap && body && badge) {
+    if (sinRespuesta.length) {
+      wrap.hidden = false;
+      badge.textContent = sinRespuesta.length;
+      badge.className = 'acc-badge has-warn';
+      body.innerHTML = `<div class="list">${sinRespuesta.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>`;
+      bindQuoteCards(body);
+    } else {
+      wrap.hidden = true;
+    }
   }
-  if (sinRespuesta.length) {
-    html += `<div class="hoy-section-header warn" style="margin-top:${overdue.length?16:0}px">
-      <span class="hoy-dot warn"></span>Sin respuesta +14 días
-    </div>
-    <div class="list">${sinRespuesta.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>`;
-  }
-  el.innerHTML = html;
-  if (html) bindQuoteCards(el);
 }
 
 // ---------- Render ----------
@@ -786,26 +825,32 @@ function renderDashboard() {
     .sort((a, b) => a.seguimiento.localeCompare(b.seguimiento))
     .slice(0, 5);
   const fuEl = document.getElementById('follow-ups');
+  const fuBadge = document.getElementById('acc-ct-followups');
   if (!quotesLoaded) {
-    fuEl.innerHTML = skeletonCards(2);
+    if (fuEl) fuEl.innerHTML = skeletonCards(2);
   } else if (!followUps.length) {
-    fuEl.innerHTML = '<div class="empty">Sin seguimientos programados</div>';
+    if (fuEl) fuEl.innerHTML = '<div class="empty">Sin seguimientos programados</div>';
+    if (fuBadge) { fuBadge.textContent = '0'; fuBadge.className = 'acc-badge'; }
   } else {
-    fuEl.innerHTML = followUps.map(q => cardQuoteHtml(q)).join('');
-    bindQuoteCards(fuEl);
+    if (fuEl) { fuEl.innerHTML = followUps.map(q => cardQuoteHtml(q)).join(''); bindQuoteCards(fuEl); }
+    if (fuBadge) { fuBadge.textContent = followUps.length; fuBadge.className = 'acc-badge has-items'; }
   }
 
   const recEl = document.getElementById('recent-quotes');
+  const recBadge = document.getElementById('acc-ct-recent');
   if (!quotesLoaded) {
-    recEl.innerHTML = skeletonCards(3);
+    if (recEl) recEl.innerHTML = skeletonCards(3);
   } else {
     const recent = [...quotes]
       .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
       .slice(0, 5);
-    recEl.innerHTML = recent.length
-      ? recent.map(q => cardQuoteHtml(q)).join('')
-      : '<div class="empty">Aún no hay cotizaciones</div>';
-    bindQuoteCards(recEl);
+    if (recEl) {
+      recEl.innerHTML = recent.length
+        ? recent.map(q => cardQuoteHtml(q)).join('')
+        : '<div class="empty">Aún no hay cotizaciones</div>';
+      bindQuoteCards(recEl);
+    }
+    if (recBadge) { recBadge.textContent = recent.length; recBadge.className = recent.length ? 'acc-badge has-items' : 'acc-badge'; }
   }
   renderMetrics();
 }
@@ -1253,7 +1298,34 @@ function renderQuotes() {
 const CLIENTS_PER_PAGE = 10;
 let clientsPage = 0;
 
-let clientSemaforoFilter = 'all';
+const clientFilters = { semaforo: 'all', industria: 'all', otros: 'all' };
+
+function clientActiveFilterCount() {
+  return (clientFilters.semaforo !== 'all' ? 1 : 0)
+       + (clientFilters.industria !== 'all' ? 1 : 0)
+       + (clientFilters.otros     !== 'all' ? 1 : 0);
+}
+
+function updateClientFilterBadge() {
+  const n = clientActiveFilterCount();
+  const badge = document.getElementById('clientFilterBadge');
+  const btn   = document.getElementById('clientFilterToggle');
+  if (badge) { badge.textContent = n; badge.hidden = n === 0; }
+  if (btn)   btn.classList.toggle('active', n > 0);
+}
+
+function renderClientIndustriaChips() {
+  const container = document.getElementById('clientIndustriaFilter');
+  const row       = document.getElementById('cf-row-industria');
+  if (!container) return;
+  const industries = [...new Set(clients.map(c => c.industria).filter(Boolean))].sort();
+  if (row) row.hidden = industries.length === 0;
+  const cur = clientFilters.industria;
+  container.innerHTML = `<button class="sfchip${cur === 'all' ? ' active' : ''}" data-ind="all">Todas</button>`
+    + industries.map(ind =>
+        `<button class="sfchip${cur === ind ? ' active' : ''}" data-ind="${escapeHtml(ind)}">${escapeHtml(ind)}</button>`
+      ).join('');
+}
 
 function clientSemaforo(c) {
   const fields = [c.empresa, c.nombre, c.email, c.telefono, c.cargo];
@@ -1265,6 +1337,7 @@ function clientSemaforo(c) {
 
 function renderClients() {
   if (!clientsLoaded) { document.getElementById('clients-list').innerHTML = skeletonClientCards(4); return; }
+  renderClientIndustriaChips();
   const q = (document.getElementById('search-clients').value || '').toLowerCase().trim();
   let list = [...clients].sort((a, b) => a.empresa.localeCompare(b.empresa));
   if (q) {
@@ -1274,8 +1347,17 @@ function renderClients() {
       (x.email||'').toLowerCase().includes(q)
     );
   }
-  if (clientSemaforoFilter !== 'all') {
-    list = list.filter(c => clientSemaforo(c) === clientSemaforoFilter);
+  if (clientFilters.semaforo !== 'all') {
+    list = list.filter(c => clientSemaforo(c) === clientFilters.semaforo);
+  }
+  if (clientFilters.industria !== 'all') {
+    list = list.filter(c => c.industria === clientFilters.industria);
+  }
+  if (clientFilters.otros !== 'all') {
+    if (clientFilters.otros === 'con_cot')   list = list.filter(c => quotes.some(q => q.empresa === c.empresa));
+    if (clientFilters.otros === 'sin_cot')   list = list.filter(c => !quotes.some(q => q.empresa === c.empresa));
+    if (clientFilters.otros === 'con_notas') list = list.filter(c => c.notas && String(c.notas).trim());
+    if (clientFilters.otros === 'sin_notas') list = list.filter(c => !c.notas || !String(c.notas).trim());
   }
 
   const el = document.getElementById('clients-list');
@@ -1365,13 +1447,48 @@ document.getElementById('clientNotesSheet')?.addEventListener('click', (e) => {
   if (e.target === e.currentTarget) document.getElementById('clientNotesSheet').classList.add('hidden');
 });
 
+// Toggle panel
+document.getElementById('clientFilterToggle')?.addEventListener('click', () => {
+  const panel = document.getElementById('clientFilterPanel');
+  const btn   = document.getElementById('clientFilterToggle');
+  const open  = panel.hidden;
+  panel.hidden = !open;
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+
+// Semáforo
 document.getElementById('clientSemaforoFilter')?.addEventListener('click', (e) => {
   const chip = e.target.closest('.sfchip');
   if (!chip) return;
-  clientSemaforoFilter = chip.dataset.sf;
-  document.querySelectorAll('.sfchip').forEach(c => c.classList.toggle('active', c === chip));
-  clientsPage = 0;
-  renderClients();
+  clientFilters.semaforo = chip.dataset.sf;
+  document.querySelectorAll('#clientSemaforoFilter .sfchip').forEach(c => c.classList.toggle('active', c === chip));
+  clientsPage = 0; updateClientFilterBadge(); renderClients();
+});
+
+// Industria
+document.getElementById('clientIndustriaFilter')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.sfchip');
+  if (!chip) return;
+  clientFilters.industria = chip.dataset.ind;
+  document.querySelectorAll('#clientIndustriaFilter .sfchip').forEach(c => c.classList.toggle('active', c === chip));
+  clientsPage = 0; updateClientFilterBadge(); renderClients();
+});
+
+// Otros
+document.getElementById('clientOtrosFilter')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.sfchip');
+  if (!chip) return;
+  clientFilters.otros = chip.dataset.otros;
+  document.querySelectorAll('#clientOtrosFilter .sfchip').forEach(c => c.classList.toggle('active', c === chip));
+  clientsPage = 0; updateClientFilterBadge(); renderClients();
+});
+
+// Limpiar filtros
+document.getElementById('clientFilterClear')?.addEventListener('click', () => {
+  clientFilters.semaforo = 'all'; clientFilters.industria = 'all'; clientFilters.otros = 'all';
+  document.querySelectorAll('#clientSemaforoFilter .sfchip').forEach(c => c.classList.toggle('active', c.dataset.sf === 'all'));
+  document.querySelectorAll('#clientOtrosFilter .sfchip').forEach(c => c.classList.toggle('active', c.dataset.otros === 'all'));
+  clientsPage = 0; updateClientFilterBadge(); renderClients();
 });
 
 function renderCompaniesDatalist() {
@@ -2877,6 +2994,37 @@ document.getElementById('quotesViewToggle')?.addEventListener('click', (e) => {
   else if (_quotesView === 'proyectos') renderProyectos();
   else renderQuotes();
 });
+
+// ---------- Acordeones home ----------
+(function initAccordions() {
+  const ACCS = [
+    { btn: 'acc-btn-sinresp',   body: 'acc-body-sinresp',   key: 'acc_sinresp',   def: false },
+    { btn: 'acc-btn-followups', body: 'acc-body-followups', key: 'acc_followups', def: false },
+    { btn: 'acc-btn-recent',    body: 'acc-body-recent',    key: 'acc_recent',    def: false },
+  ];
+
+  function setAcc(btn, body, open) {
+    body.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  ACCS.forEach(({ btn: btnId, body: bodyId, key, def }) => {
+    const btn  = document.getElementById(btnId);
+    const body = document.getElementById(bodyId);
+    if (!btn || !body) return;
+
+    const open = localStorage.getItem(key) !== null
+      ? localStorage.getItem(key) === '1'
+      : def;
+    setAcc(btn, body, open);
+
+    btn.addEventListener('click', () => {
+      const next = !body.classList.contains('open');
+      setAcc(btn, body, next);
+      localStorage.setItem(key, next ? '1' : '0');
+    });
+  });
+})();
 
 // ---------- PWA service worker ----------
 if ('serviceWorker' in navigator) {

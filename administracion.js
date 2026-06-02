@@ -1052,7 +1052,7 @@ el('synapNotifBtn')?.addEventListener('click', () => {
       <div class="synap-section-title" style="color:var(--accent)">★ Recomendación principal</div>
       <div class="synap-notif-preview">
         <div class="synap-notif-header">
-          <img src="logo.png" alt="" style="width:28px;height:28px;border-radius:8px;object-fit:contain" />
+          <img src="logo.jfif" alt="" style="width:28px;height:28px;border-radius:8px;object-fit:contain" />
           <div>
             <div style="font-size:11px;font-weight:700;color:var(--muted)">SonqollayAPP</div>
             <div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3">${esc(best.titulo)}</div>

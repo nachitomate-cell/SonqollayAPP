@@ -55,12 +55,37 @@ async function sendToAll(notification, data = {}) {
     notification,
     data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
     webpush: {
+      headers: { Urgency: 'high' },
       fcmOptions: { link: '/' },
-      notification: { icon: '/logo.png', badge: '/logo.png' },
+      notification: { icon: '/logo.jfif', badge: '/logo.jfif', requireInteraction: false },
+    },
+    apns: {
+      headers: { 'apns-priority': '10' },
+      payload: {
+        aps: {
+          alert: { title: notification.title, body: notification.body || '' },
+          sound: 'default',
+          badge: 1,
+        },
+      },
+    },
+    android: {
+      priority: 'high',
+      notification: { sound: 'default', channelId: 'default' },
     },
   };
 
   const res = await getMessaging().sendEachForMulticast(message);
+
+  // Log detallado por token
+  res.responses.forEach((r, i) => {
+    const t = tokens[i];
+    if (r.success) {
+      logger.info(`OK token ${t.id.slice(0,20)} uid=${t.uid} msgId=${r.messageId}`);
+    } else {
+      logger.warn(`FAIL token ${t.id.slice(0,20)} uid=${t.uid} code=${r.error?.code} msg=${r.error?.message}`);
+    }
+  });
 
   // Limpiar tokens inválidos
   const toDelete = [];

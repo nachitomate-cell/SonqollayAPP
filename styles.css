@@ -778,6 +778,36 @@ main { padding: 14px 14px 20px; }
 .greeting-date { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
 /* ── Hoy urgente ── */
+/* ── Acordeones home ── */
+.acc-wrap { margin-top: 10px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); background: var(--card); }
+.acc-btn {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border: none; background: none; cursor: pointer;
+  font-family: var(--font); font-size: 14px; font-weight: 700; color: var(--text);
+  text-align: left; transition: background .15s;
+}
+.acc-btn:hover, .acc-btn:focus-visible { background: rgba(255,255,255,.04); }
+.acc-btn.warn { color: var(--warn); }
+.acc-label { flex: 1; }
+.acc-badge {
+  min-width: 22px; height: 22px; border-radius: 20px; padding: 0 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--card-2); color: var(--muted);
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+.acc-badge.has-items { background: rgba(249,115,22,.15); color: var(--accent); }
+.acc-badge.has-warn  { background: rgba(251,191,36,.15); color: var(--warn); }
+.acc-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.acc-dot.warn { background: var(--warn); }
+.acc-chevron { flex-shrink: 0; color: var(--muted); transition: transform .25s ease; }
+.acc-btn[aria-expanded="true"] .acc-chevron { transform: rotate(180deg); }
+.acc-body {
+  overflow: hidden; max-height: 0;
+  transition: max-height .3s ease, padding .3s ease;
+  padding: 0 12px;
+}
+.acc-body.open { max-height: 4000px; padding: 0 12px 12px; }
+
 .hoy-section-header {
   display: flex; align-items: center; gap: 7px;
   margin: 18px 0 8px;
@@ -1028,10 +1058,36 @@ main { padding: 14px 14px 20px; }
 .sfchip {
   padding: 5px 12px; border-radius: 99px; font-size: 12px; font-weight: 500;
   border: 1px solid var(--border); background: var(--card);
-  color: var(--muted); cursor: pointer;
+  color: var(--muted); cursor: pointer; font-family: var(--font);
   transition: all var(--transition);
 }
 .sfchip.active { background: var(--card-2); color: var(--text); border-color: var(--accent); }
+
+/* ── Filtros de clientes ── */
+.toolbar-filter-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 7px 11px; border-radius: 99px; flex-shrink: 0;
+  border: 1px solid var(--border); background: var(--card);
+  color: var(--muted); cursor: pointer; font-family: var(--font); font-size: 12px;
+  transition: all .15s;
+}
+.toolbar-filter-btn:hover,
+.toolbar-filter-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(249,115,22,.08); }
+.toolbar-filter-badge {
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px;
+  background: var(--accent); color: #fff;
+  font-size: 10px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.client-filter-panel {
+  padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 14px;
+  background: var(--card-2); border-bottom: 1px solid var(--border);
+}
+.cf-row { display: flex; flex-direction: column; gap: 7px; }
+.cf-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.cf-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cf-clear { align-self: flex-start; background: none; border: none; font-family: var(--font); font-size: 12px; color: var(--muted); cursor: pointer; padding: 2px 0; }
+.cf-clear:hover { color: var(--danger); }
 
 /* Semáforo dot en card */
 .sema-dot {
