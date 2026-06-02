@@ -1,0 +1,15 @@
+{
+  "name": "Sonqollay Admin",
+  "short_name": "Admin",
+  "description": "Panel de administración de SonqollayAPP",
+  "start_url": "/administracion",
+  "scope": "/administracion",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a1628",
+  "theme_color": "#f97316",
+  "lang": "es-CL",
+  "icons": [
+    { "src": "/logo.png", "sizes": "any", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
