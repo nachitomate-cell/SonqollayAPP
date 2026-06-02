@@ -10,6 +10,7 @@
       "README.md"
     ],
     "rewrites": [
+      { "source": "/administracion", "destination": "/administracion.html" },
       { "source": "**", "destination": "/index.html" }
     ],
     "headers": [

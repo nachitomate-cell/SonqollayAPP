@@ -1,8 +1,9 @@
 functions/
 .firebase/
-*.xlsx
-*.json.bak
-firestore.rules
-firebase.json
 .firebaserc
+firebase.json
+firestore.rules
+*.xlsx
 contactos_import.json
+*.log
+.git/
