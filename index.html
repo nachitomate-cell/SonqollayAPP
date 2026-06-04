@@ -81,6 +81,12 @@
         <p class="subtitle">Clientes y cotizaciones</p>
       </div>
     </div>
+    <button id="activityFeedBtn" class="icon-btn" aria-label="Actividad reciente" style="position:relative">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+      </svg>
+      <span id="afBadge" class="af-topbar-badge hidden">!</span>
+    </button>
     <button id="menuBtn" class="icon-btn" aria-label="Menú">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
         <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none"/>
@@ -558,6 +564,15 @@
       </header>
       <form id="quoteForm" class="form">
         <button type="button" class="btn btn-outline btn-sm btn-block" id="useTemplateBtn" style="margin-bottom:16px">Desde plantilla</button>
+        <!-- ── Dictado IA ── -->
+        <div id="quoteAIDictateBox" style="margin-bottom:16px">
+          <button type="button" class="btn btn-outline btn-sm btn-block" id="quoteAIDictateBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg>
+            Dictar requerimiento con IA
+          </button>
+          <p id="quoteAIDictateStatus" style="font-size:12px;color:var(--muted);text-align:center;margin:5px 0 0;min-height:16px"></p>
+          <p id="quoteAIDictateTranscript" style="display:none;font-size:12px;color:var(--fg);background:var(--card-bg,#f0f0f0);border-radius:8px;padding:8px 10px;margin-top:6px;white-space:pre-wrap;line-height:1.5;border:1px solid var(--border,#ddd)"></p>
+        </div>
         <label>Empresa
           <input list="companies" name="empresa" required placeholder="Nombre de la empresa" />
           <datalist id="companies"></datalist>
@@ -745,6 +760,9 @@
       <input type="date" id="segDateInput" class="seg-date-input" />
       <div class="sheet-actions" style="margin-top:16px">
         <button class="btn btn-ghost" id="segCancelBtn">Cancelar</button>
+        <button class="btn btn-outline" id="segSheetCalBtn" title="Exportar al calendario">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5"/></svg>Cal
+        </button>
         <button class="btn" id="segSaveBtn">Guardar</button>
       </div>
     </div>
@@ -819,6 +837,25 @@
         <button class="btn" id="proyectoSheetSave">Guardar proyecto</button>
       </div>
     </div>
+  </div>
+
+  <!-- ── Feed Actividad reciente ── -->
+  <div id="activityFeedSheet" class="bottom-sheet hidden">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header" style="flex-shrink:0">
+      <h2 class="sheet-title">Actividad reciente</h2>
+      <button class="icon-btn" id="afClose" aria-label="Cerrar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="afFilters" class="af-filters">
+      <button class="aff active" data-aff="all">Todo</button>
+      <button class="aff" data-aff="quotes">Cotizaciones</button>
+      <button class="aff" data-aff="notes">Notas</button>
+      <button class="aff" data-aff="seg">Seguimientos</button>
+      <button class="aff" data-aff="clients">Clientes</button>
+    </div>
+    <div id="afList" class="af-list"></div>
   </div>
 
   <div id="toast" class="toast hidden"></div>

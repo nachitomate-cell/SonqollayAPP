@@ -4,6 +4,7 @@
 
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onCall } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
@@ -208,5 +209,173 @@ exports.notifyOnNewQuote = onDocumentWritten(
       title: `Nueva cotización · ${after.numero}`,
       body: `${after.empresa} — ${formatCLP(after.valor)}`,
     }, { kind: 'new_quote', quoteId: event.params.quoteId });
+  }
+);
+
+// ---------- 5) Aviso al agregar nota en cotización ----------
+exports.onQuoteNoteAdded = onDocumentWritten(
+  { document: 'quotes/{quoteId}', region: 'us-central1' },
+  async (event) => {
+    const before = event.data && event.data.before && event.data.before.data();
+    const after  = event.data && event.data.after  && event.data.after.data();
+    if (!after || !before) return; // solo en edición
+    const prevNotas = (before.notas || '').trim();
+    const newNotas  = (after.notas  || '').trim();
+    // Detectar nota nueva: el campo creció (se añadió texto al final)
+    if (!newNotas || newNotas.length <= prevNotas.length) return;
+    const added = newNotas.startsWith(prevNotas)
+      ? newNotas.slice(prevNotas.length).trim()
+      : newNotas;
+    const noteText = added.replace(/^\[\d{2} \w+ \d{4} \d{2}:\d{2}\]\s*/, '').slice(0, 120);
+    if (!noteText) return;
+    await sendToAll(
+      { title: `Nota en ${after.numero} · ${after.empresa}`, body: noteText },
+      { kind: 'quote_note', quoteId: event.params.quoteId }
+    );
+  }
+);
+
+// ---------- 6) Aviso al cambiar estado de cotización ----------
+exports.onQuoteEstadoChanged = onDocumentWritten(
+  { document: 'quotes/{quoteId}', region: 'us-central1' },
+  async (event) => {
+    const before = event.data && event.data.before && event.data.before.data();
+    const after  = event.data && event.data.after  && event.data.after.data();
+    if (!after || !before) return;
+    if ((before.estado || '') === (after.estado || '')) return;
+    const icons = { Adjudicada: '🎉', Perdida: '❌', Enviada: '📤', 'En revisión': '🔍', Borrador: '📝' };
+    const icon = icons[after.estado] || '📋';
+    await sendToAll(
+      {
+        title: `${icon} ${after.numero} → ${after.estado}`,
+        body: `${after.empresa}${after.descripcion ? ' · ' + after.descripcion.slice(0, 80) : ''}`,
+      },
+      { kind: 'quote_estado', quoteId: event.params.quoteId }
+    );
+  }
+);
+
+// ---------- 7) Aviso al registrar seguimiento (contacto) ----------
+exports.onQuoteSeguimientoRegistered = onDocumentWritten(
+  { document: 'quotes/{quoteId}', region: 'us-central1' },
+  async (event) => {
+    const before = event.data && event.data.before && event.data.before.data();
+    const after  = event.data && event.data.after  && event.data.after.data();
+    if (!after || !before) return;
+    const prevSeg = before.seguimiento || '';
+    const newSeg  = after.seguimiento  || '';
+    // Disparar solo cuando se actualiza la fecha de seguimiento a una futura
+    if (!newSeg || newSeg === prevSeg) return;
+    const today = todayISO();
+    if (newSeg <= today) return; // ya cubierto por onQuoteSeguimientoToday
+    const days = daysBetween(today, newSeg);
+    await sendToAll(
+      {
+        title: `Seguimiento programado · ${after.numero}`,
+        body: `${after.empresa} · en ${days} día${days !== 1 ? 's' : ''} (${newSeg})`,
+      },
+      { kind: 'seguimiento_scheduled', quoteId: event.params.quoteId }
+    );
+  }
+);
+
+// ---------- 8) Aviso al crear cliente ----------
+exports.onClientCreated = onDocumentWritten(
+  { document: 'clients/{clientId}', region: 'us-central1' },
+  async (event) => {
+    const before = event.data && event.data.before && event.data.before.data();
+    const after  = event.data && event.data.after  && event.data.after.data();
+    if (before || !after || !after.empresa) return;
+    await sendToAll(
+      {
+        title: `Nuevo cliente · ${after.empresa}`,
+        body: [after.nombre, after.industria].filter(Boolean).join(' · ') || 'Cliente registrado',
+      },
+      { kind: 'new_client', clientId: event.params.clientId }
+    );
+  }
+);
+
+// ---------- 9) Dictado IA — extracción de entidades con Gemini ----------
+const DICTATION_SYSTEM_PROMPT = `Eres un asistente de extracción de datos para SonqollayAPP, sistema de cotizaciones comerciales chileno.
+
+El usuario dicta un requerimiento en español. Extrae entidades y devuelve EXCLUSIVAMENTE un objeto JSON válido (sin texto adicional, sin markdown, sin bloques de código).
+
+Estructura exacta del JSON:
+{
+  "empresa": string | null,
+  "tipo": "Consultoría"|"Academia"|"AURA"|null,
+  "industria": "Construcción"|"Minería"|"Industrial"|"Infraestructura"|null,
+  "descripcion": string | null,
+  "valor": number | null,
+  "numero": string | null,
+  "fecha": "YYYY-MM-DD" | null,
+  "seguimiento": "YYYY-MM-DD" | null,
+  "estado": "Borrador"|"Enviada"|"En revisión"|"Adjudicada"|"Perdida"|null,
+  "contactos": string | null,
+  "notas": string | null,
+  "cursoNombre": string | null,
+  "cursoFecha": "YYYY-MM-DD" | null,
+  "cursoModalidad": "Online"|"Presencial"|"Híbrido"|null,
+  "cursoCupos": number | null,
+  "cursoInscritos": number | null
+}
+
+Reglas estrictas:
+1. Devuelve SOLO el objeto JSON. Sin ningún texto adicional.
+2. Valores monetarios → número entero: "490 mil"→490000, "1,5 millones"→1500000, "490 lucas"→490000, "490k"→490000.
+3. Fechas relativas: usa la fecha actual del mensaje como referencia ("la próxima semana", "en 3 días", etc.).
+4. Si no se menciona un campo: null.
+5. Infiere "tipo": "curso"/"capacitación"/"alumnos"/"cupos" → "Academia"; "consultoría"/"asesoría" → "Consultoría"; "AURA" → "AURA".
+6. "lucas" = miles de pesos chilenos (CLP).
+7. Preserva nombres de empresas tal como se dictan (sin corregir mayúsculas ni abreviar).`;
+
+exports.parseDictation = onCall(
+  { region: 'us-central1' },
+  async (request) => {
+    const { transcript, today } = request.data || {};
+
+    if (!transcript || typeof transcript !== 'string' || transcript.trim().length === 0) {
+      throw new Error('transcript requerido');
+    }
+    if (transcript.length > 2000) {
+      throw new Error('transcript demasiado largo (máx. 2000 caracteres)');
+    }
+
+    const fechaHoy = today || new Date().toISOString().slice(0, 10);
+    const apiKey   = process.env.GEMINI_API_KEY;
+    const model    = 'gemini-2.0-flash';
+    const url      = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: DICTATION_SYSTEM_PROMPT }] },
+        contents: [{
+          role: 'user',
+          parts: [{ text: `Fecha de hoy: ${fechaHoy}\n\nTexto dictado: "${transcript}"` }],
+        }],
+        generationConfig: { maxOutputTokens: 512, temperature: 0.1, responseMimeType: 'application/json' },
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      logger.error('Gemini API error', { status: response.status, body: errBody });
+      throw new Error(`Error al contactar la IA (${response.status})`);
+    }
+
+    const body = await response.json();
+    const rawText = body.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '{}';
+
+    // Tolerante: extrae el primer objeto JSON aunque la IA añada texto extra
+    const match = rawText.match(/\{[\s\S]*\}/);
+    try {
+      return match ? JSON.parse(match[0]) : {};
+    } catch (parseErr) {
+      logger.error('JSON parse error en respuesta IA', { rawText });
+      return {};
+    }
   }
 );

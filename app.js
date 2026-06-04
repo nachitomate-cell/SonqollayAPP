@@ -15,6 +15,9 @@ import {
 import {
   getAnalytics, isSupported as analyticsSupported
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics.js';
+import {
+  getFunctions, httpsCallable
+} from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js';
 import { firebaseConfig, VAPID_KEY } from './firebase-config.js';
 
 // ---------- Init Firebase ----------
@@ -24,6 +27,7 @@ const dbf = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
 const googleProvider = new GoogleAuthProvider();
+const fbFunctions = getFunctions(app, 'us-central1');
 
 analyticsSupported().then(ok => { if (ok) getAnalytics(app); }).catch(() => {});
 
@@ -45,6 +49,18 @@ const seedQuotes = [
 
 // ---------- Helpers ----------
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+function nextVersionNumero(numero) {
+  const m = (numero || '').match(/^(.+?)_v(\d+)$/i);
+  if (m) return `${m[1]}_v${String(parseInt(m[2]) + 1).padStart(2, '0')}`;
+  return `${numero}_v02`;
+}
+
+function getVersionFamily(q) {
+  const rootId = q.parentId || q.id;
+  return quotes.filter(x => x.id === rootId || x.parentId === rootId)
+    .sort((a, b) => (a.version || 1) - (b.version || 1));
+}
 
 const formatCLP = (v) => (v == null || v === '' || isNaN(v)) ? '—' : '$ ' + Number(v).toLocaleString('es-CL');
 const formatCLPShort = (v) => {
@@ -75,6 +91,42 @@ function daysSinceUpdated(q) {
   if (q.updatedAt?.toDate) return Math.round((Date.now() - q.updatedAt.toDate().getTime()) / 86400000);
   if (q.fecha) return Math.round((Date.now() - new Date(q.fecha).getTime()) / 86400000);
   return 0;
+}
+
+function generateICS(q) {
+  if (!q.seguimiento) return null;
+  const dateStr = q.seguimiento.replace(/-/g, '');
+  const [y, mo, d] = q.seguimiento.split('-').map(Number);
+  const end = new Date(y, mo - 1, d + 1);
+  const endStr = `${end.getFullYear()}${String(end.getMonth()+1).padStart(2,'0')}${String(end.getDate()).padStart(2,'0')}`;
+  const desc = [
+    q.descripcion,
+    `Valor: ${formatCLP(q.valor)}`,
+    `Estado: ${q.estado || 'Borrador'}`,
+    q.contactos ? `Contactos: ${q.contactos}` : null,
+  ].filter(Boolean).join('\\n');
+  return [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//SonqollayAPP//ES',
+    'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
+    `UID:seg-${q.id}-${q.seguimiento}@sonqollayapp`,
+    `DTSTART;VALUE=DATE:${dateStr}`, `DTEND;VALUE=DATE:${endStr}`,
+    `SUMMARY:Seguimiento: ${q.numero} · ${q.empresa}`,
+    `DESCRIPTION:${desc}`,
+    'STATUS:CONFIRMED', 'END:VEVENT', 'END:VCALENDAR',
+  ].join('\r\n');
+}
+
+function downloadICS(q) {
+  const content = generateICS(q);
+  if (!content) { showToast('Sin fecha de seguimiento'); return; }
+  const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `seg_${(q.numero || 'cot').replace(/[^a-zA-Z0-9_-]/g, '_')}.ics`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Archivo .ics descargado · ábrelo para agregar al calendario');
 }
 const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -383,6 +435,138 @@ function renderAdminActivity() {
   }));
 }
 
+// ---------- Feed de actividad reciente ----------
+const AF_CFG = {
+  quote_new:      { label: 'creó cotización',      color: '#f97316', group: 'quotes' },
+  quote_edit:     { label: 'editó cotización',      color: '#f59e0b', group: 'quotes' },
+  quote_delete:   { label: 'eliminó cotización',    color: '#ef4444', group: 'quotes' },
+  quote_estado:   { label: 'cambió estado',         color: '#8b5cf6', group: 'quotes' },
+  quote_note:     { label: 'agregó nota',           color: '#22c55e', group: 'notes'  },
+  quote_contacto: { label: 'registró seguimiento',  color: '#06b6d4', group: 'seg'    },
+  client_new:     { label: 'creó cliente',          color: '#f97316', group: 'clients'},
+  client_edit:    { label: 'editó cliente',         color: '#f59e0b', group: 'clients'},
+  client_delete:  { label: 'eliminó cliente',       color: '#ef4444', group: 'clients'},
+};
+const AF_AVATAR_COLORS = ['#f97316','#8b5cf6','#06b6d4','#22c55e','#f59e0b','#ec4899','#14b8a6','#3b82f6'];
+
+function afAvatarColor(name) {
+  const n = (name || '?').split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+  return AF_AVATAR_COLORS[n % AF_AVATAR_COLORS.length];
+}
+
+function afDayLabel(ts) {
+  const date = ts.toDate ? ts.toDate() : new Date(ts);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const itemDay = new Date(date); itemDay.setHours(0,0,0,0);
+  const diffDays = Math.round((today - itemDay) / 86400000);
+  if (diffDays === 0) return 'Hoy';
+  if (diffDays === 1) return 'Ayer';
+  return date.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function renderActivityFeed() {
+  const el = document.getElementById('afList');
+  if (!el) return;
+
+  const filter = _actFeedFilter;
+  const logs = _actFeedLogs.filter(a => {
+    const cfg = AF_CFG[a.action];
+    if (!cfg) return false;
+    if (filter === 'all') return true;
+    return cfg.group === filter;
+  });
+
+  if (!logs.length) {
+    el.innerHTML = `<div class="empty" style="margin:32px 0">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg>
+      <span>Sin actividad reciente</span>
+    </div>`;
+    return;
+  }
+
+  // Agrupar por día
+  const groups = {};
+  const groupOrder = [];
+  logs.forEach(a => {
+    if (!a.timestamp?.toDate) return;
+    const dayKey = afDayLabel(a.timestamp);
+    if (!groups[dayKey]) { groups[dayKey] = []; groupOrder.push(dayKey); }
+    groups[dayKey].push(a);
+  });
+
+  let html = '';
+  groupOrder.forEach(day => {
+    html += `<div class="af-day-sep">${escapeHtml(day)}</div>`;
+    groups[day].forEach(a => {
+      const cfg = AF_CFG[a.action] || { label: a.action, color: 'var(--muted)', group: null };
+      const when = a.timestamp?.toDate ? timeAgo(a.timestamp.toDate()) : '—';
+      const who  = a.displayName || a.email || '?';
+      const firstName = who.trim().split(' ')[0];
+      const init = firstName[0].toUpperCase();
+      const avatarBg = afAvatarColor(who);
+
+      html += `<div class="af-item">
+        <div class="af-avatar" style="background:${avatarBg}">${escapeHtml(init)}</div>
+        <div class="af-body">
+          <div class="af-who-row">
+            <span class="af-who">${escapeHtml(firstName)}</span>
+            <span class="af-action">
+              <span class="af-dot" style="background:${cfg.color}"></span>${cfg.label}
+            </span>
+          </div>
+          ${a.detail ? `<span class="af-detail">${escapeHtml(a.detail)}</span>` : ''}
+        </div>
+        <span class="af-time">${escapeHtml(when)}</span>
+      </div>`;
+    });
+  });
+
+  el.innerHTML = html;
+}
+
+function subscribeActivityFeed() {
+  if (unsubActivityFeed) return;
+  const q = query(collection(dbf, 'activityLogs'), orderBy('timestamp', 'desc'), limit(80));
+  unsubActivityFeed = onSnapshot(q, snap => {
+    _actFeedLogs = snap.docs.map(d => d.data());
+    renderActivityFeed();
+    // Badge: actividad más reciente posterior a la última vista
+    const newest = _actFeedLogs[0]?.timestamp?.toDate?.()?.getTime() || 0;
+    const badge = document.getElementById('afBadge');
+    if (badge) badge.classList.toggle('hidden', !newest || newest <= _actFeedLastSeen);
+  }, err => {
+    console.warn('Activity feed', err);
+    const el = document.getElementById('afList');
+    if (el) el.innerHTML = '<div class="empty" style="margin:24px 0">No tienes permiso para ver esta sección aún.<br><small>Despliega las reglas de Firestore.</small></div>';
+  });
+}
+
+function openActivityFeed() {
+  subscribeActivityFeed();
+  _actFeedLastSeen = Date.now();
+  const badge = document.getElementById('afBadge');
+  if (badge) badge.classList.add('hidden');
+  document.getElementById('activityFeedSheet').classList.remove('hidden');
+}
+
+function closeActivityFeed() {
+  document.getElementById('activityFeedSheet').classList.add('hidden');
+}
+
+document.getElementById('activityFeedBtn')?.addEventListener('click', openActivityFeed);
+document.getElementById('afClose')?.addEventListener('click', closeActivityFeed);
+document.getElementById('activityFeedSheet')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeActivityFeed();
+});
+
+document.getElementById('afFilters')?.addEventListener('click', e => {
+  const btn = e.target.closest('.aff');
+  if (!btn) return;
+  _actFeedFilter = btn.dataset.aff;
+  document.querySelectorAll('#afFilters .aff').forEach(b => b.classList.toggle('active', b === btn));
+  renderActivityFeed();
+});
+
 // ---------- Estado en memoria ----------
 let currentUser = null;
 let quotes = [];
@@ -392,6 +576,8 @@ let unsubClients = null;
 let quotesLoaded = false;
 let clientsLoaded = false;
 let _quotesView = 'list';
+let _pendingVersionParentId = null;
+let _pendingVersionNum = null;
 
 // ---------- Filtros Cotizaciones ----------
 let quotesFilters = { estados: [], sinSeg: false };
@@ -417,6 +603,10 @@ let isAdmin = false;
 let unsubAdminActivity = null;
 let unsubAdminSessions = null;
 let unsubAppVersion    = null;
+let unsubActivityFeed  = null;
+let _actFeedLogs       = [];
+let _actFeedFilter     = 'all';
+let _actFeedLastSeen   = 0;
 let _appVersionKnown   = null;
 let _adminSessions = [];
 let _adminActivity = [];
@@ -529,6 +719,8 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubClients) { unsubClients(); unsubClients = null; }
     if (unsubTemplates) { unsubTemplates(); unsubTemplates = null; }
     if (unsubAppVersion) { unsubAppVersion(); unsubAppVersion = null; }
+    if (unsubActivityFeed) { unsubActivityFeed(); unsubActivityFeed = null; }
+    _actFeedLogs = [];
     _appVersionKnown = null;
     currentUser = null;
     quotesLoaded = false;
@@ -1214,6 +1406,7 @@ function cardQuoteHtml(q, opts = {}) {
         <div class="card-title">${escapeHtml(q.numero)} · ${escapeHtml(q.empresa)}</div>
         <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
           <span class="tag estado-${escapeHtml(estadoClass)}">${escapeHtml(q.estado || 'Borrador')}</span>
+          ${q.version > 1 ? `<span class="tag-version">v${q.version}</span>` : ''}
           ${q.tipoServicio ? `<span class="tag-tipo">${escapeHtml(q.tipoServicio)}</span>` : ''}
           ${q.industria ? `<span class="tag-industria">${escapeHtml(q.industria)}</span>` : ''}
         </div>
@@ -1584,6 +1777,8 @@ let _hitosTemp = [];
 
 function openQuoteForm(id, prefill = null) {
   editingQuoteId = id || null;
+  _pendingVersionParentId = prefill?._parentId || null;
+  _pendingVersionNum = prefill?._version || null;
   quoteForm.reset();
   document.getElementById('quoteTitle').textContent = id ? 'Editar cotización' : 'Nueva cotización';
   document.getElementById('quoteDelete').hidden = !id;
@@ -1685,8 +1880,12 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
       updatedBy: currentUser.uid,
       ...(editingQuoteId
         ? (logEntries.length ? { _log: arrayUnion(...logEntries) } : {})
-        : { createdAt: serverTimestamp(), createdBy: currentUser.uid, _log: [] })
+        : {
+            createdAt: serverTimestamp(), createdBy: currentUser.uid, _log: [],
+            ...(_pendingVersionParentId ? { parentId: _pendingVersionParentId, version: _pendingVersionNum } : {}),
+          })
     }, { merge: true });
+    _pendingVersionParentId = null; _pendingVersionNum = null;
     logActivity(editingQuoteId ? 'quote_edit' : 'quote_new', `${data.numero} · ${data.empresa}`).catch(() => {});
     await ensureClientForCompany(data.empresa, data.contactos);
     quoteModal.classList.add('hidden');
@@ -1731,6 +1930,7 @@ function openQuoteDetail(id) {
   const q = quotes.find(x => x.id === id);
   if (!q) return;
   detailQuoteId = id;
+  const family = getVersionFamily(q);
   const emails = (q.contactos || '').split(';').map(s => s.trim()).filter(Boolean);
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
   const sm = getSeguimientoStatus(q);
@@ -1785,7 +1985,11 @@ function openQuoteDetail(id) {
     <div class="seg-detail-box">
       <div class="seg-detail-header">
         <span class="lbl">Seguimiento</span>
-        <button class="btn-seg-link" id="segUpdateBtn">${sm ? '↻ Actualizar' : '＋ Programar'}</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${sm ? `<button class="btn-seg-link" id="detailCalBtn" title="Agregar al calendario">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:3px"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5"/></svg>Cal</button>` : ''}
+          <button class="btn-seg-link" id="segUpdateBtn">${sm ? '↻ Actualizar' : '＋ Programar'}</button>
+        </div>
       </div>
       ${sm
         ? `<div class="sm-row" style="margin:0">
@@ -1818,6 +2022,22 @@ function openQuoteDetail(id) {
       </div>
     </div>` : ''}
 
+    ${family.length > 1 ? `
+    <div class="detail-row">
+      <span class="lbl">Versiones (${family.length})</span>
+      <div class="val versions-list">
+        ${family.map(v => `
+          <div class="version-item${v.id === q.id ? ' ver-current' : ' ver-other'}" data-ver-id="${escapeHtml(v.id)}">
+            <span class="ver-badge">v${v.version||1}</span>
+            <span class="ver-numero">${escapeHtml(v.numero)}</span>
+            <span class="tag estado-${escapeHtml((v.estado||'Borrador').split(' ')[0])}" style="font-size:11px;padding:2px 6px">${escapeHtml(v.estado||'Borrador')}</span>
+            ${v.valor != null ? `<span style="font-size:11px;color:var(--muted);margin-left:auto">${formatCLPShort(v.valor)}</span>` : ''}
+            ${v.id === q.id ? `<span style="font-size:11px;color:var(--accent);font-weight:600;margin-left:4px">← actual</span>` : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>`}
+          </div>
+        `).join('')}
+      </div>
+    </div>` : ''}
+
     <div class="detail-actions">
       ${emails.length ? `<a class="btn" href="mailto:${escapeHtml(emails.join(','))}?subject=${encodeURIComponent('Cotización ' + q.numero + ' - ' + q.empresa)}">✉ Enviar correo</a>` : ''}
       <a class="btn btn-outline" href="${waUrl}" target="_blank" rel="noopener" style="background:rgba(37,211,102,.1);border-color:rgba(37,211,102,.3);color:#25D366">
@@ -1826,6 +2046,7 @@ function openQuoteDetail(id) {
       </a>
       <button class="btn btn-outline" id="detailShare">Compartir</button>
       <button class="btn btn-outline" id="detailDuplicate">Duplicar</button>
+      <button class="btn btn-outline" id="detailNewVersion">Nueva versión</button>
       <button class="btn btn-outline" id="detailSaveTemplate">Guardar plantilla</button>
       <button class="btn btn-outline" id="detailDictate">🎤 Dictar avance</button>
     </div>
@@ -1893,6 +2114,31 @@ function openQuoteDetail(id) {
   document.getElementById('detailDictate')?.addEventListener('click', () => {
     _dictateTarget = { type: 'quote', id };
     openDictateSheet('Dictar avance · ' + q.numero);
+  });
+
+  document.getElementById('detailCalBtn')?.addEventListener('click', () => downloadICS(q));
+
+  document.getElementById('detailNewVersion')?.addEventListener('click', () => {
+    detailModal.classList.add('hidden');
+    const parentId = q.parentId || q.id;
+    const nextVer = (q.version || 1) + 1;
+    openQuoteForm(null, {
+      empresa: q.empresa, descripcion: q.descripcion,
+      valor: q.valor, contactos: q.contactos,
+      estado: 'Borrador', fecha: new Date().toISOString().slice(0, 10),
+      numero: nextVersionNumero(q.numero),
+      seguimiento: '', notas: '',
+      tipoServicio: q.tipoServicio || '', industria: q.industria || '',
+      items: q.items ? q.items.map(i => ({ ...i, id: uid() })) : [],
+      _parentId: parentId, _version: nextVer,
+    });
+  });
+
+  document.querySelectorAll('[data-ver-id]').forEach(el => {
+    el.addEventListener('click', () => {
+      const vid = el.dataset.verId;
+      if (vid && vid !== q.id) openQuoteDetail(vid);
+    });
   });
 }
 
@@ -2340,6 +2586,13 @@ document.getElementById('segDateInput').addEventListener('input', (e) => {
 
 document.getElementById('segCancelBtn').addEventListener('click', () => {
   document.getElementById('seguimientoSheet').classList.add('hidden');
+});
+
+document.getElementById('segSheetCalBtn')?.addEventListener('click', () => {
+  const dateVal = document.getElementById('segDateInput').value;
+  const q = quotes.find(x => x.id === _segQuoteId);
+  if (!q || !dateVal) { showToast('Selecciona una fecha de seguimiento'); return; }
+  downloadICS({ ...q, seguimiento: dateVal });
 });
 
 document.getElementById('segSaveBtn').addEventListener('click', async () => {
@@ -3027,6 +3280,129 @@ document.getElementById('quotesViewToggle')?.addEventListener('click', (e) => {
 })();
 
 // ---------- PWA service worker ----------
+// ---------- Dictado IA — relleno automático de cotización ----------
+
+async function parseDictacionConIA(transcript) {
+  const fn = httpsCallable(fbFunctions, 'parseDictation');
+  const today = new Date().toISOString().slice(0, 10);
+  const res = await fn({ transcript, today });
+  return res.data;
+}
+
+function fillQuoteFromDictation(data) {
+  if (!data || typeof data !== 'object') return;
+  if (data.empresa)         quoteForm.empresa.value      = data.empresa;
+  if (data.numero)          quoteForm.numero.value        = data.numero;
+  if (data.fecha)           quoteForm.fecha.value         = data.fecha;
+  if (data.descripcion)     quoteForm.descripcion.value   = data.descripcion;
+  if (data.valor != null)   quoteForm.valor.value         = data.valor;
+  if (data.contactos)       quoteForm.contactos.value     = data.contactos;
+  if (data.seguimiento)     quoteForm.seguimiento.value   = data.seguimiento;
+  if (data.notas)           quoteForm.notas.value         = data.notas;
+  if (data.estado)          quoteForm.estado.value        = data.estado;
+  if (data.tipo) {
+    _editingTipo = data.tipo;
+    updateTipoChips();
+  }
+  if (data.industria) {
+    _editingIndustriaQuote = data.industria;
+    updateIndustriaChips('quote');
+  }
+  if (data.tipo === 'Academia') {
+    if (data.cursoNombre    && quoteForm.cursoNombre)    quoteForm.cursoNombre.value    = data.cursoNombre;
+    if (data.cursoFecha     && quoteForm.cursoFecha)     quoteForm.cursoFecha.value     = data.cursoFecha;
+    if (data.cursoModalidad && quoteForm.cursoModalidad) quoteForm.cursoModalidad.value = data.cursoModalidad;
+    if (data.cursoCupos    != null && quoteForm.cursoCupos)    quoteForm.cursoCupos.value    = data.cursoCupos;
+    if (data.cursoInscritos != null && quoteForm.cursoInscritos) quoteForm.cursoInscritos.value = data.cursoInscritos;
+  }
+}
+
+function _resetAIDictateBtn(btn) {
+  btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg> Dictar requerimiento con IA`;
+  btn.style.borderColor = '';
+  btn.style.color = '';
+}
+
+function initAIDictado() {
+  const btn          = document.getElementById('quoteAIDictateBtn');
+  const statusEl     = document.getElementById('quoteAIDictateStatus');
+  const transcriptEl = document.getElementById('quoteAIDictateTranscript');
+  if (!btn) return;
+
+  if (!SpeechRec) {
+    btn.disabled = true;
+    btn.textContent = 'Dictado no disponible en este navegador';
+    return;
+  }
+
+  let recognition = null;
+  let isListening = false;
+  let finalText   = '';
+
+  btn.addEventListener('click', () => {
+    if (isListening) { recognition?.stop(); return; }
+
+    finalText = '';
+    transcriptEl.textContent = '';
+    transcriptEl.style.display = 'none';
+
+    recognition = new SpeechRec();
+    recognition.lang = 'es-CL';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      isListening = true;
+      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px"><rect x="6" y="6" width="12" height="12" rx="2"/></svg> Detener`;
+      btn.style.borderColor = 'var(--danger,#e53e3e)';
+      btn.style.color       = 'var(--danger,#e53e3e)';
+      statusEl.textContent  = '🎙 Escuchando… habla ahora';
+    };
+
+    recognition.onresult = (e) => {
+      let interim = '';
+      finalText = '';
+      for (let i = 0; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      transcriptEl.textContent = finalText + interim;
+      if (transcriptEl.textContent) transcriptEl.style.display = 'block';
+    };
+
+    recognition.onerror = (ev) => {
+      if (ev.error === 'no-speech') return;
+      isListening = false;
+      _resetAIDictateBtn(btn);
+      statusEl.textContent = 'Error de micrófono: ' + ev.error;
+    };
+
+    recognition.onend = async () => {
+      isListening = false;
+      _resetAIDictateBtn(btn);
+      const text = finalText.trim();
+      if (!text) { statusEl.textContent = 'No se detectó voz. Intenta de nuevo.'; return; }
+      statusEl.textContent = '⏳ Procesando con IA…';
+      btn.disabled = true;
+      try {
+        const data = await parseDictacionConIA(text);
+        fillQuoteFromDictation(data);
+        statusEl.textContent = '✓ Formulario completado · revisa y guarda';
+      } catch (err) {
+        console.error('parseDictacion error', err);
+        statusEl.textContent = 'Error al procesar con IA. Intenta de nuevo.';
+        showToast('Error al procesar dictado con IA');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    recognition.start();
+  });
+}
+
+initAIDictado();
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').then(reg => {

@@ -27,10 +27,10 @@ service cloud.firestore {
       }
     }
 
-    // Logs de actividad: cada usuario escribe solo los suyos; solo admin lee
+    // Logs de actividad: cada usuario escribe solo los suyos; todos los autenticados leen (feed de equipo)
     match /activityLogs/{id} {
       allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow read:   if isAdmin();
+      allow read:   if request.auth != null;
     }
 
     // Sesiones: cada usuario escribe la suya; solo admin lee
