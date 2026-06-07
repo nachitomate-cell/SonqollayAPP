@@ -7,6 +7,11 @@
  * pelear con sw.js, que controla el scope raíz «/». Ver setupFcm() en app.js.
  */
 
+// El SDK compat referencia `window` en algunas rutas (p. ej. detección de "firebase ya
+// definido"). En un Service Worker `window` no existe (el global es `self`), lo que
+// rompía la evaluación con "window is not defined". Apuntamos window → self.
+self.window = self;
+
 // SDK alojado en el MISMO origen (vendor/) en vez de gstatic.com.
 // importScripts() va directo a la red (no pasa por la caché de sw.js); si la red a
 // gstatic falla/está bloqueada, el SW no se evaluaba y las push no se registraban.
