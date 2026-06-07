@@ -1,7 +1,8 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
 import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword,
-  signOut, onAuthStateChanged
+  signOut, onAuthStateChanged,
+  setPersistence, browserLocalPersistence, browserSessionPersistence
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDoc, addDoc, deleteDoc, setDoc, onSnapshot,
@@ -1282,8 +1283,24 @@ onAuthStateChanged(auth, async user => {
   subscribe();
 });
 
+// ── Persistencia de sesión ("Mantener sesión iniciada") ──
+const KEEP_KEY = 'adm_keepSession';
+const wantKeep = () => localStorage.getItem(KEEP_KEY) !== '0'; // default: true
+async function applyPersistence() {
+  const keep = el('gateKeep') ? el('gateKeep').checked : wantKeep();
+  localStorage.setItem(KEEP_KEY, keep ? '1' : '0');
+  // local = sobrevive cierres del navegador · session = se cierra al cerrar la pestaña
+  await setPersistence(auth, keep ? browserLocalPersistence : browserSessionPersistence);
+}
+// Estado inicial del checkbox + persistencia según preferencia guardada
+if (el('gateKeep')) el('gateKeep').checked = wantKeep();
+setPersistence(auth, wantKeep() ? browserLocalPersistence : browserSessionPersistence).catch(() => {});
+
 // ── Events: nav ──
-el('gateLoginBtn')?.addEventListener('click', () => signInWithPopup(auth, gProvider).catch(() => {}));
+el('gateLoginBtn')?.addEventListener('click', async () => {
+  try { await applyPersistence(); } catch (_) {}
+  signInWithPopup(auth, gProvider).catch(() => {});
+});
 
 el('gateEmailBtn')?.addEventListener('click', async () => {
   const email = el('gateEmail')?.value.trim();
@@ -1294,6 +1311,7 @@ el('gateEmailBtn')?.addEventListener('click', async () => {
   const btn = el('gateEmailBtn');
   btn.disabled = true; btn.textContent = 'Ingresando…';
   try {
+    await applyPersistence();
     await signInWithEmailAndPassword(auth, email, pass);
   } catch (e) {
     const msgs = {
