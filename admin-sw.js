@@ -1,10 +1,10 @@
-const CACHE = 'sonqollay-admin-v2';
+const CACHE = 'sonqollay-admin-v3';
 const PRECACHE = [
   '/administracion',
   '/administracion.js',
   '/styles.css',
   '/firebase-config.js',
-  '/logo.jfif',
+  '/icon-192.png',
 ];
 
 self.addEventListener('install', e => {
