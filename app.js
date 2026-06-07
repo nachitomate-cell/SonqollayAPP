@@ -3253,44 +3253,105 @@ document.getElementById('proyectoSheetSave')?.addEventListener('click', async ()
 });
 
 // ---------- Pipeline view ----------
+// Probabilidad de cierre por estado (para el pronóstico ponderado)
+const ESTADO_PROB = { 'Borrador': 0.10, 'Enviada': 0.40, 'En revisión': 0.60, 'Adjudicada': 1.0, 'Perdida': 0 };
+
+function kanbanCardHtml(q) {
+  const sm = getSeguimientoStatus(q);
+  return `<div class="kanban-card" draggable="true" data-quote-id="${escapeHtml(q.id)}" data-estado="${escapeHtml(q.estado || 'Borrador')}">
+    <div class="kc-title">${escapeHtml(q.numero || '—')}</div>
+    <div class="kc-emp">${escapeHtml(q.empresa || '')}</div>
+    ${q.valor != null && q.valor !== '' ? `<div class="kc-val">${formatCLP(q.valor)}</div>` : ''}
+    ${sm ? `<div class="kc-seg ${sm.key}">${escapeHtml(sm.label)}</div>` : ''}
+  </div>`;
+}
+
+async function moveQuoteEstado(id, newEstado) {
+  const q = quotes.find(x => x.id === id);
+  if (!q || (q.estado || 'Borrador') === newEstado) return;
+  try {
+    await setDoc(doc(quotesCol(), id), { estado: newEstado, updatedAt: serverTimestamp(), updatedBy: currentUser.uid }, { merge: true });
+    logActivity('quote_estado', `${q.numero}: ${newEstado}`).catch(() => {});
+    showToast(`${q.numero} → ${newEstado}`);
+  } catch (e) { showToast('Error: ' + e.message); }
+}
+
+// Kanban arrastrable por estado + pronóstico ponderado.
 function renderPipeline() {
   const el = document.getElementById('pipeline-view');
   if (!el) return;
-  const PIPELINE = [
-    { estado: 'En revisión', dot: 'warn',    open: true  },
-    { estado: 'Enviada',     dot: 'accent',   open: true  },
-    { estado: 'Borrador',    dot: 'muted',    open: false },
-    { estado: 'Adjudicada',  dot: 'success',  open: false },
-    { estado: 'Perdida',     dot: 'danger',   open: false },
+  const COLS = [
+    { estado: 'Borrador',    cls: 'muted'   },
+    { estado: 'Enviada',     cls: 'accent'  },
+    { estado: 'En revisión', cls: 'warn'    },
+    { estado: 'Adjudicada',  cls: 'success' },
+    { estado: 'Perdida',     cls: 'danger'  },
   ];
   const searchVal = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
-  el.innerHTML = PIPELINE.map(({ estado, dot, open }) => {
-    let group = quotes.filter(q => (q.estado || 'Borrador') === estado);
-    if (searchVal) group = group.filter(q =>
-      (q.empresa||'').toLowerCase().includes(searchVal) ||
-      (q.numero||'').toLowerCase().includes(searchVal) ||
-      (q.descripcion||'').toLowerCase().includes(searchVal)
-    );
-    group = applyQuotesFilters(group);
+  let visible = quotes.slice();
+  if (searchVal) visible = visible.filter(q =>
+    (q.empresa||'').toLowerCase().includes(searchVal) ||
+    (q.numero||'').toLowerCase().includes(searchVal) ||
+    (q.descripcion||'').toLowerCase().includes(searchVal)
+  );
+  visible = applyQuotesFilters(visible);
+
+  // Pronóstico: ponderado (deals abiertos), pipeline abierto y adjudicado
+  let weighted = 0, openTotal = 0, won = 0;
+  visible.forEach(q => {
+    const v = Number(q.valor) || 0;
+    const est = q.estado || 'Borrador';
+    if (est === 'Adjudicada') { won += v; return; }
+    if (est === 'Perdida') return;
+    openTotal += v;
+    weighted += v * (ESTADO_PROB[est] ?? 0);
+  });
+
+  const forecastHtml = `<div class="kanban-forecast">
+    <div class="kf-item"><span class="kf-label">Pronóstico ponderado</span><span class="kf-val accent">${formatCLP(weighted)}</span></div>
+    <div class="kf-item"><span class="kf-label">Pipeline abierto</span><span class="kf-val">${formatCLP(openTotal)}</span></div>
+    <div class="kf-item"><span class="kf-label">Adjudicado</span><span class="kf-val success">${formatCLP(won)}</span></div>
+  </div>
+  <div class="kanban-hint">Arrastrá las tarjetas entre columnas para cambiar el estado · ponderación: Borrador 10% · Enviada 40% · En revisión 60%.</div>`;
+
+  const boardHtml = `<div class="kanban-board">${COLS.map(col => {
+    const group = visible.filter(q => (q.estado || 'Borrador') === col.estado);
     const total = group.reduce((s, q) => s + (Number(q.valor) || 0), 0);
-    return `<div class="pipeline-group${open ? ' open' : ''}" data-pg="${escapeHtml(estado)}">
-      <div class="pipeline-group-header">
-        <span class="pg-dot ${dot}"></span>
-        <span class="pg-name">${escapeHtml(estado)}</span>
-        <span class="pg-count">${group.length}</span>
-        ${total ? `<span class="pg-total">${formatCLP(total)}</span>` : ''}
-        <svg class="pg-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+    return `<div class="kanban-col" data-drop-estado="${escapeHtml(col.estado)}">
+      <div class="kanban-col-head ${col.cls}">
+        <span class="kc-name">${escapeHtml(col.estado)}</span>
+        <span class="kc-count">${group.length}</span>
+        ${total ? `<span class="kc-total">${formatCLP(total)}</span>` : ''}
       </div>
-      <div class="pipeline-group-body">
-        ${group.length ? group.map(q => cardQuoteHtml(q)).join('') : '<div class="pg-empty">Sin cotizaciones</div>'}
+      <div class="kanban-col-body">
+        ${group.length ? group.map(kanbanCardHtml).join('') : '<div class="pg-empty">—</div>'}
       </div>
     </div>`;
-  }).join('');
+  }).join('')}</div>`;
 
-  el.querySelectorAll('.pipeline-group-header').forEach(h => {
-    h.addEventListener('click', () => h.closest('.pipeline-group').classList.toggle('open'));
+  el.innerHTML = forecastHtml + boardHtml;
+
+  // Click → detalle
+  el.querySelectorAll('.kanban-card').forEach(card => {
+    card.addEventListener('click', () => openQuoteDetail(card.dataset.quoteId));
+    card.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', card.dataset.quoteId);
+      e.dataTransfer.effectAllowed = 'move';
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
   });
-  bindQuoteCards(el);
+  // Columnas = zonas de drop
+  el.querySelectorAll('.kanban-col').forEach(col => {
+    col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drop-over'); });
+    col.addEventListener('dragleave', () => col.classList.remove('drop-over'));
+    col.addEventListener('drop', (e) => {
+      e.preventDefault();
+      col.classList.remove('drop-over');
+      const id = e.dataTransfer.getData('text/plain');
+      if (id) moveQuoteEstado(id, col.dataset.dropEstado);
+    });
+  });
 }
 
 document.getElementById('quotesViewToggle')?.addEventListener('click', (e) => {

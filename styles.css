@@ -1694,3 +1694,40 @@ main { padding: 14px 14px 20px; }
   .rates-widget { padding: 4px 9px; gap: 7px; }
   .rates-widget .rate-v { font-size: 11px; }
 }
+
+/* ── Kanban (pipeline arrastrable) + pronóstico ── */
+.kanban-forecast { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.kf-item { flex: 1; min-width: 110px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+.kf-label { display: block; font-size: 9.5px; color: var(--muted); font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.kf-val { display: block; font-size: 16px; font-weight: 800; color: var(--text); margin-top: 3px; }
+.kf-val.accent { color: var(--accent); }
+.kf-val.success { color: var(--success); }
+.kanban-hint { font-size: 11px; color: var(--muted); margin: 0 0 12px; }
+.kanban-board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; -webkit-overflow-scrolling: touch; }
+.kanban-col { flex: 0 0 240px; width: 240px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; max-height: 72vh; }
+.kanban-col.drop-over { border-color: var(--accent); box-shadow: inset 0 0 0 2px rgba(249,115,22,.3); }
+.kanban-col-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-2); border-radius: var(--radius-sm) var(--radius-sm) 0 0; z-index: 1; }
+.kanban-col-head .kc-name { font-weight: 700; font-size: 13px; color: var(--text); }
+.kanban-col-head .kc-count { font-size: 11px; background: var(--card-2); color: var(--muted); border-radius: 999px; padding: 1px 7px; font-weight: 700; }
+.kanban-col-head .kc-total { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 600; }
+.kanban-col-head.accent .kc-name { color: var(--accent); }
+.kanban-col-head.warn .kc-name { color: var(--warn); }
+.kanban-col-head.success .kc-name { color: var(--success); }
+.kanban-col-head.danger .kc-name { color: var(--danger); }
+.kanban-col-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 40px; }
+.kanban-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 10px; padding: 9px 11px; cursor: grab; transition: border-color .15s, transform .08s; }
+.kanban-card:hover { border-color: var(--accent); }
+.kanban-card:active { cursor: grabbing; transform: scale(.98); }
+.kanban-card.dragging { opacity: .45; }
+.kanban-card[data-estado="Enviada"] { border-left-color: var(--accent); }
+.kanban-card[data-estado="En revisión"] { border-left-color: var(--warn); }
+.kanban-card[data-estado="Adjudicada"] { border-left-color: var(--success); }
+.kanban-card[data-estado="Perdida"] { border-left-color: var(--danger); }
+.kanban-card .kc-title { font-weight: 700; font-size: 12.5px; color: var(--text); }
+.kanban-card .kc-emp { font-size: 12px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kanban-card .kc-val { font-size: 12px; font-weight: 700; color: var(--accent); margin-top: 4px; }
+.kanban-card .kc-seg { font-size: 10.5px; margin-top: 4px; font-weight: 600; }
+.kanban-card .kc-seg.red { color: var(--danger); }
+.kanban-card .kc-seg.yellow { color: var(--warn); }
+.kanban-card .kc-seg.green { color: var(--success); }
+.kanban-card .kc-seg.muted { color: var(--muted); }
