@@ -1815,9 +1815,12 @@ function openQuoteForm(id, prefill = null) {
       quoteForm.fecha.value = q.fecha || '';
       quoteForm.descripcion.value = q.descripcion || '';
       quoteForm.valor.value = q.valor != null ? q.valor : '';
+      quoteForm.rut.value = q.rut || '';
       quoteForm.contactos.value = q.contactos || '';
       quoteForm.estado.value = q.estado || 'Borrador';
       quoteForm.seguimiento.value = q.seguimiento || '';
+      quoteForm.formaPago.value = q.formaPago || '';
+      quoteForm.validezDias.value = q.validezDias != null ? q.validezDias : '';
       quoteForm.notas.value = q.notas || '';
       _editingTipo = q.tipoServicio || '';
       _editingIndustriaQuote = q.industria || '';
@@ -1837,9 +1840,12 @@ function openQuoteForm(id, prefill = null) {
     quoteForm.fecha.value = prefill.fecha || new Date().toISOString().slice(0,10);
     quoteForm.descripcion.value = prefill.descripcion || '';
     quoteForm.valor.value = prefill.valor != null ? prefill.valor : '';
+    quoteForm.rut.value = prefill.rut || '';
     quoteForm.contactos.value = prefill.contactos || '';
     quoteForm.estado.value = prefill.estado || 'Borrador';
     quoteForm.seguimiento.value = prefill.seguimiento || '';
+    quoteForm.formaPago.value = prefill.formaPago || '';
+    quoteForm.validezDias.value = prefill.validezDias != null ? prefill.validezDias : '';
     quoteForm.notas.value = prefill.notas || '';
     _editingTipo = prefill.tipoServicio || '';
     _editingIndustriaQuote = prefill.industria || '';
@@ -1869,9 +1875,12 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     fecha: quoteForm.fecha.value,
     descripcion: quoteForm.descripcion.value.trim(),
     valor: parseValor(quoteForm.valor.value),
+    rut: quoteForm.rut.value.trim(),
     contactos: quoteForm.contactos.value.trim(),
     estado: quoteForm.estado.value,
     seguimiento: quoteForm.seguimiento.value || '',
+    formaPago: quoteForm.formaPago.value.trim(),
+    validezDias: parseInt(quoteForm.validezDias.value) || null,
     notas: quoteForm.notas.value.trim(),
     tipoServicio: _editingTipo,
     industria: _editingIndustriaQuote,

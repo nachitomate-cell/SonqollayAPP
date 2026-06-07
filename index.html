@@ -653,6 +653,9 @@
           <button type="button" class="btn btn-outline btn-sm" id="addItemBtn" style="margin-bottom:8px">+ Agregar ítem</button>
           <div class="card-meta" style="margin-top:4px">Total: <strong id="itemsTotal" style="color:var(--accent);margin-left:6px">$ 0</strong></div>
         </div>
+        <label>RUT cliente
+          <input name="rut" type="text" placeholder="76.123.456-7" />
+        </label>
         <label>Contactos (separar con ;)
           <textarea name="contactos" rows="2" placeholder="correo@empresa.com; otro@empresa.com"></textarea>
         </label>
@@ -667,6 +670,12 @@
         </label>
         <label>Próximo seguimiento
           <input name="seguimiento" type="date" />
+        </label>
+        <label>Forma de pago
+          <input name="formaPago" type="text" placeholder="Ej: 50% anticipo, 50% contra entrega" />
+        </label>
+        <label>Validez (días)
+          <input name="validezDias" type="number" min="1" placeholder="30" />
         </label>
         <label>Notas
           <textarea name="notas" rows="3" placeholder="Observaciones internas…" data-dictate></textarea>
