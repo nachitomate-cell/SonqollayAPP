@@ -24,6 +24,7 @@ import {
   nextVersionNumero, escapeHtml, getSeguimientoStatus, generateICS, fmtDuration, timeAgo,
 } from './lib/format.js';
 import { seedQuotes } from './lib/seed-data.js';
+import { getRates, cachedUf } from './lib/indicadores.js';
 
 // ---------- Init Firebase ----------
 const app = initializeApp(firebaseConfig);
@@ -851,6 +852,65 @@ async function setupFcm() {
     setLabel('Activar notificaciones');
   }
 }
+
+// ---------- Indicadores USD/UF ----------
+let _ufValue = cachedUf();
+const _fmtCLPplain = (n) => '$ ' + Math.round(n).toLocaleString('es-CL');
+
+async function renderRates(force = false) {
+  const usdEl = document.getElementById('rateUsd');
+  const ufEl  = document.getElementById('rateUf');
+  if (!usdEl || !ufEl) return;
+  try {
+    const r = await getRates({ force });
+    if (r.dolar != null) usdEl.textContent = '$' + Math.round(r.dolar).toLocaleString('es-CL');
+    if (r.uf != null)    ufEl.textContent  = '$' + Math.round(r.uf).toLocaleString('es-CL');
+    if (r.uf) _ufValue = r.uf;
+    const w = document.getElementById('ratesWidget');
+    if (w && r.fecha) {
+      const f = new Date(r.fecha);
+      w.title = `Dólar y UF · ${isNaN(f.getTime()) ? r.fecha : f.toLocaleDateString('es-CL')} · toca para actualizar`;
+    }
+    updateUfHint();
+  } catch {
+    if (!_ufValue) { usdEl.textContent = '—'; ufEl.textContent = '—'; }
+  }
+}
+
+function updateUfHint() {
+  const hint = document.getElementById('ufHint');
+  if (!hint) return;
+  const valorInput = document.querySelector('#quoteForm [name="valor"]');
+  const clp = valorInput ? parseValor(valorInput.value) : null;
+  if (clp && _ufValue) {
+    hint.textContent = `≈ ${(clp / _ufValue).toLocaleString('es-CL', { maximumFractionDigits: 1 })} UF  ·  UF hoy ${_fmtCLPplain(_ufValue)}`;
+  } else if (_ufValue) {
+    hint.textContent = `UF hoy: ${_fmtCLPplain(_ufValue)}`;
+  } else {
+    hint.textContent = '';
+  }
+}
+
+document.getElementById('ratesWidget')?.addEventListener('click', () => {
+  showToast('Actualizando indicadores…');
+  renderRates(true);
+});
+
+document.getElementById('ufToClpBtn')?.addEventListener('click', () => {
+  const ufInput = document.getElementById('quoteValorUf');
+  const valorInput = document.querySelector('#quoteForm [name="valor"]');
+  const uf = parseFloat((ufInput?.value || '').replace(/\./g, '').replace(',', '.'));
+  if (!_ufValue) { showToast('Aún no tengo el valor de la UF. Tocá el indicador del header.'); return; }
+  if (!uf || isNaN(uf)) { showToast('Ingresá un monto en UF.'); return; }
+  const clp = Math.round(uf * _ufValue);
+  if (valorInput) valorInput.value = clp.toLocaleString('es-CL');
+  updateUfHint();
+  showToast(`${uf} UF = ${_fmtCLPplain(clp)}`);
+});
+
+document.querySelector('#quoteForm [name="valor"]')?.addEventListener('input', updateUfHint);
+
+renderRates(false);
 
 // ---------- Greeting ----------
 function renderGreeting() {
@@ -1794,6 +1854,9 @@ function openQuoteForm(id, prefill = null) {
   updateTipoChips();
   updateIndustriaChips('quote');
   renderQuoteItems();
+  const ufField = document.getElementById('quoteValorUf');
+  if (ufField) ufField.value = '';
+  updateUfHint();
   quoteModal.classList.remove('hidden');
 }
 

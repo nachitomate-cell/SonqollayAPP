@@ -90,6 +90,11 @@
         <p class="subtitle">Clientes y cotizaciones</p>
       </div>
     </div>
+    <button id="ratesWidget" class="rates-widget" type="button" title="Dólar y UF de hoy · toca para actualizar" aria-label="Indicadores: dólar y UF">
+      <span class="rate"><span class="rate-k">USD</span><span class="rate-v" id="rateUsd">—</span></span>
+      <span class="rate-sep"></span>
+      <span class="rate"><span class="rate-k">UF</span><span class="rate-v" id="rateUf">—</span></span>
+    </button>
     <button id="activityFeedBtn" class="icon-btn" aria-label="Actividad reciente" style="position:relative">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
@@ -637,6 +642,11 @@
         <label>Valor (CLP)
           <input name="valor" type="text" inputmode="numeric" placeholder="0" />
         </label>
+        <div class="uf-convert" style="display:flex;gap:6px;align-items:center;margin-top:-4px">
+          <input id="quoteValorUf" type="text" inputmode="decimal" placeholder="… o monto en UF" style="flex:1;min-width:0" />
+          <button type="button" class="btn btn-outline btn-sm" id="ufToClpBtn" style="white-space:nowrap">UF → CLP</button>
+        </div>
+        <div class="card-meta" id="ufHint" style="margin-top:2px;min-height:14px"></div>
         <div id="itemsSection">
           <div style="display:block;font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px;margin-top:8px">Servicios / Ítems</div>
           <div id="quoteItemsList"></div>
