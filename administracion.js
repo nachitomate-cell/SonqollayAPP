@@ -22,7 +22,9 @@ let broadcasts = [];
 let quotes     = [];
 let clients    = [];
 let adminNotes = [];
-let userRoles  = {}; // uid → boolean (isAdmin)
+let userRoles    = {}; // uid → boolean (isAdmin)
+let userApproved = {}; // uid → boolean (approved, acceso a datos)
+const OWNER_EMAIL = 'ignaciiio.mate@gmail.com';
 let unsubSessions  = null;
 let unsubActivity  = null;
 let unsubBroadcast = null;
@@ -143,17 +145,25 @@ function avatarHtml(u, size = 34) {
     : `<div class="u-avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.38)}px">${esc(init)}</div>`;
 }
 
+function approveBtnHtml(uid, approved) {
+  const base = 'cursor:pointer;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;white-space:nowrap';
+  return approved
+    ? `<button class="approve-btn" data-approve-uid="${esc(uid)}" data-approve-val="0" style="${base};background:rgba(52,211,153,.18);color:var(--success)">✓ Aprobado</button>`
+    : `<button class="approve-btn" data-approve-uid="${esc(uid)}" data-approve-val="1" style="${base};background:var(--accent);color:#fff">Aprobar</button>`;
+}
+
 function userRowHtml(u) {
   const badge = u.online
     ? '<span class="badge online">● En línea</span>'
     : '<span class="badge offline">Desconectado</span>';
   const isAdm = userRoles[u.uid] === true;
-  const rolBadge = isAdm
+  // Los admins tienen acceso siempre; los demás se gestionan con el botón Aprobar.
+  const rolCell = isAdm
     ? '<span class="rol-badge rol-admin">Admin</span>'
-    : '<span class="rol-badge rol-user">Usuario</span>';
+    : approveBtnHtml(u.uid, userApproved[u.uid] === true);
   return `<div class="user-row">
     <div class="user-ident">${avatarHtml(u)}<div><div class="u-name">${esc(u.displayName||'—')}</div></div></div>
-    <div class="u-cell">${rolBadge}</div>
+    <div class="u-cell">${rolCell}</div>
     <div class="u-cell u-email">${esc(u.email||'—')}</div>
     <div class="u-cell">${u.sessions}</div>
     <div class="u-cell">${fmtDuration(u.totalTime)}</div>
@@ -188,6 +198,25 @@ function renderAll() {
   updateUserFilterSelect(users);
   renderActivity();
 }
+
+// ── Aprobación de acceso ──
+async function toggleApproved(uid, value) {
+  try {
+    await setDoc(doc(db, 'users', uid), { approved: value }, { merge: true });
+    userApproved[uid] = value;
+    renderAll();
+    adminToast(value ? 'Acceso aprobado' : 'Acceso revocado');
+  } catch (e) {
+    console.error('toggleApproved', e);
+    adminToast('No se pudo cambiar el acceso: ' + (e?.message || e), true);
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-approve-uid]');
+  if (!btn) return;
+  toggleApproved(btn.dataset.approveUid, btn.dataset.approveVal === '1');
+});
 
 // ── Activity ──
 const ACT_CFG = {
@@ -1148,8 +1177,9 @@ function subscribe() {
       await Promise.all(newUids.map(async uid => {
         try {
           const uSnap = await getDoc(doc(db, 'users', uid));
-          userRoles[uid] = uSnap.exists() && uSnap.data().isAdmin === true;
-        } catch { userRoles[uid] = false; }
+          userRoles[uid]    = uSnap.exists() && uSnap.data().isAdmin === true;
+          userApproved[uid] = uSnap.exists() && uSnap.data().approved === true;
+        } catch { userRoles[uid] = false; userApproved[uid] = false; }
       }));
     }
     renderAll();
@@ -1238,7 +1268,8 @@ onAuthStateChanged(auth, async user => {
   showLoading();
   try {
     const snap = await getDoc(doc(db, 'users', user.uid));
-    if (!snap.exists() || snap.data().isAdmin !== true) { showNoAdmin(); return; }
+    const isAdm = user.email === OWNER_EMAIL || (snap.exists() && snap.data().isAdmin === true);
+    if (!isAdm) { showNoAdmin(); return; }
   } catch (_) { showNoAdmin(); return; }
 
   const name = user.displayName || user.email || 'Admin';

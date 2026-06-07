@@ -355,12 +355,16 @@ exports.parseDictation = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Debes iniciar sesión.');
     }
+    // Mismo modelo que las reglas: dueño, admin o usuario aprobado.
     const email = (request.auth.token && request.auth.token.email) || '';
-    const emailVerified = !!(request.auth.token && request.auth.token.email_verified);
-    const isTeam = email === 'ignaciiio.mate@gmail.com' ||
-      (emailVerified && /^[^@]+@sonqollay\.cl$/i.test(email));
-    if (!isTeam) {
-      throw new HttpsError('permission-denied', 'Acceso restringido al equipo.');
+    let allowed = email === 'ignaciiio.mate@gmail.com';
+    if (!allowed) {
+      const uSnap = await db.collection('users').doc(request.auth.uid).get();
+      const ud = uSnap.exists ? uSnap.data() : {};
+      allowed = ud.isAdmin === true || ud.approved === true;
+    }
+    if (!allowed) {
+      throw new HttpsError('permission-denied', 'Tu acceso está pendiente de aprobación por un administrador.');
     }
 
     const { transcript, today } = request.data || {};

@@ -9,27 +9,26 @@ service cloud.firestore {
       );
     }
 
-    // Miembros del equipo: dueño, administradores, o correos verificados del dominio.
-    // Los datos de negocio (cotizaciones, clientes, plantillas) son globales pero NO
-    // deben quedar expuestos a cualquier cuenta de Google que inicie sesión.
-    function isTeam() {
+    // Miembro del equipo: dueño/admin, o usuario aprobado explícitamente por un admin
+    // (flag `approved: true` en users/{uid}). Como el registro de cuentas es ABIERTO,
+    // un filtro por dominio de correo no alcanza: el acceso a datos de negocio requiere
+    // aprobación. Un admin gestiona las aprobaciones desde el panel /administracion.
+    function isMember() {
       return isAdmin() || (
         request.auth != null &&
-        request.auth.token.email_verified == true &&
-        // Ancla ^...$: matches() en CEL no está anclado, así que sin esto
-        // 'x@sonqollay.cl.attacker.com' pasaría el filtro.
-        request.auth.token.email.matches('^[^@]+@sonqollay[.]cl$')
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('approved', false) == true
       );
     }
 
     match /quotes/{id} {
-      allow read, write: if isTeam();
+      allow read, write: if isMember();
     }
     match /clients/{id} {
-      allow read, write: if isTeam();
+      allow read, write: if isMember();
     }
     match /templates/{id} {
-      allow read, write: if isTeam();
+      allow read, write: if isMember();
     }
     match /users/{uid} {
       allow read, write: if request.auth != null &&

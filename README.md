@@ -30,7 +30,9 @@ BG51GzCL7b78_tnJ1GzvV53HimMawsAwPPdTCKM8XPAKV6RS8arlEQZ-BxzQqyFLxCJaY-durev5H6Gy
 - **Reglas de Firestore**: copiar el contenido de `firestore.rules` en *Rules* y publicar.
 - **Cloud Messaging** → ya tenés la VAPID Web Push registrada.
 
-> **Acceso del equipo (importante).** Las cotizaciones, clientes y plantillas ya **no** son accesibles para cualquier cuenta de Google que inicie sesión. La función `isTeam()` de `firestore.rules` solo permite al dueño (`ignaciiio.mate@gmail.com`), a los administradores (`isAdmin == true`) y a correos **verificados** del dominio `@sonqollay.cl`. La Cloud Function `parseDictation` aplica el mismo criterio. Para sumar miembros con otro correo, marcá su documento `users/{uid}` con `isAdmin: true` o ajustá el dominio en `isTeam()` y en `parseDictation`.
+> **Acceso del equipo (importante).** Las cotizaciones, clientes y plantillas ya **no** son accesibles para cualquier cuenta que inicie sesión. Como el registro de cuentas es abierto, el acceso a datos de negocio requiere **aprobación de un admin**: la función `isMember()` de `firestore.rules` (y la Cloud Function `parseDictation`) solo permiten al dueño, a los admins (`isAdmin == true`) y a usuarios con `approved == true` en `users/{uid}`.
+>
+> **Cómo aprobar a alguien:** que la persona inicie sesión una vez (se crea su `users/{uid}`), luego en **/administracion → Usuarios** tocá **"Aprobar"** junto a su nombre. Mientras no esté aprobada, verá la app pero sin datos. Los admins (y el dueño) tienen acceso siempre.
 
 ### d) Dominios autorizados
 
