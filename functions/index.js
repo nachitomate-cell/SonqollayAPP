@@ -70,27 +70,19 @@ async function sendToAll(notification, data = {}, opts = {}) {
   if (opts.excludeUid) tokens = tokens.filter(t => t.uid !== opts.excludeUid);
   if (!tokens.length) return { sent: 0, removed: 0 };
 
+  // Mensaje SOLO de datos: el service worker (firebase-messaging-sw.js) arma y muestra
+  // la notificación en onBackgroundMessage. Es el patrón confiable para Web Push / PWA
+  // (incluido iOS) y evita la ambigüedad del auto-display del SDK cuando hay un
+  // onBackgroundMessage definido (que dejaba notificaciones sin mostrar).
   const base = {
-    notification,
-    data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+    data: {
+      title: notification.title || 'SonqollayAPP',
+      body: notification.body || '',
+      ...Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
+    },
     webpush: {
-      headers: { Urgency: 'high' },
+      headers: { Urgency: 'high', TTL: '86400' },
       fcmOptions: { link: '/' },
-      notification: { icon: '/logo.jfif', badge: '/logo.jfif', requireInteraction: false },
-    },
-    apns: {
-      headers: { 'apns-priority': '10' },
-      payload: {
-        aps: {
-          alert: { title: notification.title, body: notification.body || '' },
-          sound: 'default',
-          badge: 1,
-        },
-      },
-    },
-    android: {
-      priority: 'high',
-      notification: { sound: 'default', channelId: 'default' },
     },
   };
 

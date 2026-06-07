@@ -770,8 +770,10 @@ async function setupFcm() {
 
   // Notificaciones con la app en primer plano.
   onMessage(messaging, (payload) => {
-    const title = payload?.notification?.title || 'SonqollayAPP';
-    const body = payload?.notification?.body || '';
+    // Mensajes solo-data: título/cuerpo vienen en payload.data
+    const d = payload?.data || payload?.notification || {};
+    const title = d.title || 'SonqollayAPP';
+    const body = d.body || '';
     pushNotif({ title, body });
     showToast(`${title}${body ? ' · ' + body : ''}`);
   });

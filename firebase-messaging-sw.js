@@ -25,15 +25,18 @@ const messaging = firebase.messaging();
 // Definir onBackgroundMessage hace que el SDK NO muestre una notificación por su
 // cuenta: la mostramos nosotros una sola vez (evita avisos duplicados).
 messaging.onBackgroundMessage((payload) => {
-  const n = payload.notification || {};
-  const title = n.title || 'SonqollayAPP';
-  const body = n.body || '';
+  // Mensajes solo-data: título/cuerpo vienen en payload.data (ver sendToAll en functions).
+  const d = payload.data || payload.notification || {};
+  const title = d.title || 'SonqollayAPP';
+  const body = d.body || '';
 
   self.registration.showNotification(title, {
     body,
-    icon: './logo.jfif',
-    badge: './logo.jfif',
-    data: payload.data || {},
+    // Rutas absolutas: el SW vive en /firebase-cloud-messaging-push-scope/, así que
+    // un './logo.jfif' resolvía a una URL inexistente.
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: d,
   });
 
   // Avisar a las pestañas abiertas para guardar la notificación en el historial local.
