@@ -1,6 +1,6 @@
 // Service worker de la app (cache de shell para offline).
 // El SW de FCM es ./firebase-messaging-sw.js (registrado aparte).
-const CACHE = 'sonqollay-v12';
+const CACHE = 'sonqollay-v13';
 const ASSETS = [
   './',
   './index.html',
@@ -18,8 +18,11 @@ const ASSETS = [
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE).then(c =>
-      // cache: 'reload' fuerza fetch desde red, ignorando la HTTP cache del browser
-      Promise.all(ASSETS.map(url => c.add(new Request(url, { cache: 'reload' }))))
+      // cache: 'reload' fuerza fetch desde red, ignorando la HTTP cache del browser.
+      // Tolerante: un asset que falle (404) no debe romper toda la instalación del SW.
+      Promise.all(ASSETS.map(url =>
+        c.add(new Request(url, { cache: 'reload' })).catch(err => console.warn('precache miss', url, err))
+      ))
     )
   );
   self.skipWaiting();

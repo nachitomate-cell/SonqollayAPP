@@ -786,25 +786,34 @@ async function setupFcm() {
   // interactive=false → silencioso, solo refresca el token si ya hay permiso.
   async function subscribe(interactive) {
     if (!currentUser) return false;
-    const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: FCM_SW_SCOPE });
+    let step = 'registrar SW';
+    try {
+      const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: FCM_SW_SCOPE });
+      await navigator.serviceWorker.ready;
 
-    let perm = Notification.permission;
-    if (perm === 'default' && interactive) perm = await Notification.requestPermission();
-    if (perm !== 'granted') {
-      if (interactive) showToast(perm === 'denied'
-        ? 'Notificaciones bloqueadas. Activalas en los ajustes del navegador.'
-        : 'Permiso de notificaciones no concedido');
-      return false;
+      let perm = Notification.permission;
+      if (perm === 'default' && interactive) perm = await Notification.requestPermission();
+      if (perm !== 'granted') {
+        if (interactive) showToast(perm === 'denied'
+          ? 'Notificaciones bloqueadas. Activalas en los ajustes del navegador.'
+          : 'Permiso de notificaciones no concedido');
+        return false;
+      }
+
+      step = 'obtener token';
+      const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+      if (!token) { if (interactive) showToast('No se pudo obtener el token de notificaciones'); return false; }
+
+      step = 'guardar token';
+      await setDoc(doc(tokensCol(), token), {
+        token, ua: navigator.userAgent, createdAt: serverTimestamp(),
+      }, { merge: true });
+      setLabel('Notificaciones activadas ✓');
+      return true;
+    } catch (e) {
+      e._step = step;
+      throw e;
     }
-
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
-    if (!token) { if (interactive) showToast('No se pudo obtener el token de notificaciones'); return false; }
-
-    await setDoc(doc(tokensCol(), token), {
-      token, ua: navigator.userAgent, createdAt: serverTimestamp(),
-    }, { merge: true });
-    setLabel('Notificaciones activadas ✓');
-    return true;
   }
 
   const btn = document.getElementById('enablePushBtn');
@@ -816,8 +825,8 @@ async function setupFcm() {
         if (ok) showToast('Notificaciones activadas');
         else setLabel('Activar notificaciones');
       } catch (e) {
-        console.error('FCM', e);
-        showToast('Error al activar notificaciones');
+        console.error('FCM', e?._step, e);
+        showToast(`Error al activar (${e?._step || '?'}): ${e?.code || e?.message || e}`);
         setLabel('Activar notificaciones');
       }
     });
