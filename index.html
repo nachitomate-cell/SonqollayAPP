@@ -10,8 +10,9 @@
   <meta name="apple-mobile-web-app-title" content="SonqollayAPP" />
   <title>SonqollayAPP</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" type="image/jpeg" href="logo.jfif" />
-  <link rel="apple-touch-icon" href="logo.jfif" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   <script>!function(){var t=localStorage.getItem('theme');document.documentElement.setAttribute('data-theme',t==='light'?'light':'dark')}()</script>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -25,9 +26,17 @@
 
   <!-- ── Splash / Loading Screen ── -->
   <div id="splashScreen" class="splash-screen">
-    <img src="logo.jfif" alt="SonqollayAPP" class="splash-logo" />
-    <span class="splash-name">SonqollayAPP</span>
-    <div class="splash-dots"><span></span><span></span><span></span></div>
+    <div class="splash-aurora" aria-hidden="true"></div>
+    <div class="splash-content">
+      <div class="splash-logo-wrap">
+        <span class="splash-ring" aria-hidden="true"></span>
+        <span class="splash-glow" aria-hidden="true"></span>
+        <img src="logo.jfif" alt="SonqollayAPP" class="splash-logo" />
+      </div>
+      <span class="splash-name">SonqollayAPP</span>
+      <span class="splash-tagline">Gestión de clientes y cotizaciones</span>
+      <div class="splash-progress" role="progressbar" aria-label="Cargando"><span></span></div>
+    </div>
   </div>
 
   <!-- ── Login Screen ── -->

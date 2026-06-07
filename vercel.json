@@ -2,6 +2,7 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
+    { "source": "/administracion", "destination": "/administracion.html" },
     { "source": "/superadmin", "destination": "/superadmin.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],

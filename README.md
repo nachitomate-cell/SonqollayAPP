@@ -12,10 +12,10 @@ PWA móvil para gestión de clientes y cotizaciones con **Firestore** (sincroniz
 
 ### b) Pegar los valores
 
-Editá **dos** archivos con los mismos valores:
+Editá los mismos valores en **dos** lugares:
 
 - `firebase-config.js` (módulo ES que usa la app)
-- `firebase-config-compat.js` (lo usa el service worker de FCM)
+- `firebase-messaging-sw.js` (config embebida que usa el service worker de FCM)
 
 La **VAPID Public Key** ya está cargada:
 
@@ -29,6 +29,8 @@ BG51GzCL7b78_tnJ1GzvV53HimMawsAwPPdTCKM8XPAKV6RS8arlEQZ-BxzQqyFLxCJaY-durev5H6Gy
 - **Firestore Database** → Crear base de datos (modo producción).
 - **Reglas de Firestore**: copiar el contenido de `firestore.rules` en *Rules* y publicar.
 - **Cloud Messaging** → ya tenés la VAPID Web Push registrada.
+
+> **Acceso del equipo (importante).** Las cotizaciones, clientes y plantillas ya **no** son accesibles para cualquier cuenta de Google que inicie sesión. La función `isTeam()` de `firestore.rules` solo permite al dueño (`ignaciiio.mate@gmail.com`), a los administradores (`isAdmin == true`) y a correos **verificados** del dominio `@sonqollay.cl`. La Cloud Function `parseDictation` aplica el mismo criterio. Para sumar miembros con otro correo, marcá su documento `users/{uid}` con `isAdmin: true` o ajustá el dominio en `isTeam()` y en `parseDictation`.
 
 ### d) Dominios autorizados
 
@@ -94,11 +96,15 @@ firebase deploy --only functions:dailyFollowUpReminders
 
 Ubicadas en `functions/index.js`:
 
-- **`dailyFollowUpReminders`** — Schedule: todos los días 09:00 (America/Santiago). Para cada usuario, busca cotizaciones cuyo `seguimiento` sea hoy, esté vencido (hasta 14 días atrás) o caiga en los próximos 3 días (excluye Adjudicadas/Perdidas) y envía un push consolidado a todos los tokens FCM del usuario.
-- **`onQuoteSeguimientoToday`** — Trigger Firestore (onWrite). Si una cotización se crea/edita con `seguimiento === hoy`, envía un push instantáneo.
-- **`notifyOnNewQuote`** — Trigger Firestore (onCreate). Notifica cada cotización nueva con empresa y valor.
+- **`dailyFollowUpReminders`** — Schedule: todos los días 09:00 (America/Santiago). Espeja las urgencias del dashboard y envía un push consolidado: cotizaciones **atrasadas** (seguimiento vencido, sin tope de antigüedad), de **hoy**, **próximas** (1-3 días) y **sin respuesta +14 días** (Enviada/En revisión sin actividad reciente, aunque no tengan seguimiento). Excluye Adjudicadas/Perdidas. Mientras una cotización siga atrasada, se recuerda cada día.
+- **`onQuoteWritten`** — Trigger Firestore único (onWrite) sobre `quotes/{quoteId}`. Envía **como máximo una** notificación por escritura, según prioridad: creación → cambio de estado → seguimiento (hoy/programado) → nota nueva. Excluye al autor del cambio (`updatedBy`/`createdBy`).
+- **`onClientCreated`** — Trigger Firestore (onCreate) sobre `clients/{clientId}`. Notifica cada cliente nuevo (excluye al autor).
+- **`onAdminBroadcast`** — Trigger Firestore (onCreate) sobre `adminBroadcasts/{id}`. Reenvía el push manual del panel admin/superadmin a todos los tokens.
+- **`parseDictation`** — Callable. Extrae entidades de un dictado con Gemini 2.0 Flash.
 
-Las funciones limpian automáticamente los tokens FCM que el navegador haya invalidado.
+> Nota de migración: las funciones `onQuoteSeguimientoToday`, `notifyOnNewQuote`, `onQuoteNoteAdded`, `onQuoteEstadoChanged` y `onQuoteSeguimientoRegistered` se consolidaron en `onQuoteWritten`. Al desplegar, `firebase deploy` pedirá confirmar el borrado de esas 5 funciones obsoletas (o usá `firebase deploy --only functions --force`).
+
+Las funciones envían en lotes de 500 tokens (límite de FCM) y limpian automáticamente los tokens FCM que el navegador haya invalidado.
 
 ### Probar las funciones
 

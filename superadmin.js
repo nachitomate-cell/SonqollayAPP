@@ -107,7 +107,7 @@ function setupVersionListener() {
     el('lastUpdateLabel').textContent = ts
       ? `Última actualización: ${timeAgo(ts)} por ${esc(data.updatedBy || '—')}`
       : 'Última actualización: —';
-  }, () => {});
+  }, err => console.error('appVersion listener', err));
 }
 
 // ── Force update ──
@@ -151,14 +151,15 @@ async function loadStats() {
     sesSnap.docs.forEach(d => { if (d.data().endTime === null) onlineUids.add(d.data().uid); });
     el('statOnline').textContent = onlineUids.size;
 
-    // Total tokens FCM
-    let totalTokens = 0;
-    for (const userDoc of usersSnap.docs) {
-      const tokSnap = await getDocs(collection(db, 'users', userDoc.id, 'fcmTokens'));
-      totalTokens += tokSnap.size;
-    }
-    el('statTokens').textContent = totalTokens;
-  } catch (_) {}
+    // Total tokens FCM (lecturas en paralelo, no N+1 secuencial)
+    const tokenCounts = await Promise.all(
+      usersSnap.docs.map(d => getDocs(collection(db, 'users', d.id, 'fcmTokens')).then(s => s.size))
+    );
+    el('statTokens').textContent = tokenCounts.reduce((a, b) => a + b, 0);
+  } catch (e) {
+    console.error('loadStats', e);
+    showToast('Error cargando estadísticas');
+  }
 }
 
 // ── Token table ──
@@ -170,14 +171,13 @@ async function loadTokens() {
 
   try {
     const usersSnap = await getDocs(collection(db, 'users'));
-    const rows = [];
 
-    for (const userDoc of usersSnap.docs) {
+    // Lecturas de tokens en paralelo (antes: un getDocs secuencial por usuario)
+    const rows = await Promise.all(usersSnap.docs.map(async userDoc => {
       const u = userDoc.data();
       const tokSnap = await getDocs(collection(db, 'users', userDoc.id, 'fcmTokens'));
-      const tokens = tokSnap.docs.map(d => d.data());
-      rows.push({ uid: userDoc.id, ...u, tokens });
-    }
+      return { uid: userDoc.id, ...u, tokens: tokSnap.docs.map(d => d.data()) };
+    }));
 
     rows.sort((a, b) => (b.tokens.length - a.tokens.length) || (a.displayName || '').localeCompare(b.displayName || ''));
 

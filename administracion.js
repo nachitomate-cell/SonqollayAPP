@@ -41,7 +41,38 @@ const el  = id => document.getElementById(id);
 const esc = s  => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const adminUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+// IDs sin colisiones: crypto.randomUUID() en contexto seguro; fallback por compatibilidad.
+const adminUid = () => (self.crypto && crypto.randomUUID)
+  ? crypto.randomUUID()
+  : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+
+// Toast mínimo para no fallar en silencio cuando una suscripción se rompe.
+let _adminToastTimer;
+function adminToast(msg, isErr = false) {
+  let t = el('adminToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'adminToast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);' +
+      'padding:10px 16px;border-radius:8px;color:#fff;font-size:13px;z-index:99999;' +
+      'max-width:90vw;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.35);transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.style.background = isErr ? '#b91c1c' : '#1f2937';
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(_adminToastTimer);
+  _adminToastTimer = setTimeout(() => { t.style.opacity = '0'; }, 4500);
+}
+
+// Manejador de errores de onSnapshot: no dejar secciones vacías sin explicación.
+function snapErr(label) {
+  return (err) => {
+    console.error(`[${label}]`, err);
+    if (err && err.code === 'permission-denied') { showNoAdmin(); return; }
+    adminToast(`No se pudo cargar ${label}: ${err?.message || err}`, true);
+  };
+}
 
 const formatCLPShort = (v) => {
   if (!v && v !== 0) return '—';
@@ -1128,32 +1159,32 @@ function subscribe() {
   unsubActivity = onSnapshot(actQ, snap => {
     activity = snap.docs.map(d => d.data());
     renderAll();
-  }, () => {});
+  }, snapErr('la actividad'));
 
   const brdQ = query(collection(db, 'adminBroadcasts'), orderBy('createdAt', 'desc'), limit(50));
   unsubBroadcast = onSnapshot(brdQ, snap => {
     broadcasts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderBroadcasts();
-  }, () => {});
+  }, snapErr('los avisos'));
 
   const quotesQ = query(collection(db, 'quotes'), orderBy('createdAt', 'desc'));
   unsubQuotes = onSnapshot(quotesQ, snap => {
     quotes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderQuotes();
-  }, () => {});
+  }, snapErr('las cotizaciones'));
 
   const clientsQ = query(collection(db, 'clients'), orderBy('empresa'));
   unsubClients = onSnapshot(clientsQ, snap => {
     clients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderClients();
-  }, () => {});
+  }, snapErr('los clientes'));
 
   const notesQ = query(collection(db, 'adminNotes'), orderBy('createdAt', 'desc'));
   unsubNotes = onSnapshot(notesQ, snap => {
     adminNotes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderNotes();
     renderNotesOverview();
-  }, () => {});
+  }, snapErr('los recordatorios'));
 }
 
 function unsubscribe() {

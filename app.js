@@ -19,6 +19,11 @@ import {
   getFunctions, httpsCallable
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js';
 import { firebaseConfig, VAPID_KEY } from './firebase-config.js';
+import {
+  formatCLP, formatCLPShort, parseValor, formatDate, daysUntil, daysSinceUpdated,
+  nextVersionNumero, escapeHtml, getSeguimientoStatus, generateICS, fmtDuration, timeAgo,
+} from './lib/format.js';
+import { seedQuotes } from './lib/seed-data.js';
 
 // ---------- Init Firebase ----------
 const app = initializeApp(firebaseConfig);
@@ -31,89 +36,18 @@ const fbFunctions = getFunctions(app, 'us-central1');
 
 analyticsSupported().then(ok => { if (ok) getAnalytics(app); }).catch(() => {});
 
-// ---------- Datos iniciales (sembrado global en primera conexión) ----------
-const seedQuotes = [
-  { empresa: 'Arcadis', numero: 'P014_v01', fecha: '2026-03-16', descripcion: 'Celdas flotación División Andina - Codelco', valor: 93230280, contactos: 'juan.sarquis@arcadis.com; ricardo.bravo@arcadis.com', estado: 'Enviada' },
-  { empresa: 'Arcadis', numero: 'P015_v01', fecha: '2026-04-10', descripcion: 'Tranque Ovejería Etapa V (Codelco VP)', valor: 461530100, contactos: 'carolina.cofre@arcadis.com', estado: 'Enviada' },
-  { empresa: 'Arcadis', numero: 'P016_v01', fecha: '2026-05-08', descripcion: 'Capacitación', valor: 8200000, contactos: '', estado: 'Enviada' },
-  { empresa: 'Keypro', numero: 'P002', fecha: '2026-05-05', descripcion: 'Consultoría', valor: null, contactos: '', estado: 'Borrador' },
-  { empresa: 'Keypro', numero: 'P003', fecha: '2026-04-06', descripcion: 'Capacitación', valor: null, contactos: '', estado: 'Borrador' },
-  { empresa: 'Keypro', numero: 'P004_v02', fecha: '2026-05-19', descripcion: 'Tranque Ovejería Etapa V (Codelco VP)', valor: 444453283, contactos: 'marien.teran@keyproingenieria.com', estado: 'Enviada' },
-  { empresa: 'Worley', numero: 'P002_01', fecha: '2026-03-20', descripcion: 'Capacitación', valor: 14000000, contactos: '', estado: 'Enviada' },
-  { empresa: 'JRI', numero: 'P005_v02', fecha: '2026-04-10', descripcion: 'PMChS Obras de Acceso Nivel 2', valor: 8800000, contactos: 'dmellado@jri.cl', estado: 'Enviada' },
-  { empresa: 'WSP', numero: 'P001_v01', fecha: '2026-05-11', descripcion: 'Ing. Detalle y Terreno TOVE 5', valor: null, contactos: '', estado: 'Borrador' },
-  { empresa: 'Salfa', numero: 'P001_v01', fecha: '2026-05-11', descripcion: 'Mina Chuquicamata Subterránea PMCHS', valor: 99000000, contactos: 'mcabezasg@salfamontajes.com; gacastroy@salfamontajes.com', estado: 'Enviada' },
-  { empresa: 'Techint', numero: 'P001_v01', fecha: '2026-05-21', descripcion: 'Apoyo propuestas BHP', valor: 8000000, contactos: 'teapju@techint.com; juanlovrics@techint.com', estado: 'Enviada' },
-  { empresa: 'R&Q', numero: 'P003_v01', fecha: '2026-05-20', descripcion: 'APOYO PROCESO IMPLEMENTACIÓN NORMA ISO 19650', valor: 19680000, contactos: '', estado: 'Enviada' },
-];
-
 // ---------- Helpers ----------
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-
-function nextVersionNumero(numero) {
-  const m = (numero || '').match(/^(.+?)_v(\d+)$/i);
-  if (m) return `${m[1]}_v${String(parseInt(m[2]) + 1).padStart(2, '0')}`;
-  return `${numero}_v02`;
-}
+// Datos demo del sembrado → ./lib/seed-data.js · Helpers puros → ./lib/format.js
+// IDs sin colisiones: crypto.randomUUID() en contexto seguro (PWA https/localhost);
+// fallback solo por compatibilidad con navegadores muy antiguos.
+const uid = () => (self.crypto && crypto.randomUUID)
+  ? crypto.randomUUID()
+  : Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 
 function getVersionFamily(q) {
   const rootId = q.parentId || q.id;
   return quotes.filter(x => x.id === rootId || x.parentId === rootId)
     .sort((a, b) => (a.version || 1) - (b.version || 1));
-}
-
-const formatCLP = (v) => (v == null || v === '' || isNaN(v)) ? '—' : '$ ' + Number(v).toLocaleString('es-CL');
-const formatCLPShort = (v) => {
-  if (v == null || v === '' || isNaN(v)) return '—';
-  const n = Number(v);
-  if (n >= 1_000_000_000) return `$ ${(n / 1_000_000_000).toLocaleString('es-CL', { maximumFractionDigits: 2 })} MM`;
-  if (n >= 1_000_000)     return `$ ${(n / 1_000_000).toLocaleString('es-CL', { maximumFractionDigits: 1 })} M`;
-  if (n >= 1_000)         return `$ ${(n / 1_000).toLocaleString('es-CL', { maximumFractionDigits: 0 })} K`;
-  return formatCLP(n);
-};
-const parseValor = (s) => {
-  if (s == null || s === '') return null;
-  const n = Number(String(s).replace(/[^\d.-]/g, ''));
-  return isNaN(n) ? null : n;
-};
-const formatDate = (iso) => {
-  if (!iso) return '—';
-  const [y, m, d] = iso.split('-');
-  return y ? `${d}-${m}-${y}` : iso;
-};
-const daysUntil = (iso) => {
-  if (!iso) return Infinity;
-  const t = new Date(); t.setHours(0,0,0,0);
-  const x = new Date(iso); x.setHours(0,0,0,0);
-  return Math.round((x - t) / 86400000);
-};
-function daysSinceUpdated(q) {
-  if (q.updatedAt?.toDate) return Math.round((Date.now() - q.updatedAt.toDate().getTime()) / 86400000);
-  if (q.fecha) return Math.round((Date.now() - new Date(q.fecha).getTime()) / 86400000);
-  return 0;
-}
-
-function generateICS(q) {
-  if (!q.seguimiento) return null;
-  const dateStr = q.seguimiento.replace(/-/g, '');
-  const [y, mo, d] = q.seguimiento.split('-').map(Number);
-  const end = new Date(y, mo - 1, d + 1);
-  const endStr = `${end.getFullYear()}${String(end.getMonth()+1).padStart(2,'0')}${String(end.getDate()).padStart(2,'0')}`;
-  const desc = [
-    q.descripcion,
-    `Valor: ${formatCLP(q.valor)}`,
-    `Estado: ${q.estado || 'Borrador'}`,
-    q.contactos ? `Contactos: ${q.contactos}` : null,
-  ].filter(Boolean).join('\\n');
-  return [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//SonqollayAPP//ES',
-    'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-    `UID:seg-${q.id}-${q.seguimiento}@sonqollayapp`,
-    `DTSTART;VALUE=DATE:${dateStr}`, `DTEND;VALUE=DATE:${endStr}`,
-    `SUMMARY:Seguimiento: ${q.numero} · ${q.empresa}`,
-    `DESCRIPTION:${desc}`,
-    'STATUS:CONFIRMED', 'END:VEVENT', 'END:VCALENDAR',
-  ].join('\r\n');
 }
 
 function downloadICS(q) {
@@ -127,19 +61,6 @@ function downloadICS(q) {
   a.click();
   URL.revokeObjectURL(url);
   showToast('Archivo .ics descargado · ábrelo para agregar al calendario');
-}
-const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-function getSeguimientoStatus(q) {
-  if (!q.seguimiento) return null;
-  const estado = (q.estado || '').toLowerCase();
-  if (estado === 'adjudicada' || estado === 'perdida') return null;
-  const d = daysUntil(q.seguimiento);
-  if (d === 0)  return { key: 'red',    label: 'Vence hoy' };
-  if (d < 0)    return { key: 'red',    label: d === -1 ? 'Venció ayer' : `Venció hace ${-d}d` };
-  if (d <= 3)   return { key: 'yellow', label: `Vence en ${d}d` };
-  if (d <= 30)  return { key: 'green',  label: `En ${d}d` };
-  return               { key: 'muted',  label: formatDate(q.seguimiento) };
 }
 
 function showToast(msg) {
@@ -198,24 +119,6 @@ function skeletonKpis() {
       <div class="skeleton-line" style="width:75%;height:26px;border-radius:8px;animation-delay:${i*0.1+0.1}s"></div>
     </div>`).join('')}
   </div>`;
-}
-
-// ─── Time helpers ───
-function fmtDuration(sec) {
-  if (!sec || sec < 60) return '< 1m';
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
-  return h ? `${h}h ${m}m` : `${m}m`;
-}
-function timeAgo(date) {
-  const s = Math.round((Date.now() - date.getTime()) / 1000);
-  if (s < 60)  return 'hace un momento';
-  const m = Math.round(s / 60);
-  if (m < 60)  return `hace ${m}m`;
-  const h = Math.round(m / 60);
-  if (h < 24)  return `hace ${h}h`;
-  const d = Math.round(h / 24);
-  if (d < 30)  return `hace ${d}d`;
-  return date.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' });
 }
 
 // ─── Activity logger ───
@@ -312,7 +215,7 @@ function subscribeAdmin() {
   unsubAdminSessions = onSnapshot(sesQ, snap => {
     _adminSessions = snap.docs.map(d => d.data());
     renderAdminUsers();
-  }, () => {});
+  }, err => { console.error('admin sessions', err); if (err.code === 'permission-denied') renderAdminGate(false); });
 }
 
 function unsubscribeAdmin() {
@@ -775,9 +678,15 @@ async function maybeSeed() {
   if (localStorage.getItem(seedKey)) return;
   const snap = await getDocs(quotesCol());
   if (!snap.empty) { localStorage.setItem(seedKey, '1'); return; }
+
+  // IDs deterministas: si dos usuarios siembran a la vez, escriben los MISMOS
+  // documentos (last-write-wins) en lugar de duplicar las 12 cotizaciones demo.
+  const slug = s => String(s || '').toLowerCase().normalize('NFD')
+    .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
   const batch = writeBatch(dbf);
   for (const q of seedQuotes) {
-    const id = uid();
+    const id = `seed-q-${slug(q.empresa)}-${slug(q.numero)}`;
     batch.set(doc(quotesCol(), id), {
       id, seguimiento: '', notas: '', createdAt: serverTimestamp(),
       createdBy: currentUser.uid, ...q
@@ -785,7 +694,7 @@ async function maybeSeed() {
   }
   const empresas = [...new Set(seedQuotes.map(q => q.empresa))];
   for (const empresa of empresas) {
-    const id = uid();
+    const id = `seed-c-${slug(empresa)}`;
     const emails = seedQuotes
       .filter(q => q.empresa === empresa)
       .flatMap(q => (q.contactos || '').split(';').map(s => s.trim()).filter(Boolean));
@@ -797,7 +706,7 @@ async function maybeSeed() {
     });
   }
   await batch.commit();
-  localStorage.setItem('sqy_seeded_' + currentUser.uid, '1');
+  localStorage.setItem(seedKey, '1');
 }
 
 function subscribe() {
@@ -851,11 +760,15 @@ function setupAppVersionListener() {
   }, () => {});
 }
 
+// Scope propio para el SW de FCM: no choca con sw.js (que controla la raíz «/»).
+const FCM_SW_SCOPE = './firebase-cloud-messaging-push-scope/';
+
 async function setupFcm() {
   if (!(await isSupported())) return;
-  if (!('Notification' in window)) return;
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
   const messaging = getMessaging(app);
 
+  // Notificaciones con la app en primer plano.
   onMessage(messaging, (payload) => {
     const title = payload?.notification?.title || 'SonqollayAPP';
     const body = payload?.notification?.body || '';
@@ -863,28 +776,58 @@ async function setupFcm() {
     showToast(`${title}${body ? ' · ' + body : ''}`);
   });
 
-  const btn = document.getElementById('enablePushBtn');
-  if (!btn) return;
   const pushLabel = document.getElementById('pushBtnLabel');
-  if (Notification.permission === 'granted' && pushLabel) pushLabel.textContent = 'Notificaciones activadas';
+  const setLabel = (txt) => { if (pushLabel) pushLabel.textContent = txt; };
 
-  btn.addEventListener('click', async () => {
-    try {
-      const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { type: 'module' });
-      const perm = await Notification.requestPermission();
-      if (perm !== 'granted') { showToast('Permiso denegado'); return; }
-      const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
-      if (!token) { showToast('No se obtuvo token FCM'); return; }
-      await setDoc(doc(tokensCol(), token), {
-        token, ua: navigator.userAgent, createdAt: serverTimestamp(),
-      });
-      if (pushLabel) pushLabel.textContent = 'Notificaciones activadas';
-      showToast('Notificaciones activadas');
-    } catch (e) {
-      console.error(e);
-      showToast('Error: ' + e.message);
+  // Registra el SW de FCM, asegura permiso, obtiene el token y lo guarda.
+  // interactive=true → puede pedir permiso y mostrar avisos (uso por botón).
+  // interactive=false → silencioso, solo refresca el token si ya hay permiso.
+  async function subscribe(interactive) {
+    if (!currentUser) return false;
+    const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: FCM_SW_SCOPE });
+
+    let perm = Notification.permission;
+    if (perm === 'default' && interactive) perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      if (interactive) showToast(perm === 'denied'
+        ? 'Notificaciones bloqueadas. Activalas en los ajustes del navegador.'
+        : 'Permiso de notificaciones no concedido');
+      return false;
     }
-  });
+
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+    if (!token) { if (interactive) showToast('No se pudo obtener el token de notificaciones'); return false; }
+
+    await setDoc(doc(tokensCol(), token), {
+      token, ua: navigator.userAgent, createdAt: serverTimestamp(),
+    }, { merge: true });
+    setLabel('Notificaciones activadas ✓');
+    return true;
+  }
+
+  const btn = document.getElementById('enablePushBtn');
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      setLabel('Activando…');
+      try {
+        const ok = await subscribe(true);
+        if (ok) showToast('Notificaciones activadas');
+        else setLabel('Activar notificaciones');
+      } catch (e) {
+        console.error('FCM', e);
+        showToast('Error al activar notificaciones');
+        setLabel('Activar notificaciones');
+      }
+    });
+  }
+
+  // Si el permiso ya está concedido, re-suscribir en silencio en cada carga
+  // para mantener el token siempre fresco (sobrevive a reinstalaciones/rotaciones).
+  if (Notification.permission === 'granted') {
+    subscribe(false).catch((e) => console.warn('FCM refresh', e));
+  } else {
+    setLabel('Activar notificaciones');
+  }
 }
 
 // ---------- Greeting ----------
