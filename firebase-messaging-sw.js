@@ -7,8 +7,12 @@
  * pelear con sw.js, que controla el scope raíz «/». Ver setupFcm() en app.js.
  */
 
-importScripts('https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js');
+// SDK alojado en el MISMO origen (vendor/) en vez de gstatic.com.
+// importScripts() va directo a la red (no pasa por la caché de sw.js); si la red a
+// gstatic falla/está bloqueada, el SW no se evaluaba y las push no se registraban.
+// Same-origin es confiable (es el dominio que ya sirve este propio SW).
+importScripts('/vendor/firebase-app-compat.js');
+importScripts('/vendor/firebase-messaging-compat.js');
 
 // Config pública de Firebase. Mantener en sync con firebase-config.js
 firebase.initializeApp({
