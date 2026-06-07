@@ -769,13 +769,24 @@ async function setupFcm() {
   const messaging = getMessaging(app);
 
   // Notificaciones con la app en primer plano.
-  onMessage(messaging, (payload) => {
+  onMessage(messaging, async (payload) => {
     // Mensajes solo-data: título/cuerpo vienen en payload.data
     const d = payload?.data || payload?.notification || {};
     const title = d.title || 'SonqollayAPP';
     const body = d.body || '';
-    pushNotif({ title, body });
-    showToast(`${title}${body ? ' · ' + body : ''}`);
+    pushNotif({ title, body }); // historial in-app
+    // Mostrar SIEMPRE el banner del sistema, incluso con la app en primer plano.
+    // (En primer plano FCM no dispara onBackgroundMessage, así que lo hacemos acá.)
+    try {
+      if (Notification.permission !== 'granted') throw new Error('sin permiso');
+      const reg = (await navigator.serviceWorker.getRegistration(FCM_SW_SCOPE))
+        || (await navigator.serviceWorker.ready);
+      await reg.showNotification(title, {
+        body, icon: '/icon-192.png', badge: '/icon-192.png', data: d,
+      });
+    } catch {
+      showToast(`${title}${body ? ' · ' + body : ''}`); // fallback si no hay permiso/SW
+    }
   });
 
   const pushLabel = document.getElementById('pushBtnLabel');
