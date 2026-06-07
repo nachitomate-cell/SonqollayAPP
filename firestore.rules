@@ -64,6 +64,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Plantillas reutilizables de notificaciones push (panel admin)
+    match /notifTemplates/{id} {
+      allow read, write: if isAdmin();
+    }
+
     // Configuración global (versión de app, etc.)
     match /config/{id} {
       allow read: if request.auth != null;

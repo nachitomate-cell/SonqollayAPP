@@ -23,6 +23,7 @@ let broadcasts = [];
 let quotes     = [];
 let clients    = [];
 let adminNotes = [];
+let notifTemplates = []; // pool de plantillas de notificación push guardadas
 let userRoles    = {}; // uid → boolean (isAdmin)
 let userApproved = {}; // uid → boolean (approved, acceso a datos)
 const OWNER_EMAIL = 'ignaciiio.mate@gmail.com';
@@ -32,6 +33,7 @@ let unsubBroadcast = null;
 let unsubQuotes    = null;
 let unsubClients   = null;
 let unsubNotes     = null;
+let unsubNotifTpl  = null;
 let currentSection = 'overview';
 
 // Activity filter + pagination state
@@ -1216,6 +1218,12 @@ function subscribe() {
     renderNotes();
     renderNotesOverview();
   }, snapErr('los recordatorios'));
+
+  const tplQ = query(collection(db, 'notifTemplates'), orderBy('createdAt', 'desc'));
+  unsubNotifTpl = onSnapshot(tplQ, snap => {
+    notifTemplates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderNotifTemplates();
+  }, snapErr('las plantillas'));
 }
 
 function unsubscribe() {
@@ -1225,6 +1233,7 @@ function unsubscribe() {
   unsubQuotes?.();    unsubQuotes    = null;
   unsubClients?.();   unsubClients   = null;
   unsubNotes?.();     unsubNotes     = null;
+  unsubNotifTpl?.();  unsubNotifTpl  = null;
 }
 
 // ── Sections ──
@@ -1410,6 +1419,68 @@ el('sendNotifBtn')?.addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
   }
+});
+
+// ── Pool de plantillas de notificación ──
+function renderNotifTemplates() {
+  const wrap = el('templatesList');
+  if (!wrap) return;
+  if (!notifTemplates.length) {
+    wrap.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:6px 2px">Aún no guardaste plantillas. Escribí una notificación arriba y tocá «+ Guardar actual».</div>';
+    return;
+  }
+  wrap.innerHTML = notifTemplates.map(t => `
+    <div data-tpl-id="${esc(t.id)}" title="Usar esta plantilla"
+         style="position:relative;width:230px;max-width:100%;background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:border-color .15s">
+      <div style="font-weight:600;font-size:13px;color:var(--text);padding-right:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.title || '—')}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px;min-height:16px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(t.body || '')}</div>
+      <button data-tpl-del="${esc(t.id)}" title="Eliminar plantilla"
+              style="position:absolute;top:4px;right:6px;border:none;background:transparent;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:2px 5px;border-radius:6px">×</button>
+    </div>`).join('');
+}
+
+// Guardar la notificación actual como plantilla
+el('saveTemplateBtn')?.addEventListener('click', async () => {
+  const title = notifTitle?.value.trim();
+  const body  = notifBody?.value.trim() || '';
+  if (!title) { adminToast('Escribí un título antes de guardar la plantilla.', true); return; }
+  if (notifTemplates.some(t => (t.title || '') === title && (t.body || '') === body)) {
+    adminToast('Esa plantilla ya está guardada.'); return;
+  }
+  try {
+    await addDoc(collection(db, 'notifTemplates'), {
+      title, body,
+      createdAt: serverTimestamp(),
+      createdBy: auth.currentUser?.displayName || auth.currentUser?.email || 'Admin',
+    });
+    adminToast('Plantilla guardada');
+  } catch (e) {
+    console.error('saveTemplate', e);
+    adminToast('No se pudo guardar la plantilla: ' + (e?.message || e), true);
+  }
+});
+
+// Cargar o eliminar plantillas (delegación)
+document.addEventListener('click', (e) => {
+  const del = e.target.closest('[data-tpl-del]');
+  if (del) {
+    e.stopPropagation();
+    const id = del.dataset.tplDel;
+    if (!confirm('¿Eliminar esta plantilla?')) return;
+    deleteDoc(doc(db, 'notifTemplates', id))
+      .then(() => adminToast('Plantilla eliminada'))
+      .catch(err => adminToast('No se pudo eliminar: ' + (err?.message || err), true));
+    return;
+  }
+  const card = e.target.closest('[data-tpl-id]');
+  if (!card) return;
+  const tpl = notifTemplates.find(t => t.id === card.dataset.tplId);
+  if (!tpl) return;
+  if (notifTitle) notifTitle.value = tpl.title || '';
+  if (notifBody)  notifBody.value  = tpl.body || '';
+  updatePreview();
+  notifTitle?.focus();
+  adminToast('Plantilla cargada · revisá y enviá');
 });
 
 function setFeedback(msg, color) {
