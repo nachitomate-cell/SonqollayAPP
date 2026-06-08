@@ -1140,12 +1140,13 @@ main { padding: 14px 14px 20px; }
   padding: 0 16px 12px;
 }
 .sfchip {
-  padding: 5px 12px; border-radius: 99px; font-size: 12px; font-weight: 500;
-  border: 1px solid var(--border); background: var(--card);
+  padding: 6px 12px; border-radius: 99px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border); background: var(--bg-2);
   color: var(--muted); cursor: pointer; font-family: var(--font);
-  transition: all var(--transition);
+  transition: all var(--transition); white-space: nowrap;
 }
-.sfchip.active { background: var(--card-2); color: var(--text); border-color: var(--accent); }
+.sfchip:hover { border-color: var(--accent); color: var(--text); }
+.sfchip.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
 
 /* ── Filtros de clientes ── */
 .toolbar-filter-btn {
@@ -1164,14 +1165,17 @@ main { padding: 14px 14px 20px; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .client-filter-panel {
-  padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 14px;
-  background: var(--card-2); border-bottom: 1px solid var(--border);
+  margin: 0 16px 10px; display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  overflow: hidden;
 }
-.cf-row { display: flex; flex-direction: column; gap: 7px; }
+.cf-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px; }
+.cf-head-title { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.cf-row { display: flex; flex-direction: column; gap: 9px; padding: 11px 14px; border-top: 1px solid var(--border); }
 .cf-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.cf-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.cf-clear { align-self: flex-start; background: none; border: none; font-family: var(--font); font-size: 12px; color: var(--muted); cursor: pointer; padding: 2px 0; }
-.cf-clear:hover { color: var(--danger); }
+.cf-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.cf-clear { background: none; border: none; font-family: var(--font); font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 2px 4px; }
+.cf-clear:hover { text-decoration: underline; }
 
 /* Semáforo dot en card */
 .sema-dot {

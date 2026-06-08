@@ -1516,12 +1516,10 @@ function renderQuotes() {
 const CLIENTS_PER_PAGE = 10;
 let clientsPage = 0;
 
-const clientFilters = { semaforo: 'all', industria: 'all', otros: 'all' };
+const clientFilters = { semaforo: 'all', industria: 'all', tipo: 'all', cotiz: 'all', notas: 'all', sort: 'empresa' };
 
 function clientActiveFilterCount() {
-  return (clientFilters.semaforo !== 'all' ? 1 : 0)
-       + (clientFilters.industria !== 'all' ? 1 : 0)
-       + (clientFilters.otros     !== 'all' ? 1 : 0);
+  return ['semaforo', 'industria', 'tipo', 'cotiz', 'notas'].filter(k => clientFilters[k] !== 'all').length;
 }
 
 function updateClientFilterBadge() {
@@ -1557,7 +1555,7 @@ function renderClients() {
   if (!clientsLoaded) { document.getElementById('clients-list').innerHTML = skeletonClientCards(4); return; }
   renderClientIndustriaChips();
   const q = (document.getElementById('search-clients').value || '').toLowerCase().trim();
-  let list = [...clients].sort((a, b) => a.empresa.localeCompare(b.empresa));
+  let list = [...clients];
   if (q) {
     list = list.filter(x =>
       (x.empresa||'').toLowerCase().includes(q) ||
@@ -1571,11 +1569,22 @@ function renderClients() {
   if (clientFilters.industria !== 'all') {
     list = list.filter(c => c.industria === clientFilters.industria);
   }
-  if (clientFilters.otros !== 'all') {
-    if (clientFilters.otros === 'con_cot')   list = list.filter(c => quotes.some(q => q.empresa === c.empresa));
-    if (clientFilters.otros === 'sin_cot')   list = list.filter(c => !quotes.some(q => q.empresa === c.empresa));
-    if (clientFilters.otros === 'con_notas') list = list.filter(c => c.notas && String(c.notas).trim());
-    if (clientFilters.otros === 'sin_notas') list = list.filter(c => !c.notas || !String(c.notas).trim());
+  if (clientFilters.tipo !== 'all') {
+    list = list.filter(c => quotes.some(qq => qq.empresa === c.empresa && qq.tipoServicio === clientFilters.tipo));
+  }
+  if (clientFilters.cotiz === 'con') list = list.filter(c => quotes.some(qq => qq.empresa === c.empresa));
+  if (clientFilters.cotiz === 'sin') list = list.filter(c => !quotes.some(qq => qq.empresa === c.empresa));
+  if (clientFilters.notas === 'con') list = list.filter(c => c.notas && String(c.notas).trim());
+  if (clientFilters.notas === 'sin') list = list.filter(c => !c.notas || !String(c.notas).trim());
+
+  // Orden
+  const _count = c => quotes.filter(qq => qq.empresa === c.empresa).length;
+  if (clientFilters.sort === 'recientes') {
+    list.sort((a, b) => (b.createdAt?.toDate?.()?.getTime() || 0) - (a.createdAt?.toDate?.()?.getTime() || 0));
+  } else if (clientFilters.sort === 'cotizaciones') {
+    list.sort((a, b) => _count(b) - _count(a) || (a.empresa || '').localeCompare(b.empresa || ''));
+  } else {
+    list.sort((a, b) => (a.empresa || '').localeCompare(b.empresa || ''));
   }
 
   const el = document.getElementById('clients-list');
@@ -1692,20 +1701,32 @@ document.getElementById('clientIndustriaFilter')?.addEventListener('click', (e) 
   clientsPage = 0; updateClientFilterBadge(); renderClients();
 });
 
-// Otros
-document.getElementById('clientOtrosFilter')?.addEventListener('click', (e) => {
-  const chip = e.target.closest('.sfchip');
-  if (!chip) return;
-  clientFilters.otros = chip.dataset.otros;
-  document.querySelectorAll('#clientOtrosFilter .sfchip').forEach(c => c.classList.toggle('active', c === chip));
-  clientsPage = 0; updateClientFilterBadge(); renderClients();
-});
+// Grupos de chips (tipo / cotizaciones / notas / orden)
+function _bindClientChips(containerId, attr, key) {
+  document.getElementById(containerId)?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.sfchip');
+    if (!chip) return;
+    clientFilters[key] = chip.dataset[attr];
+    document.querySelectorAll('#' + containerId + ' .sfchip').forEach(c => c.classList.toggle('active', c === chip));
+    clientsPage = 0; updateClientFilterBadge(); renderClients();
+  });
+}
+_bindClientChips('clientTipoFilter',  'tipo',  'tipo');
+_bindClientChips('clientCotizFilter', 'cotiz', 'cotiz');
+_bindClientChips('clientNotasFilter', 'notas', 'notas');
+_bindClientChips('clientSortFilter',  'sort',  'sort');
 
-// Limpiar filtros
+// Limpiar filtros (resetea filtros y orden a A–Z)
 document.getElementById('clientFilterClear')?.addEventListener('click', () => {
-  clientFilters.semaforo = 'all'; clientFilters.industria = 'all'; clientFilters.otros = 'all';
-  document.querySelectorAll('#clientSemaforoFilter .sfchip').forEach(c => c.classList.toggle('active', c.dataset.sf === 'all'));
-  document.querySelectorAll('#clientOtrosFilter .sfchip').forEach(c => c.classList.toggle('active', c.dataset.otros === 'all'));
+  Object.assign(clientFilters, { semaforo: 'all', industria: 'all', tipo: 'all', cotiz: 'all', notas: 'all', sort: 'empresa' });
+  const setActive = (id, attr, val) =>
+    document.querySelectorAll('#' + id + ' .sfchip').forEach(c => c.classList.toggle('active', c.dataset[attr] === val));
+  setActive('clientSemaforoFilter', 'sf', 'all');
+  setActive('clientTipoFilter', 'tipo', 'all');
+  setActive('clientCotizFilter', 'cotiz', 'all');
+  setActive('clientNotasFilter', 'notas', 'all');
+  setActive('clientSortFilter', 'sort', 'empresa');
+  renderClientIndustriaChips();
   clientsPage = 0; updateClientFilterBadge(); renderClients();
 });
 

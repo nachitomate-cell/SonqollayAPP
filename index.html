@@ -324,13 +324,17 @@
 
       <!-- Panel de filtros -->
       <div id="clientFilterPanel" class="client-filter-panel" hidden>
+        <div class="cf-head">
+          <span class="cf-head-title">Filtros y orden</span>
+          <button id="clientFilterClear" class="cf-clear">Limpiar</button>
+        </div>
         <div class="cf-row">
-          <span class="cf-label">Estado</span>
+          <span class="cf-label">Estado de ficha</span>
           <div class="cf-chips" id="clientSemaforoFilter">
             <button class="sfchip active" data-sf="all">Todos</button>
-            <button class="sfchip green"  data-sf="green">🟢 Completo</button>
-            <button class="sfchip yellow" data-sf="yellow">🟡 Casi</button>
-            <button class="sfchip red"    data-sf="red">🔴 Incompleto</button>
+            <button class="sfchip" data-sf="green">🟢 Completo</button>
+            <button class="sfchip" data-sf="yellow">🟡 Casi</button>
+            <button class="sfchip" data-sf="red">🔴 Incompleto</button>
           </div>
         </div>
         <div class="cf-row" id="cf-row-industria">
@@ -338,16 +342,38 @@
           <div class="cf-chips" id="clientIndustriaFilter"></div>
         </div>
         <div class="cf-row">
-          <span class="cf-label">Otros</span>
-          <div class="cf-chips" id="clientOtrosFilter">
-            <button class="sfchip active" data-otros="all">Todos</button>
-            <button class="sfchip" data-otros="con_cot">Con cotizaciones</button>
-            <button class="sfchip" data-otros="sin_cot">Sin cotizaciones</button>
-            <button class="sfchip" data-otros="con_notas">Con notas</button>
-            <button class="sfchip" data-otros="sin_notas">Sin notas</button>
+          <span class="cf-label">Tipo de servicio</span>
+          <div class="cf-chips" id="clientTipoFilter">
+            <button class="sfchip active" data-tipo="all">Todos</button>
+            <button class="sfchip" data-tipo="Consultoría">Consultoría</button>
+            <button class="sfchip" data-tipo="Academia">Academia</button>
+            <button class="sfchip" data-tipo="AURA">AURA</button>
           </div>
         </div>
-        <button id="clientFilterClear" class="cf-clear">Limpiar filtros</button>
+        <div class="cf-row">
+          <span class="cf-label">Cotizaciones</span>
+          <div class="cf-chips" id="clientCotizFilter">
+            <button class="sfchip active" data-cotiz="all">Todas</button>
+            <button class="sfchip" data-cotiz="con">Con cotizaciones</button>
+            <button class="sfchip" data-cotiz="sin">Sin cotizaciones</button>
+          </div>
+        </div>
+        <div class="cf-row">
+          <span class="cf-label">Notas</span>
+          <div class="cf-chips" id="clientNotasFilter">
+            <button class="sfchip active" data-notas="all">Todas</button>
+            <button class="sfchip" data-notas="con">Con notas</button>
+            <button class="sfchip" data-notas="sin">Sin notas</button>
+          </div>
+        </div>
+        <div class="cf-row">
+          <span class="cf-label">Ordenar por</span>
+          <div class="cf-chips" id="clientSortFilter">
+            <button class="sfchip active" data-sort="empresa">A–Z</button>
+            <button class="sfchip" data-sort="recientes">Recientes</button>
+            <button class="sfchip" data-sort="cotizaciones">Más cotizaciones</button>
+          </div>
+        </div>
       </div>
 
       <div id="clients-list" class="list"></div>
