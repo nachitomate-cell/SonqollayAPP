@@ -288,21 +288,52 @@
           Filtros <span id="filterBadge" class="filter-badge hidden">0</span>
         </button>
       </div>
-      <div class="filter-bar hidden" id="quotesFilterBar">
-        <div class="filter-group">
-          <span class="filter-label">Estado</span>
-          <div class="filter-chips" id="filterEstadoChips">
-            <button class="fchip" data-estado="Borrador">Borrador</button>
-            <button class="fchip" data-estado="Enviada">Enviada</button>
-            <button class="fchip" data-estado="En revisión">En revisión</button>
-            <button class="fchip" data-estado="Adjudicada">Adjudicada</button>
-            <button class="fchip" data-estado="Perdida">Perdida</button>
+      <div class="filter-panel hidden" id="quotesFilterBar">
+        <div class="cf-head">
+          <span class="cf-head-title">Filtros y orden</span>
+          <button class="cf-clear" id="filterClearBtn">Limpiar</button>
+        </div>
+        <div class="cf-row">
+          <span class="cf-label">Estado (elegí varios)</span>
+          <div class="cf-chips" id="filterEstadoChips">
+            <button class="sfchip" data-estado="Borrador">Borrador</button>
+            <button class="sfchip" data-estado="Enviada">Enviada</button>
+            <button class="sfchip" data-estado="En revisión">En revisión</button>
+            <button class="sfchip" data-estado="Adjudicada">Adjudicada</button>
+            <button class="sfchip" data-estado="Perdida">Perdida</button>
           </div>
         </div>
-        <div class="filter-group">
-          <button class="fchip" id="filterSinSeg">Sin seguimiento</button>
+        <div class="cf-row" id="qf-row-industria">
+          <span class="cf-label">Industria</span>
+          <div class="cf-chips" id="qfIndustriaFilter"></div>
         </div>
-        <button class="filter-clear" id="filterClearBtn">Limpiar</button>
+        <div class="cf-row">
+          <span class="cf-label">Tipo de servicio</span>
+          <div class="cf-chips" id="qfTipoFilter">
+            <button class="sfchip active" data-tipo="all">Todos</button>
+            <button class="sfchip" data-tipo="Consultoría">Consultoría</button>
+            <button class="sfchip" data-tipo="Academia">Academia</button>
+            <button class="sfchip" data-tipo="AURA">AURA</button>
+          </div>
+        </div>
+        <div class="cf-row">
+          <span class="cf-label">Seguimiento</span>
+          <div class="cf-chips" id="qfSegFilter">
+            <button class="sfchip active" data-seg="all">Todos</button>
+            <button class="sfchip" data-seg="con">Con seguimiento</button>
+            <button class="sfchip" data-seg="sin">Sin seguimiento</button>
+            <button class="sfchip" data-seg="vencido">Vencido</button>
+          </div>
+        </div>
+        <div class="cf-row">
+          <span class="cf-label">Ordenar por</span>
+          <div class="cf-chips" id="qfSortFilter">
+            <button class="sfchip active" data-sort="fecha_desc">Recientes</button>
+            <button class="sfchip" data-sort="fecha_asc">Antiguas</button>
+            <button class="sfchip" data-sort="valor_desc">Mayor valor</button>
+            <button class="sfchip" data-sort="empresa">Empresa A–Z</button>
+          </div>
+        </div>
       </div>
       <div id="pipeline-view" class="hidden"></div>
       <div id="proyectos-view" class="hidden"></div>
@@ -323,7 +354,7 @@
       </div>
 
       <!-- Panel de filtros -->
-      <div id="clientFilterPanel" class="client-filter-panel" hidden>
+      <div id="clientFilterPanel" class="filter-panel" hidden>
         <div class="cf-head">
           <span class="cf-head-title">Filtros y orden</span>
           <button id="clientFilterClear" class="cf-clear">Limpiar</button>

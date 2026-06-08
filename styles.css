@@ -1164,7 +1164,7 @@ main { padding: 14px 14px 20px; }
   font-size: 10px; font-weight: 700;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.client-filter-panel {
+.filter-panel {
   margin: 0 16px 10px; display: flex; flex-direction: column;
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
   overflow: hidden;

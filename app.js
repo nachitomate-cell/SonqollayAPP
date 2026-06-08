@@ -484,7 +484,7 @@ let _pendingVersionParentId = null;
 let _pendingVersionNum = null;
 
 // ---------- Filtros Cotizaciones ----------
-let quotesFilters = { estados: [], sinSeg: false };
+let quotesFilters = { estados: [], industria: 'all', tipo: 'all', seg: 'all', sort: 'fecha_desc' };
 
 // ---------- Templates ----------
 let templates = [];
@@ -1476,14 +1476,28 @@ function applyQuotesFilters(list) {
   if (quotesFilters.estados.length) {
     list = list.filter(q => quotesFilters.estados.includes(q.estado || 'Borrador'));
   }
-  if (quotesFilters.sinSeg) {
-    list = list.filter(q => !q.seguimiento);
+  if (quotesFilters.industria !== 'all') {
+    list = list.filter(q => q.industria === quotesFilters.industria);
   }
+  if (quotesFilters.tipo !== 'all') {
+    list = list.filter(q => (q.tipoServicio || '') === quotesFilters.tipo);
+  }
+  if (quotesFilters.seg === 'con') list = list.filter(q => !!q.seguimiento);
+  if (quotesFilters.seg === 'sin') list = list.filter(q => !q.seguimiento);
+  if (quotesFilters.seg === 'vencido') list = list.filter(q => {
+    if (!q.seguimiento) return false;
+    const e = (q.estado || '').toLowerCase();
+    if (e === 'adjudicada' || e === 'perdida') return false;
+    return daysUntil(q.seguimiento) <= 0;
+  });
   return list;
 }
 
 function updateFilterBadge() {
-  const count = quotesFilters.estados.length + (quotesFilters.sinSeg ? 1 : 0);
+  const count = quotesFilters.estados.length
+    + (quotesFilters.industria !== 'all' ? 1 : 0)
+    + (quotesFilters.tipo !== 'all' ? 1 : 0)
+    + (quotesFilters.seg !== 'all' ? 1 : 0);
   const badge = document.getElementById('filterBadge');
   if (!badge) return;
   badge.textContent = count;
@@ -1491,12 +1505,25 @@ function updateFilterBadge() {
   document.getElementById('quotesFilterToggle')?.classList.toggle('active', count > 0);
 }
 
+// Chips de industria del filtro de cotizaciones (dinámicos según los datos)
+function renderQuoteIndustriaChips() {
+  const container = document.getElementById('qfIndustriaFilter');
+  const row = document.getElementById('qf-row-industria');
+  if (!container) return;
+  const inds = [...new Set(quotes.map(q => q.industria).filter(Boolean))].sort();
+  if (row) row.hidden = inds.length === 0;
+  const cur = quotesFilters.industria;
+  container.innerHTML = `<button class="sfchip${cur === 'all' ? ' active' : ''}" data-ind="all">Todas</button>`
+    + inds.map(i => `<button class="sfchip${cur === i ? ' active' : ''}" data-ind="${escapeHtml(i)}">${escapeHtml(i)}</button>`).join('');
+}
+
 function renderQuotes() {
+  renderQuoteIndustriaChips();
   if (_quotesView === 'pipeline') { renderPipeline(); return; }
   if (_quotesView === 'proyectos') { renderProyectos(); return; }
   if (!quotesLoaded) { document.getElementById('quotes-list').innerHTML = skeletonCards(5); return; }
   const q = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
-  let list = [...quotes].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  let list = [...quotes];
   if (q) {
     list = list.filter(x =>
       (x.empresa||'').toLowerCase().includes(q) ||
@@ -1506,6 +1533,12 @@ function renderQuotes() {
     );
   }
   list = applyQuotesFilters(list);
+  // Orden
+  const s = quotesFilters.sort;
+  if (s === 'fecha_asc')        list.sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+  else if (s === 'valor_desc')  list.sort((a, b) => (Number(b.valor) || 0) - (Number(a.valor) || 0));
+  else if (s === 'empresa')     list.sort((a, b) => (a.empresa || '').localeCompare(b.empresa || ''));
+  else                          list.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
   const el = document.getElementById('quotes-list');
   el.innerHTML = list.length
     ? list.map(x => cardQuoteHtml(x)).join('')
@@ -2457,27 +2490,42 @@ document.getElementById('quotesFilterToggle')?.addEventListener('click', () => {
   document.getElementById('quotesFilterBar').classList.toggle('hidden');
 });
 
-document.getElementById('filterEstadoChips')?.querySelectorAll('.fchip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    const e = chip.dataset.estado;
-    const idx = quotesFilters.estados.indexOf(e);
-    if (idx >= 0) { quotesFilters.estados.splice(idx, 1); chip.classList.remove('active'); }
-    else { quotesFilters.estados.push(e); chip.classList.add('active'); }
-    updateFilterBadge();
-    renderQuotes();
-  });
-});
-
-document.getElementById('filterSinSeg')?.addEventListener('click', () => {
-  quotesFilters.sinSeg = !quotesFilters.sinSeg;
-  document.getElementById('filterSinSeg').classList.toggle('active', quotesFilters.sinSeg);
+// Estado (multi-select)
+document.getElementById('filterEstadoChips')?.addEventListener('click', (ev) => {
+  const chip = ev.target.closest('.sfchip');
+  if (!chip) return;
+  const e = chip.dataset.estado;
+  const idx = quotesFilters.estados.indexOf(e);
+  if (idx >= 0) { quotesFilters.estados.splice(idx, 1); chip.classList.remove('active'); }
+  else { quotesFilters.estados.push(e); chip.classList.add('active'); }
   updateFilterBadge();
   renderQuotes();
 });
 
+// Grupos single-select (industria / tipo / seguimiento / orden)
+function _bindQuoteChips(containerId, attr, key) {
+  document.getElementById(containerId)?.addEventListener('click', (ev) => {
+    const chip = ev.target.closest('.sfchip');
+    if (!chip) return;
+    quotesFilters[key] = chip.dataset[attr];
+    document.querySelectorAll('#' + containerId + ' .sfchip').forEach(c => c.classList.toggle('active', c === chip));
+    updateFilterBadge();
+    renderQuotes();
+  });
+}
+_bindQuoteChips('qfIndustriaFilter', 'ind',  'industria');
+_bindQuoteChips('qfTipoFilter',      'tipo', 'tipo');
+_bindQuoteChips('qfSegFilter',       'seg',  'seg');
+_bindQuoteChips('qfSortFilter',      'sort', 'sort');
+
 document.getElementById('filterClearBtn')?.addEventListener('click', () => {
-  quotesFilters = { estados: [], sinSeg: false };
-  document.querySelectorAll('#filterEstadoChips .fchip, #filterSinSeg').forEach(c => c.classList.remove('active'));
+  quotesFilters = { estados: [], industria: 'all', tipo: 'all', seg: 'all', sort: 'fecha_desc' };
+  document.querySelectorAll('#filterEstadoChips .sfchip').forEach(c => c.classList.remove('active'));
+  const setActive = (id, attr, val) => document.querySelectorAll('#' + id + ' .sfchip').forEach(c => c.classList.toggle('active', c.dataset[attr] === val));
+  setActive('qfTipoFilter', 'tipo', 'all');
+  setActive('qfSegFilter', 'seg', 'all');
+  setActive('qfSortFilter', 'sort', 'fecha_desc');
+  renderQuoteIndustriaChips();
   updateFilterBadge();
   renderQuotes();
 });
