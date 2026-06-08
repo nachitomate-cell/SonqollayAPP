@@ -785,8 +785,23 @@ function openQuoteModal(qt = null) {
   el('qSeguimiento').value= qt?.seguimiento || '';
   el('qNotas').value      = qt?.notas       || '';
   el('quoteDeleteBtn').style.display = qt ? '' : 'none';
+  quoteEditLog = Array.isArray(qt?._log) ? qt._log : [];
+  el('quoteHistoryBtn').style.display = quoteEditLog.length ? '' : 'none';
   el('quoteModal').style.display = '';
 }
+
+let quoteEditLog = [];
+el('quoteHistoryBtn')?.addEventListener('click', () => {
+  el('synapModalTitle').textContent = 'Historial de cambios';
+  el('synapModalBody').innerHTML = quoteEditLog.length
+    ? `<div style="display:flex;flex-direction:column;gap:10px">${quoteEditLog.slice().reverse().map(e => `
+        <div style="border-left:2px solid var(--accent);padding:2px 0 2px 10px">
+          <div style="font-size:12px;color:var(--muted)">${esc(fmtDatetime(new Date(e.t)))} · ${esc(e.u || '—')}</div>
+          <div style="font-size:13px;color:var(--text);margin-top:2px">${esc(e.d || '')}</div>
+        </div>`).join('')}</div>`
+    : '<div style="color:var(--muted)">Sin cambios registrados.</div>';
+  el('synapModal').style.display = '';
+});
 
 function closeQuoteModal() {
   el('quoteModal').style.display = 'none';
