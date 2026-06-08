@@ -200,6 +200,116 @@ function renderAll() {
 
   updateUserFilterSelect(users);
   renderActivity();
+  renderComercial();
+}
+
+// ── Tablero comercial (BI) ──
+const COM_PROB = { 'Borrador': 0.10, 'Enviada': 0.40, 'En revisión': 0.60 };
+
+function _uidNameMap() {
+  const m = {};
+  sessions.forEach(s => { if (s.uid && s.displayName) m[s.uid] = s.displayName; });
+  activity.forEach(a => { if (a.uid && a.displayName) m[a.uid] = a.displayName; });
+  return m;
+}
+
+const _biCard = (title, inner) =>
+  `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px">
+     <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px">${title}</div>${inner}</div>`;
+
+function _biBars(items, color) {
+  if (!items.length) return '<div style="color:var(--muted);font-size:13px">Sin datos</div>';
+  const max = Math.max(1, ...items.map(i => i.value));
+  return items.map(i => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <div style="width:88px;flex-shrink:0;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(i.label)}</div>
+    <div style="flex:1;background:var(--card-2);border-radius:6px;height:18px;overflow:hidden"><div style="height:100%;border-radius:6px;width:${Math.max(2, Math.round(i.value / max * 100))}%;background:${i.color || color || 'var(--accent)'}"></div></div>
+    <div style="width:96px;flex-shrink:0;text-align:right;font-size:11px;color:var(--text);font-weight:600">${esc(i.sub)}</div>
+  </div>`).join('');
+}
+
+function renderComercial() {
+  const kpisEl = el('comKpis');
+  const chartsEl = el('comCharts');
+  if (!kpisEl || !chartsEl) return;
+
+  const qs = quotes || [];
+  const sum = (arr) => arr.reduce((s, q) => s + (Number(q.valor) || 0), 0);
+  const adjudicadas = qs.filter(q => q.estado === 'Adjudicada');
+  const perdidas    = qs.filter(q => q.estado === 'Perdida');
+  const abiertas    = qs.filter(q => !['Adjudicada', 'Perdida'].includes(q.estado || 'Borrador'));
+  const cerradas    = adjudicadas.length + perdidas.length;
+  const winRate     = cerradas ? Math.round(adjudicadas.length / cerradas * 100) : 0;
+  const montoAdj = sum(adjudicadas), montoPerd = sum(perdidas), montoAbierto = sum(abiertas);
+  const forecast = abiertas.reduce((s, q) => s + (Number(q.valor) || 0) * (COM_PROB[q.estado || 'Borrador'] ?? 0), 0);
+
+  const kpi = (label, val, color) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px">
+    <div style="font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em">${label}</div>
+    <div style="font-size:20px;font-weight:800;margin-top:4px;color:${color || 'var(--text)'}">${val}</div></div>`;
+  kpisEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
+    ${kpi('Pronóstico ponderado', formatCLPShort(forecast), 'var(--accent)')}
+    ${kpi('Adjudicado', formatCLPShort(montoAdj), 'var(--success)')}
+    ${kpi('Pipeline abierto', formatCLPShort(montoAbierto))}
+    ${kpi('Win-rate', winRate + '%')}
+    ${kpi('Cotizaciones', String(qs.length))}
+  </div>`;
+
+  // Por mes (últimos 6)
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString('es-CL', { month: 'short' }) });
+  }
+  const monthData = months.map(m => {
+    const g = qs.filter(q => (q.fecha || '').slice(0, 7) === m.key);
+    return { label: m.label, value: g.length, sub: `${g.length} · ${formatCLPShort(sum(g))}` };
+  });
+
+  // Adjudicado vs Perdido
+  const winLoss = [
+    { label: 'Adjudicado', value: montoAdj,  sub: `${adjudicadas.length} · ${formatCLPShort(montoAdj)}`,  color: 'var(--success)' },
+    { label: 'Perdido',    value: montoPerd, sub: `${perdidas.length} · ${formatCLPShort(montoPerd)}`, color: 'var(--danger)' },
+  ];
+
+  // Por industria / por tipo (por monto)
+  const agg = (field, fallback) => {
+    const m = {};
+    qs.forEach(q => { const k = q[field] || fallback; m[k] = (m[k] || 0) + (Number(q.valor) || 0); });
+    return Object.entries(m).map(([label, value]) => ({ label, value, sub: formatCLPShort(value) })).sort((a, b) => b.value - a.value);
+  };
+  const indData  = agg('industria', 'Sin industria');
+  const tipoData = agg('tipoServicio', 'Sin tipo');
+
+  // Ranking por persona (createdBy)
+  const nameMap = _uidNameMap();
+  const byUser = {};
+  qs.forEach(q => {
+    const uid = q.createdBy || 'desconocido';
+    if (!byUser[uid]) byUser[uid] = { uid, creadas: 0, adjudicadas: 0, monto: 0 };
+    byUser[uid].creadas++;
+    if (q.estado === 'Adjudicada') { byUser[uid].adjudicadas++; byUser[uid].monto += Number(q.valor) || 0; }
+  });
+  const ranking = Object.values(byUser).sort((a, b) => b.monto - a.monto || b.adjudicadas - a.adjudicadas || b.creadas - a.creadas);
+  const rankRows = ranking.slice(0, 10).map((r, i) => `<tr style="border-top:1px solid var(--border)">
+    <td style="padding:7px 4px;color:var(--muted)">${i + 1}</td>
+    <td style="padding:7px 4px;font-weight:600">${esc(nameMap[r.uid] || (r.uid === 'desconocido' ? 'Sin autor' : r.uid.slice(0, 6)))}</td>
+    <td style="padding:7px 4px;text-align:center">${r.creadas}</td>
+    <td style="padding:7px 4px;text-align:center;color:var(--success);font-weight:600">${r.adjudicadas}</td>
+    <td style="padding:7px 4px;text-align:right;font-weight:600">${formatCLPShort(r.monto)}</td>
+  </tr>`).join('');
+  const rankTable = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em">
+      <th style="padding:4px;text-align:left">#</th><th style="padding:4px;text-align:left">Persona</th>
+      <th style="padding:4px;text-align:center">Creadas</th><th style="padding:4px;text-align:center">Adjud.</th>
+      <th style="padding:4px;text-align:right">Monto adj.</th>
+    </tr></thead><tbody>${rankRows || '<tr><td colspan="5" style="padding:10px;color:var(--muted)">Sin datos</td></tr>'}</tbody></table>`;
+
+  chartsEl.innerHTML =
+    _biCard('Cotizaciones por mes', _biBars(monthData)) +
+    _biCard('Adjudicado vs Perdido', _biBars(winLoss)) +
+    _biCard('Por industria', _biBars(indData)) +
+    _biCard('Por tipo de servicio', _biBars(tipoData)) +
+    _biCard('Ranking del equipo (por monto adjudicado)', rankTable);
 }
 
 // ── Aprobación de acceso ──
@@ -522,6 +632,7 @@ function estadoBadgeClass(estado) {
 let quotesSearchQuery = '';
 
 function renderQuotes() {
+  renderComercial();
   const listEl = el('quotesList');
   if (!listEl) return;
 
@@ -1239,6 +1350,7 @@ function unsubscribe() {
 // ── Sections ──
 const SECTIONS = {
   overview:       'sectionOverview',
+  comercial:      'sectionComercial',
   users:          'sectionUsers',
   recordatorios:  'sectionRecordatorios',
   activity:       'sectionActivity',
@@ -1249,6 +1361,7 @@ const SECTIONS = {
 };
 const TITLES = {
   overview:       ['Resumen',        'Vista general de uso de la aplicación'],
+  comercial:      ['Comercial',      'Indicadores comerciales y ranking del equipo'],
   users:          ['Usuarios',       'Listado completo de usuarios registrados'],
   recordatorios:  ['Recordatorios',  'Bloc de notas por urgencia para el equipo'],
   activity:       ['Actividad',      'Registro de acciones en tiempo real'],
@@ -1264,6 +1377,7 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.section === name));
   el('pageTitle').textContent = TITLES[name][0];
   el('pageSub').textContent   = TITLES[name][1];
+  if (name === 'comercial') renderComercial();
 }
 
 // ── UI gates ──
