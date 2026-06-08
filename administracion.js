@@ -202,6 +202,7 @@ function renderAll() {
   updateUserFilterSelect(users);
   renderActivity();
   renderComercial();
+  populateNotifTargets(users);
 }
 
 // ── Tablero comercial (BI) ──
@@ -513,15 +514,19 @@ function renderBroadcasts() {
   }
   listEl.innerHTML = broadcasts.map(b => {
     const when = b.createdAt?.toDate ? timeAgo(b.createdAt.toDate()) : '—';
-    const sentLine = b.sent != null
-      ? `<span class="bi-sent">✓ Enviado a ${b.sent} dispositivo${b.sent !== 1 ? 's' : ''}</span>`
-      : `<span class="bi-pending">En cola · se enviará al desplegar funciones</span>`;
+    const schedTxt = b.scheduledFor?.toDate ? b.scheduledFor.toDate().toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+    const sentLine = b.status === 'scheduled'
+      ? `<span class="bi-pending">🕒 Programada para ${schedTxt}</span>`
+      : b.sent != null
+        ? `<span class="bi-sent">✓ Enviado a ${b.sent} dispositivo${b.sent !== 1 ? 's' : ''}</span>`
+        : `<span class="bi-pending">En cola…</span>`;
+    const tgtLine = (b.target && b.target !== 'all') ? '<span>· segmentada</span>' : '';
     return `<div class="broadcast-item" data-id="${esc(b.id)}">
       <div class="bi-dot"></div>
       <div class="bi-body">
         <div class="bi-title">${esc(b.title)}</div>
         ${b.body ? `<div class="bi-text">${esc(b.body)}</div>` : ''}
-        <div class="bi-meta">${sentLine}<span>${when}</span><span>por ${esc(b.sentBy||'—')}</span></div>
+        <div class="bi-meta">${sentLine}${tgtLine}<span>${when}</span><span>por ${esc(b.sentBy||'—')}</span></div>
       </div>
       <button class="bi-delete" data-id="${esc(b.id)}" title="Eliminar">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1556,15 +1561,33 @@ el('sendNotifBtn')?.addEventListener('click', async () => {
   setFeedback('Enviando...', 'var(--muted)');
   try {
     const user = auth.currentUser;
+    const target = el('notifTarget')?.value || 'all';
+    const schedVal = el('notifSchedule')?.value; // 'YYYY-MM-DDTHH:mm' (hora local)
+    let scheduledFor = null;
+    if (schedVal) {
+      const d = new Date(schedVal);
+      if (isNaN(d.getTime())) { setFeedback('Fecha de programación inválida.', 'var(--danger)'); btn.disabled = false; return; }
+      if (d.getTime() <= Date.now()) { setFeedback('La fecha programada debe ser futura.', 'var(--warn)'); btn.disabled = false; return; }
+      scheduledFor = d;
+    }
     await addDoc(collection(db, 'adminBroadcasts'), {
       title,
       body: notifBody?.value.trim() || '',
+      target,
+      ...(scheduledFor ? { scheduledFor, status: 'scheduled' } : { status: 'sending' }),
       createdAt: serverTimestamp(),
       sentBy: user?.displayName || user?.email || 'Admin',
     });
-    setFeedback('Notificación programada. Se enviará en segundos.', 'var(--success)');
+    const tgtLabel = target === 'all' ? 'todos' : (el('notifTarget')?.selectedOptions[0]?.textContent || 'usuario');
+    setFeedback(
+      scheduledFor
+        ? `Programada para ${scheduledFor.toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' })} · ${tgtLabel}.`
+        : `Notificación enviada a ${tgtLabel}. Llega en segundos.`,
+      'var(--success)'
+    );
     if (notifTitle) notifTitle.value = '';
     if (notifBody)  notifBody.value  = '';
+    if (el('notifSchedule')) el('notifSchedule').value = '';
     updatePreview();
   } catch (_) {
     setFeedback('Error al enviar. Verifica los permisos de Firestore.', 'var(--danger)');
@@ -1572,6 +1595,17 @@ el('sendNotifBtn')?.addEventListener('click', async () => {
     btn.disabled = false;
   }
 });
+
+// Pobla el selector de destinatario con los usuarios conocidos (preserva la selección).
+function populateNotifTargets(users) {
+  const sel = el('notifTarget');
+  if (!sel) return;
+  const prev = sel.value || 'all';
+  const opts = ['<option value="all">Todos los usuarios</option>']
+    .concat((users || []).map(u => `<option value="${esc(u.uid)}">${esc(u.displayName || u.email || u.uid.slice(0, 6))}</option>`));
+  sel.innerHTML = opts.join('');
+  sel.value = [...sel.options].some(o => o.value === prev) ? prev : 'all';
+}
 
 // ── Pool de plantillas de notificación ──
 function renderNotifTemplates() {

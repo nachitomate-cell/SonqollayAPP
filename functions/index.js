@@ -65,8 +65,10 @@ function chunk(arr, size) {
 }
 
 // opts.excludeUid → no notifica al usuario que originó el cambio (evita auto-aviso)
+// opts.onlyUid    → envía SOLO a los dispositivos de ese usuario (segmentación)
 async function sendToAll(notification, data = {}, opts = {}) {
   let tokens = await getAllTokens();
+  if (opts.onlyUid) tokens = tokens.filter(t => t.uid === opts.onlyUid);
   if (opts.excludeUid) tokens = tokens.filter(t => t.uid !== opts.excludeUid);
   if (!tokens.length) return { sent: 0, removed: 0 };
 
@@ -271,6 +273,19 @@ exports.onQuoteWritten = onDocumentWritten(
 );
 
 // ---------- 3) Broadcast manual desde panel de administración ----------
+// Soporta segmentación (target = 'all' | uid) y programación (scheduledFor).
+async function deliverBroadcast(ref, data) {
+  const onlyUid = data.target && data.target !== 'all' ? data.target : null;
+  const result = await sendToAll(
+    { title: data.title, body: data.body || '' },
+    { kind: 'admin_broadcast' },
+    { onlyUid }
+  );
+  await ref.update({ status: 'sent', sent: result.sent, removedTokens: result.removed, sentAt: new Date() });
+  logger.info(`Broadcast enviado · target=${data.target || 'all'} · ${result.sent} tokens · ${result.removed} limpiados`);
+  return result;
+}
+
 exports.onAdminBroadcast = onDocumentWritten(
   { document: 'adminBroadcasts/{id}', region: 'us-central1' },
   async (event) => {
@@ -279,12 +294,34 @@ exports.onAdminBroadcast = onDocumentWritten(
     if (before || !after) return; // solo en creación
     if (!after.title) return;
 
-    const result = await sendToAll(
-      { title: after.title, body: after.body || '' },
-      { kind: 'admin_broadcast' }
-    );
-    logger.info(`Broadcast enviado · ${result.sent} tokens · ${result.removed} limpiados`);
-    await event.data.after.ref.update({ sent: result.sent, removedTokens: result.removed, sentAt: new Date() });
+    // Programada a futuro → no enviar ahora; la enviará sendScheduledBroadcasts.
+    const sched = after.scheduledFor && after.scheduledFor.toDate ? after.scheduledFor.toDate() : null;
+    if (sched && sched.getTime() > Date.now() + 30000) {
+      if (after.status !== 'scheduled') await event.data.after.ref.update({ status: 'scheduled' });
+      logger.info(`Broadcast programado para ${sched.toISOString()}`);
+      return;
+    }
+    await deliverBroadcast(event.data.after.ref, after);
+  }
+);
+
+// ---------- 3b) Envío de broadcasts programados (cada 5 min) ----------
+exports.sendScheduledBroadcasts = onSchedule(
+  { schedule: '*/5 * * * *', timeZone: 'America/Santiago', region: 'us-central1' },
+  async () => {
+    const snap = await db.collection('adminBroadcasts').where('status', '==', 'scheduled').get();
+    if (snap.empty) return;
+    const now = Date.now();
+    const due = snap.docs.filter(d => {
+      const sf = d.data().scheduledFor;
+      const t = sf && sf.toDate ? sf.toDate() : null;
+      return t && t.getTime() <= now;
+    });
+    for (const doc of due) {
+      try { await deliverBroadcast(doc.ref, doc.data()); }
+      catch (e) { logger.error('Error enviando broadcast programado', doc.id, e); }
+    }
+    if (due.length) logger.info(`Broadcasts programados enviados: ${due.length}`);
   }
 );
 

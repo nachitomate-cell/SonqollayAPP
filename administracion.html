@@ -1206,6 +1206,16 @@
                 <label class="form-label" for="notifBody">Mensaje (opcional)</label>
                 <textarea class="form-textarea" id="notifBody" placeholder="Escribe el cuerpo del mensaje..." maxlength="300"></textarea>
               </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <div style="flex:1;min-width:150px">
+                  <label class="form-label" for="notifTarget">Destinatario</label>
+                  <select class="form-input" id="notifTarget"><option value="all">Todos los usuarios</option></select>
+                </div>
+                <div style="flex:1;min-width:150px">
+                  <label class="form-label" for="notifSchedule">Programar envío (opcional)</label>
+                  <input class="form-input" id="notifSchedule" type="datetime-local" />
+                </div>
+              </div>
               <button class="send-btn" id="sendNotifBtn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/>
