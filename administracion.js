@@ -161,9 +161,10 @@ function userRowHtml(u) {
     : '<span class="badge offline">Desconectado</span>';
   const isAdm = userRoles[u.uid] === true;
   // Los admins tienen acceso siempre; los demás se gestionan con el botón Aprobar.
+  const roleMini = (val, label) => `<button data-role-uid="${esc(u.uid)}" data-role-val="${val}" style="cursor:pointer;border:none;background:transparent;color:var(--muted);font-size:10px;text-decoration:underline;padding:2px 0;display:block;margin-top:3px">${label}</button>`;
   const rolCell = isAdm
-    ? '<span class="rol-badge rol-admin">Admin</span>'
-    : approveBtnHtml(u.uid, userApproved[u.uid] === true);
+    ? `<span class="rol-badge rol-admin">Admin</span>${roleMini('0', 'quitar admin')}`
+    : `${approveBtnHtml(u.uid, userApproved[u.uid] === true)}${roleMini('1', 'hacer admin')}`;
   return `<div class="user-row">
     <div class="user-ident">${avatarHtml(u)}<div><div class="u-name">${esc(u.displayName||'—')}</div></div></div>
     <div class="u-cell">${rolCell}</div>
@@ -329,6 +330,28 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-approve-uid]');
   if (!btn) return;
   toggleApproved(btn.dataset.approveUid, btn.dataset.approveVal === '1');
+});
+
+async function toggleAdmin(uid, value) {
+  if (!confirm(value
+    ? '¿Dar permisos de ADMINISTRADOR a este usuario? Podrá ver y gestionar todo el panel.'
+    : '¿Quitar los permisos de administrador?')) return;
+  try {
+    await setDoc(doc(db, 'users', uid), { isAdmin: value }, { merge: true });
+    userRoles[uid] = value;
+    if (value) userApproved[uid] = true; // un admin siempre tiene acceso
+    renderAll();
+    adminToast(value ? 'Ahora es administrador' : 'Permisos de administrador removidos');
+  } catch (e) {
+    console.error('toggleAdmin', e);
+    adminToast('No se pudo cambiar el rol: ' + (e?.message || e), true);
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-role-uid]');
+  if (!btn) return;
+  toggleAdmin(btn.dataset.roleUid, btn.dataset.roleVal === '1');
 });
 
 // ── Activity ──
