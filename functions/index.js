@@ -127,9 +127,7 @@ async function sendToAll(notification, data = {}, opts = {}) {
 //   • Vencidos: seguimiento ya pasó (CUALQUIER antigüedad, sin tope de 14 días).
 //   • Hoy / Próximos (1-3 días).
 //   • Sin respuesta +14 días: Enviada/En revisión sin actividad reciente (aunque no tengan seguimiento).
-exports.dailyFollowUpReminders = onSchedule(
-  { schedule: '0 9 * * *', timeZone: 'America/Santiago', region: 'us-central1' },
-  async () => {
+async function runFollowUpDigest() {
     const today = todayISO();
     const threeDaysFromNow = addDaysISO(today, 3);
     const isOpen = (q) => {
@@ -189,7 +187,16 @@ exports.dailyFollowUpReminders = onSchedule(
       { kind: 'follow_up_digest', total, vencidos: buckets.vencidos.length, sinRespuesta: sinRespuesta.length }
     );
     logger.info(`Digest · vencidos=${buckets.vencidos.length} hoy=${buckets.hoy.length} prox=${buckets.proximos.length} sinResp=${sinRespuesta.length} · enviadas ${result.sent}`);
-  }
+}
+
+// Recordatorio de seguimientos: dos envíos diarios, 09:00 y 18:00 (hora de Chile).
+exports.dailyFollowUpReminders = onSchedule(
+  { schedule: '0 9 * * *', timeZone: 'America/Santiago', region: 'us-central1' },
+  runFollowUpDigest
+);
+exports.eveningFollowUpReminders = onSchedule(
+  { schedule: '0 18 * * *', timeZone: 'America/Santiago', region: 'us-central1' },
+  runFollowUpDigest
 );
 
 // ---------- 2) Notificaciones sobre cotizaciones (trigger único consolidado) ----------
