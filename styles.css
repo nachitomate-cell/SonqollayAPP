@@ -1164,14 +1164,18 @@ main { padding: 14px 14px 20px; }
   font-size: 10px; font-weight: 700;
   display: inline-flex; align-items: center; justify-content: center;
 }
+/* Grilla de filtros: 1 col (móvil) · 2 (tablet) · 3 (desktop). El gap de 1px sobre
+   el fondo del borde dibuja divisores limpios entre grupos. */
 .filter-panel {
-  margin: 0 16px 10px; display: flex; flex-direction: column;
-  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  margin: 0 16px 10px; display: grid; grid-template-columns: 1fr; gap: 1px;
+  background: var(--border); border: 1px solid var(--border); border-radius: 14px;
   overflow: hidden;
 }
-.cf-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 10px; }
+@media (min-width: 560px) { .filter-panel { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 920px) { .filter-panel { grid-template-columns: 1fr 1fr 1fr; } }
+.cf-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--card); }
 .cf-head-title { font-size: 12.5px; font-weight: 700; color: var(--text); }
-.cf-row { display: flex; flex-direction: column; gap: 9px; padding: 11px 14px; border-top: 1px solid var(--border); }
+.cf-row { display: flex; flex-direction: column; gap: 9px; padding: 12px 14px; background: var(--card); }
 .cf-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .cf-chips { display: flex; gap: 7px; flex-wrap: wrap; }
 .cf-clear { background: none; border: none; font-family: var(--font); font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 2px 4px; }
