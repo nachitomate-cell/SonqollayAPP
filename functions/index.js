@@ -385,7 +385,7 @@ Reglas estrictas:
 7. Preserva nombres de empresas tal como se dictan (sin corregir mayúsculas ni abreviar).`;
 
 exports.parseDictation = onCall(
-  { region: 'us-central1' },
+  { region: 'us-central1', secrets: ['GEMINI_API_KEY'] },
   async (request) => {
     // Solo el equipo autenticado puede invocar la IA (evita abuso de la cuota de Gemini)
     if (!request.auth) {
@@ -414,6 +414,10 @@ exports.parseDictation = onCall(
 
     const fechaHoy = today || new Date().toISOString().slice(0, 10);
     const apiKey   = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      logger.error('GEMINI_API_KEY no configurada');
+      throw new HttpsError('failed-precondition', 'La IA no está configurada (falta la API key de Gemini).');
+    }
     const model    = 'gemini-2.0-flash';
     const url      = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
