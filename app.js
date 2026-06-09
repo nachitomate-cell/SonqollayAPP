@@ -784,7 +784,7 @@ async function setupFcm() {
     const body = d.body || '';
     pushNotif({ title, body }); // historial in-app
     // Mostrar SIEMPRE el banner del sistema, incluso con la app en primer plano.
-    // (En primer plano FCM no dispara onBackgroundMessage, así que lo hacemos acá.)
+    // (En primer plano FCM no dispara onBackgroundMessage, así que lo hacemos aquí.)
     try {
       if (Notification.permission !== 'granted') throw new Error('sin permiso');
       const reg = (await navigator.serviceWorker.getRegistration(FCM_SW_SCOPE))
@@ -909,8 +909,8 @@ document.getElementById('ufToClpBtn')?.addEventListener('click', () => {
   const ufInput = document.getElementById('quoteValorUf');
   const valorInput = document.querySelector('#quoteForm [name="valor"]');
   const uf = parseFloat((ufInput?.value || '').replace(/\./g, '').replace(',', '.'));
-  if (!_ufValue) { showToast('Aún no tengo el valor de la UF. Tocá el indicador del header.'); return; }
-  if (!uf || isNaN(uf)) { showToast('Ingresá un monto en UF.'); return; }
+  if (!_ufValue) { showToast('Aún no tengo el valor de la UF. Toca el indicador de arriba.'); return; }
+  if (!uf || isNaN(uf)) { showToast('Ingresa un monto en UF.'); return; }
   const clp = Math.round(uf * _ufValue);
   if (valorInput) valorInput.value = clp.toLocaleString('es-CL');
   updateUfHint();
@@ -923,17 +923,17 @@ renderRates(false);
 
 // ---------- Tour guiado ----------
 const TOUR_STEPS = [
-  { title: '¡Bienvenido a SonqollayAPP! 👋', text: 'Te muestro en 1 minuto cómo moverte por la app. Podés salir cuando quieras con «Salir» o la tecla Esc.' },
-  { nav: 'dashboard', el: '#ratesWidget', title: 'Dólar y UF del día', text: 'Acá ves el valor del dólar y la UF de hoy. Tocá para actualizarlos. También podés cotizar en UF al crear una cotización.' },
+  { title: '¡Bienvenido a SonqollayAPP! 👋', text: 'Te muestro en 1 minuto cómo moverte por la app. Puedes salir cuando quieras con «Salir» o la tecla Esc.' },
+  { nav: 'dashboard', el: '#ratesWidget', title: 'Dólar y UF del día', text: 'Aquí ves el valor del dólar y la UF de hoy. Toca para actualizarlos. También puedes cotizar en UF al crear una cotización.' },
   { nav: 'dashboard', el: '#activityFeedBtn', title: 'Actividad del equipo', text: 'El rayo ⚡ muestra la actividad reciente del equipo en tiempo real: quién creó o movió qué.' },
   { nav: 'dashboard', el: '#hoyGreeting', title: 'Inicio — tu día', text: 'Tu resumen: cotizaciones que requieren seguimiento, vencidas y sin respuesta. Lo urgente, primero.' },
-  { nav: 'dashboard', el: '#fab', title: 'Crear rápido', text: 'El botón + crea una cotización o un cliente nuevo en segundos. Incluso podés dictarlo por voz 🎤 (la IA completa los campos).' },
-  { nav: 'quotes', el: '#quotesViewToggle', title: 'Cotizaciones', text: 'Vé tus cotizaciones como Lista, Kanban (arrastrá entre estados) o Proyectos. El Kanban muestra el pronóstico ponderado.' },
-  { nav: 'quotes', el: '#quotesFilterToggle', title: 'Filtrar y ordenar', text: 'Filtrá por estado, industria, tipo de servicio o seguimiento, y ordená como prefieras.' },
-  { nav: 'quotes', el: '#quotes-list', title: 'Detalle de cada cotización', text: 'Tocá una cotización para abrir su detalle: generar PDF con tu marca, compartir por WhatsApp, registrar un seguimiento (con tipo de contacto) y dictar avances por voz 🎤.' },
-  { nav: 'clients', el: '#clientFilterToggle', title: 'Clientes', text: 'Buscá y filtrá tu cartera: completitud de ficha, industria, con/sin cotizaciones, y más.' },
-  { nav: 'settings', el: '#enablePushBtn', title: 'Notificaciones', text: 'Activá las notificaciones para recibir los recordatorios de seguimiento (9:00 y 18:00) y las novedades del equipo.' },
-  { nav: 'settings', el: '#startTourBtn', title: '¡Listo! 🚀', text: 'Eso es lo esencial. Podés repetir este tutorial cuando quieras desde acá o desde el menú ≡. ¡A vender!' },
+  { nav: 'dashboard', el: '#fab', title: 'Crear rápido', text: 'El botón + crea una cotización o un cliente nuevo en segundos. Incluso puedes dictarlo por voz 🎤 (la IA completa los campos).' },
+  { nav: 'quotes', el: '#quotesViewToggle', title: 'Cotizaciones', text: 'Ve tus cotizaciones como Lista, Kanban (arrastra entre estados) o Proyectos. El Kanban muestra el pronóstico ponderado.' },
+  { nav: 'quotes', el: '#quotesFilterToggle', title: 'Filtrar y ordenar', text: 'Filtra por estado, industria, tipo de servicio o seguimiento, y ordena como prefieras.' },
+  { nav: 'quotes', el: '#quotes-list', title: 'Detalle de cada cotización', text: 'Toca una cotización para abrir su detalle: generar PDF con tu marca, compartir por WhatsApp, registrar un seguimiento (con tipo de contacto) y dictar avances por voz 🎤.' },
+  { nav: 'clients', el: '#clientFilterToggle', title: 'Clientes', text: 'Busca y filtra tu cartera: completitud de ficha, industria, con/sin cotizaciones, y más.' },
+  { nav: 'settings', el: '#enablePushBtn', title: 'Notificaciones', text: 'Activa las notificaciones para recibir los recordatorios de seguimiento (9:00 y 18:00) y las novedades del equipo.' },
+  { nav: 'settings', el: '#startTourBtn', title: '¡Listo! 🚀', text: 'Eso es lo esencial. Puedes repetir este tutorial cuando quieras desde aquí o desde el menú ≡. ¡A vender!' },
 ];
 function launchTour() { startAppTour(TOUR_STEPS); }
 document.getElementById('startTourBtn')?.addEventListener('click', launchTour);
@@ -3516,7 +3516,7 @@ function renderPipeline() {
     <div class="kf-item"><span class="kf-label">Pipeline abierto</span><span class="kf-val">${formatCLP(openTotal)}</span></div>
     <div class="kf-item"><span class="kf-label">Adjudicado</span><span class="kf-val success">${formatCLP(won)}</span></div>
   </div>
-  <div class="kanban-hint">Arrastrá las tarjetas entre columnas para cambiar el estado · ponderación: Borrador 10% · Enviada 40% · En revisión 60%.</div>`;
+  <div class="kanban-hint">Arrastra las tarjetas entre columnas para cambiar el estado · ponderación: Borrador 10% · Enviada 40% · En revisión 60%.</div>`;
 
   const boardHtml = `<div class="kanban-board">${COLS.map(col => {
     const group = visible.filter(q => (q.estado || 'Borrador') === col.estado);

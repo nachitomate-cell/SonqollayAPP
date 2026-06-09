@@ -1612,7 +1612,7 @@ function renderNotifTemplates() {
   const wrap = el('templatesList');
   if (!wrap) return;
   if (!notifTemplates.length) {
-    wrap.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:6px 2px">Aún no guardaste plantillas. Escribí una notificación arriba y tocá «+ Guardar actual».</div>';
+    wrap.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:6px 2px">Aún no hay plantillas guardadas. Escribe una notificación arriba y toca «+ Guardar actual».</div>';
     return;
   }
   wrap.innerHTML = notifTemplates.map(t => `
@@ -1629,7 +1629,7 @@ function renderNotifTemplates() {
 el('saveTemplateBtn')?.addEventListener('click', async () => {
   const title = notifTitle?.value.trim();
   const body  = notifBody?.value.trim() || '';
-  if (!title) { adminToast('Escribí un título antes de guardar la plantilla.', true); return; }
+  if (!title) { adminToast('Escribe un título antes de guardar la plantilla.', true); return; }
   if (notifTemplates.some(t => (t.title || '') === title && (t.body || '') === body)) {
     adminToast('Esa plantilla ya está guardada.'); return;
   }
@@ -1666,7 +1666,7 @@ document.addEventListener('click', (e) => {
   if (notifBody)  notifBody.value  = tpl.body || '';
   updatePreview();
   notifTitle?.focus();
-  adminToast('Plantilla cargada · revisá y enviá');
+  adminToast('Plantilla cargada · revisa y envía');
 });
 
 function setFeedback(msg, color) {
