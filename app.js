@@ -828,6 +828,7 @@ async function setupFcm() {
         token, ua: navigator.userAgent, createdAt: serverTimestamp(),
       }, { merge: true });
       setLabel('Notificaciones activadas ✓');
+      updatePushPrompt();
       return true;
     } catch (e) {
       e._step = step;
@@ -858,6 +859,7 @@ async function setupFcm() {
   } else {
     setLabel('Activar notificaciones');
   }
+  updatePushPrompt();
 }
 
 // ---------- Indicadores USD/UF ----------
@@ -1033,8 +1035,22 @@ function renderAll() {
   updateQuickCounts();
 }
 
+// Muestra el aviso de "Activar notificaciones" en Inicio solo si no están activas.
+function updatePushPrompt() {
+  const card = document.getElementById('pushPromptCard');
+  if (!card) return;
+  const supported = ('Notification' in window) && ('serviceWorker' in navigator);
+  const needs = supported && Notification.permission !== 'granted';
+  card.classList.toggle('hidden', !needs);
+}
+document.getElementById('pushPromptActivate')?.addEventListener('click', () => {
+  document.getElementById('enablePushBtn')?.click(); // reusa el flujo de activación
+  setTimeout(updatePushPrompt, 1500);
+});
+
 function renderDashboard() {
   renderGreeting();
+  updatePushPrompt();
   renderHoyUrgente();
   if (!quotesLoaded || !clientsLoaded) {
     const kpiEl = document.getElementById('kpi-metrics')?.previousElementSibling;
