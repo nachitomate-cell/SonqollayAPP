@@ -1758,3 +1758,16 @@ main { padding: 14px 14px 20px; }
 .tour-skip { background: transparent; color: var(--muted); }
 .tour-prev { background: var(--card-2); color: var(--text); }
 .tour-next { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── Menú del header (≡) ── */
+.header-menu {
+  position: fixed; z-index: 300; min-width: 200px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 6px; display: flex; flex-direction: column;
+}
+.header-menu button {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: none; border: none; cursor: pointer; font-family: var(--font-body);
+  font-size: 14px; color: var(--text); padding: 10px 12px; border-radius: 8px;
+}
+.header-menu button:hover { background: var(--card-2); }

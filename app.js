@@ -25,7 +25,7 @@ import {
 } from './lib/format.js';
 import { seedQuotes } from './lib/seed-data.js';
 import { getRates, cachedUf } from './lib/indicadores.js';
-import { startAppTour } from './lib/tour.js';
+import { startAppTour, tourSeen } from './lib/tour.js';
 
 // ---------- Init Firebase ----------
 const app = initializeApp(firebaseConfig);
@@ -73,11 +73,17 @@ function showToast(msg) {
   showToast._t = setTimeout(() => t.classList.add('hidden'), 2400);
 }
 
+let _autoTourDone = false;
 function hideSplash() {
   const el = document.getElementById('splashScreen');
   if (!el || el.classList.contains('hidden')) return;
   el.classList.add('hiding');
   setTimeout(() => el.classList.add('hidden'), 350);
+  // Auto-arranque del tutorial la primera vez que un usuario entra
+  if (!_autoTourDone && !tourSeen()) {
+    _autoTourDone = true;
+    setTimeout(() => { try { startAppTour(TOUR_STEPS); } catch (_) {} }, 1000);
+  }
 }
 
 function skeletonCards(n = 3) {
@@ -917,15 +923,43 @@ renderRates(false);
 const TOUR_STEPS = [
   { title: '¡Bienvenido a SonqollayAPP! 👋', text: 'Te muestro en 1 minuto cómo moverte por la app. Podés salir cuando quieras con «Salir» o la tecla Esc.' },
   { nav: 'dashboard', el: '#ratesWidget', title: 'Dólar y UF del día', text: 'Acá ves el valor del dólar y la UF de hoy. Tocá para actualizarlos. También podés cotizar en UF al crear una cotización.' },
+  { nav: 'dashboard', el: '#activityFeedBtn', title: 'Actividad del equipo', text: 'El rayo ⚡ muestra la actividad reciente del equipo en tiempo real: quién creó o movió qué.' },
   { nav: 'dashboard', el: '#hoyGreeting', title: 'Inicio — tu día', text: 'Tu resumen: cotizaciones que requieren seguimiento, vencidas y sin respuesta. Lo urgente, primero.' },
-  { nav: 'dashboard', el: '#fab', title: 'Crear rápido', text: 'El botón + crea una cotización o un cliente nuevo en segundos. Incluso podés dictarlo por voz 🎤.' },
+  { nav: 'dashboard', el: '#fab', title: 'Crear rápido', text: 'El botón + crea una cotización o un cliente nuevo en segundos. Incluso podés dictarlo por voz 🎤 (la IA completa los campos).' },
   { nav: 'quotes', el: '#quotesViewToggle', title: 'Cotizaciones', text: 'Vé tus cotizaciones como Lista, Kanban (arrastrá entre estados) o Proyectos. El Kanban muestra el pronóstico ponderado.' },
   { nav: 'quotes', el: '#quotesFilterToggle', title: 'Filtrar y ordenar', text: 'Filtrá por estado, industria, tipo de servicio o seguimiento, y ordená como prefieras.' },
+  { nav: 'quotes', el: '#quotes-list', title: 'Detalle de cada cotización', text: 'Tocá una cotización para abrir su detalle: generar PDF con tu marca, compartir por WhatsApp, registrar un seguimiento (con tipo de contacto) y dictar avances por voz 🎤.' },
   { nav: 'clients', el: '#clientFilterToggle', title: 'Clientes', text: 'Buscá y filtrá tu cartera: completitud de ficha, industria, con/sin cotizaciones, y más.' },
   { nav: 'settings', el: '#enablePushBtn', title: 'Notificaciones', text: 'Activá las notificaciones para recibir los recordatorios de seguimiento (9:00 y 18:00) y las novedades del equipo.' },
-  { nav: 'settings', el: '#startTourBtn', title: '¡Listo! 🚀', text: 'Eso es lo esencial. Podés repetir este tutorial cuando quieras desde acá. ¡A vender!' },
+  { nav: 'settings', el: '#startTourBtn', title: '¡Listo! 🚀', text: 'Eso es lo esencial. Podés repetir este tutorial cuando quieras desde acá o desde el menú ≡. ¡A vender!' },
 ];
-document.getElementById('startTourBtn')?.addEventListener('click', () => startAppTour(TOUR_STEPS));
+function launchTour() { startAppTour(TOUR_STEPS); }
+document.getElementById('startTourBtn')?.addEventListener('click', launchTour);
+
+// ── Menú del header (≡) ──
+(function setupHeaderMenu() {
+  const btn = document.getElementById('menuBtn');
+  if (!btn) return;
+  let menu = null;
+  const close = () => { if (menu) { menu.remove(); menu = null; document.removeEventListener('click', onDoc, true); } };
+  const onDoc = (e) => { if (menu && !menu.contains(e.target) && !btn.contains(e.target)) close(); };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menu) { close(); return; }
+    menu = document.createElement('div');
+    menu.className = 'header-menu';
+    menu.innerHTML = `
+      <button data-act="tour">🎓 Cómo usar la app</button>
+      <button data-act="settings">⚙️ Ajustes</button>`;
+    document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    menu.style.top = (r.bottom + 6) + 'px';
+    menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    menu.querySelector('[data-act="tour"]').onclick = () => { close(); launchTour(); };
+    menu.querySelector('[data-act="settings"]').onclick = () => { close(); document.querySelector('.bottom-nav [data-view="settings"]')?.click(); };
+    setTimeout(() => document.addEventListener('click', onDoc, true), 0);
+  });
+})();
 
 // ---------- Greeting ----------
 function renderGreeting() {
