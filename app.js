@@ -25,6 +25,7 @@ import {
 } from './lib/format.js';
 import { seedQuotes } from './lib/seed-data.js';
 import { getRates, cachedUf } from './lib/indicadores.js';
+import { startAppTour } from './lib/tour.js';
 
 // ---------- Init Firebase ----------
 const app = initializeApp(firebaseConfig);
@@ -911,6 +912,20 @@ document.getElementById('ufToClpBtn')?.addEventListener('click', () => {
 document.querySelector('#quoteForm [name="valor"]')?.addEventListener('input', updateUfHint);
 
 renderRates(false);
+
+// ---------- Tour guiado ----------
+const TOUR_STEPS = [
+  { title: '¡Bienvenido a SonqollayAPP! 👋', text: 'Te muestro en 1 minuto cómo moverte por la app. Podés salir cuando quieras con «Salir» o la tecla Esc.' },
+  { nav: 'dashboard', el: '#ratesWidget', title: 'Dólar y UF del día', text: 'Acá ves el valor del dólar y la UF de hoy. Tocá para actualizarlos. También podés cotizar en UF al crear una cotización.' },
+  { nav: 'dashboard', el: '#hoyGreeting', title: 'Inicio — tu día', text: 'Tu resumen: cotizaciones que requieren seguimiento, vencidas y sin respuesta. Lo urgente, primero.' },
+  { nav: 'dashboard', el: '#fab', title: 'Crear rápido', text: 'El botón + crea una cotización o un cliente nuevo en segundos. Incluso podés dictarlo por voz 🎤.' },
+  { nav: 'quotes', el: '#quotesViewToggle', title: 'Cotizaciones', text: 'Vé tus cotizaciones como Lista, Kanban (arrastrá entre estados) o Proyectos. El Kanban muestra el pronóstico ponderado.' },
+  { nav: 'quotes', el: '#quotesFilterToggle', title: 'Filtrar y ordenar', text: 'Filtrá por estado, industria, tipo de servicio o seguimiento, y ordená como prefieras.' },
+  { nav: 'clients', el: '#clientFilterToggle', title: 'Clientes', text: 'Buscá y filtrá tu cartera: completitud de ficha, industria, con/sin cotizaciones, y más.' },
+  { nav: 'settings', el: '#enablePushBtn', title: 'Notificaciones', text: 'Activá las notificaciones para recibir los recordatorios de seguimiento (9:00 y 18:00) y las novedades del equipo.' },
+  { nav: 'settings', el: '#startTourBtn', title: '¡Listo! 🚀', text: 'Eso es lo esencial. Podés repetir este tutorial cuando quieras desde acá. ¡A vender!' },
+];
+document.getElementById('startTourBtn')?.addEventListener('click', () => startAppTour(TOUR_STEPS));
 
 // ---------- Greeting ----------
 function renderGreeting() {

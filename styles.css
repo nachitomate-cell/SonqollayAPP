@@ -1735,3 +1735,26 @@ main { padding: 14px 14px 20px; }
 .kanban-card .kc-seg.yellow { color: var(--warn); }
 .kanban-card .kc-seg.green { color: var(--success); }
 .kanban-card .kc-seg.muted { color: var(--muted); }
+
+/* ── Tour guiado ── */
+.tour-block { position: fixed; inset: 0; z-index: 100000; background: transparent; }
+.tour-spot {
+  position: fixed; z-index: 100001; border-radius: 12px; pointer-events: none;
+  outline: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgba(5,12,24,.72), 0 0 0 4px rgba(249,115,22,.3);
+  transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease;
+}
+.tour-tip {
+  position: fixed; z-index: 100002; width: min(330px, 90vw);
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px; box-shadow: var(--shadow); transition: top .2s ease, left .2s ease;
+}
+.tour-tip-title { font-family: var(--font-title); font-weight: 800; font-size: 16px; color: var(--text); margin-bottom: 6px; }
+.tour-tip-text { font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+.tour-tip-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; gap: 10px; }
+.tour-tip-count { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.tour-tip-btns { display: flex; gap: 8px; }
+.tour-tip-btns button { font-family: var(--font-body); font-size: 13px; font-weight: 600; border-radius: 8px; padding: 7px 12px; cursor: pointer; border: 1px solid var(--border); }
+.tour-skip { background: transparent; color: var(--muted); }
+.tour-prev { background: var(--card-2); color: var(--text); }
+.tour-next { background: var(--accent); color: #fff; border-color: var(--accent); }
