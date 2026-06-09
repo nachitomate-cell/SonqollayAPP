@@ -829,7 +829,15 @@
         <span class="seg-sheet-title" id="segSheetTitle"></span>
         <div id="segSheetCurrent"></div>
       </div>
-      <p class="seg-label">¿Qué pasó?</p>
+      <p class="seg-label">Tipo de contacto</p>
+      <div class="seg-chips" id="segCatChips">
+        <button class="seg-chip seg-cat-chip active" data-cat="Llamada">📞 Llamada</button>
+        <button class="seg-chip seg-cat-chip" data-cat="Email">✉️ Email</button>
+        <button class="seg-chip seg-cat-chip" data-cat="Reunión">🤝 Reunión</button>
+        <button class="seg-chip seg-cat-chip" data-cat="WhatsApp">💬 WhatsApp</button>
+        <button class="seg-chip seg-cat-chip" data-cat="Avance">📈 Avance</button>
+      </div>
+      <p class="seg-label" style="margin-top:14px">¿Qué pasó?</p>
       <textarea id="segNoteInput" class="seg-note" rows="3" placeholder="Ej: Hablé con Juan, interesados pero esperan VB de gerencia…" data-dictate></textarea>
       <p class="seg-label" style="margin-top:14px">Estado</p>
       <div class="seg-estado-chips" id="segEstadoChips"></div>

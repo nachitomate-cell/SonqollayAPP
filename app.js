@@ -1692,9 +1692,9 @@ function openClientNotesSheet(c) {
     body.innerHTML = '<p style="color:var(--muted);font-size:14px;padding:8px 0">Sin notas registradas.</p>';
   } else {
     body.innerHTML = notas.map(n => {
-      const text = typeof n === 'object' ? n.text : n;
-      const ts   = typeof n === 'object' && n.ts ? `<div class="nota-ts">${escapeHtml(n.ts)}</div>` : '';
-      return `<div class="nota-item">${ts}<div class="nota-text">${escapeHtml(text)}</div></div>`;
+      const m = parseNoteMeta(n);
+      const meta = [m.ts && escapeHtml(m.ts), m.author && `<b>${escapeHtml(m.author)}</b>`, m.tag && escapeHtml(m.tag)].filter(Boolean).join(' · ');
+      return `<div class="nota-item">${meta ? `<div class="nota-ts">${meta}</div>` : ''}<div class="nota-text">${escapeHtml(m.text)}</div></div>`;
     }).join('');
   }
   document.getElementById('clientNotesSheet').classList.remove('hidden');
@@ -2097,7 +2097,13 @@ function openQuoteDetail(id) {
         ? emails.map(e => `<div><a href="mailto:${escapeHtml(e)}">${escapeHtml(e)}</a></div>`).join('')
         : '—'
     }</span></div>
-    ${q.notas ? `<div class="detail-row"><span class="lbl">Notas</span><span class="val">${escapeHtml(q.notas).replace(/\n/g,'<br>')}</span></div>` : ''}
+    ${q.notas ? `<div class="detail-row"><span class="lbl">Notas</span><div class="val">${
+      parseNotes(q.notas).map(n => {
+        const m = parseNoteMeta(n);
+        const meta = [m.ts && escapeHtml(m.ts), m.author && `<b>${escapeHtml(m.author)}</b>`, m.tag && escapeHtml(m.tag)].filter(Boolean).join(' · ');
+        return `<div style="margin-bottom:8px">${meta ? `<div style="font-size:11px;color:var(--muted);margin-bottom:1px">${meta}</div>` : ''}<div>${escapeHtml(m.text).replace(/\n/g,'<br>')}</div></div>`;
+      }).join('')
+    }</div></div>` : ''}
 
     ${q._log && q._log.length ? `
     <div class="detail-row history-row">
@@ -2136,6 +2142,7 @@ function openQuoteDetail(id) {
         WhatsApp
       </a>
       <button class="btn btn-outline" id="detailPDF" style="background:rgba(249,115,22,.1);border-color:rgba(249,115,22,.35);color:var(--accent)">📄 PDF</button>
+      <button class="btn btn-outline" id="detailExportHist">⬇ Historial</button>
       <button class="btn btn-outline" id="detailShare">Compartir</button>
       <button class="btn btn-outline" id="detailDuplicate">Duplicar</button>
       <button class="btn btn-outline" id="detailNewVersion">Nueva versión</button>
@@ -2189,6 +2196,28 @@ function openQuoteDetail(id) {
     } finally {
       pdfBtn.disabled = false; pdfBtn.innerHTML = orig;
     }
+  });
+
+  document.getElementById('detailExportHist')?.addEventListener('click', () => {
+    const lines = [`HISTORIAL · ${q.numero} · ${q.empresa}`, `Exportado: ${new Date().toLocaleString('es-CL')}`, ''];
+    if (q._log && q._log.length) {
+      lines.push('── CAMBIOS ──');
+      [...q._log].reverse().forEach(e => lines.push(`• ${new Date(e.t).toLocaleString('es-CL')} · ${e.u || '—'} · ${e.d || ''}`));
+      lines.push('');
+    }
+    if (q.notas) {
+      lines.push('── NOTAS ──');
+      parseNotes(q.notas).forEach(n => {
+        const m = parseNoteMeta(n);
+        lines.push(`• ${[m.ts, m.author, m.tag].filter(Boolean).join(' · ')}: ${m.text.replace(/\n/g, ' ')}`);
+      });
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `historial_${(q.numero || 'cot').replace(/[^a-zA-Z0-9_-]/g, '_')}.txt`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    showToast('Historial exportado');
   });
 
   const shareBtn = document.getElementById('detailShare');
@@ -2278,9 +2307,32 @@ let clientNotasArr = [];
 let clientResultadosArr = [];
 let _editingIndustriaClient = '';
 
+// ── Anotaciones con trazabilidad (autor + origen/categoría) ──
+const NOTE_MONTHS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function currentUserName() {
+  const u = currentUser;
+  return ((u && (u.displayName || u.email)) || 'Anónimo').split(' ')[0];
+}
+// Sello de nota: [fecha · autor · etiqueta]  (etiqueta = origen o categoría)
+function noteStamp(meta = {}) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const date = `${pad(now.getDate())} ${NOTE_MONTHS[now.getMonth()]} ${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const parts = [date, currentUserName()];
+  if (meta.tag) parts.push(meta.tag);
+  return `[${parts.join(' · ')}]`;
+}
+// Extrae metadatos de una línea de nota (retrocompatible con sellos viejos sin autor)
+function parseNoteMeta(line) {
+  const m = String(line).match(/^\[([^\]]+)\]\s?([\s\S]*)$/);
+  if (!m) return { ts: '', author: '', tag: '', text: String(line) };
+  const parts = m[1].split('·').map(s => s.trim());
+  return { ts: parts[0] || '', author: parts[1] || '', tag: parts[2] || '', text: m[2] };
+}
+
 function parseNotes(notasStr) {
   if (!notasStr || !notasStr.trim()) return [];
-  const tsRe = /^\[\d{2} \w+ \d{4} \d{2}:\d{2}\]/;
+  const tsRe = /^\[\d{2} \w+ \d{4} \d{2}:\d{2}/;
   const lines = notasStr.split('\n');
   if (!lines.some(l => tsRe.test(l))) return [notasStr.trim()];
   const notes = [];
@@ -2300,14 +2352,16 @@ function renderClientNotes() {
     el.innerHTML = '<div class="notes-empty">Sin notas aún</div>';
     return;
   }
-  const tsRe = /^(\[\d{2} \w+ \d{4} \d{2}:\d{2}\]) ([\s\S]+)$/;
   el.innerHTML = clientNotasArr.map((note, i) => {
-    const m = note.match(tsRe);
-    const ts = m ? m[1] : '';
-    const text = m ? m[2] : note;
+    const meta = parseNoteMeta(note);
+    const text = meta.text || note;
+    const metaParts = [];
+    if (meta.ts) metaParts.push(escapeHtml(meta.ts));
+    if (meta.author) metaParts.push(`<b>${escapeHtml(meta.author)}</b>`);
+    if (meta.tag) metaParts.push(escapeHtml(meta.tag));
     return `<div class="note-item">
       <div class="note-meta">
-        <span class="note-ts">${escapeHtml(ts)}</span>
+        <span class="note-ts">${metaParts.join(' · ')}</span>
         <div class="note-actions">
           <button type="button" class="icon-btn note-edit-btn" data-idx="${i}" aria-label="Editar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"/></svg>
@@ -2343,7 +2397,7 @@ function renderClientNotes() {
     const i = parseInt(b.dataset.idx);
     const newText = document.querySelector(`#nt-edit-${i} textarea`).value.trim();
     if (!newText) return;
-    const m = clientNotasArr[i].match(/^(\[\d{2} \w+ \d{4} \d{2}:\d{2}\]) /);
+    const m = clientNotasArr[i].match(/^\[[^\]]+\]\s?/);
     clientNotasArr[i] = m ? `${m[0]}${newText}` : newText;
     renderClientNotes();
   }));
@@ -2429,11 +2483,7 @@ document.getElementById('clientNoteAdd').addEventListener('click', () => {
   const input = document.getElementById('clientNoteInput');
   const text = input.value.trim();
   if (!text) return;
-  const now = new Date();
-  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const pad = n => String(n).padStart(2, '0');
-  const ts = `[${pad(now.getDate())} ${months[now.getMonth()]} ${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}]`;
-  clientNotasArr.push(`${ts} ${text}`);
+  clientNotasArr.push(`${noteStamp({ tag: '✍️ manual' })} ${text}`);
   input.value = '';
   renderClientNotes();
 });
@@ -2732,10 +2782,17 @@ document.getElementById('segSheetCalBtn')?.addEventListener('click', () => {
   downloadICS({ ...q, seguimiento: dateVal });
 });
 
+document.getElementById('segCatChips')?.addEventListener('click', (e) => {
+  const chip = e.target.closest('.seg-cat-chip');
+  if (!chip) return;
+  document.querySelectorAll('#segCatChips .seg-cat-chip').forEach(c => c.classList.toggle('active', c === chip));
+});
+
 document.getElementById('segSaveBtn').addEventListener('click', async () => {
   const note = document.getElementById('segNoteInput').value.trim();
   const newDate = document.getElementById('segDateInput').value;
   const newEstado = document.getElementById('segEstadoChips')?.querySelector('.seg-estado-chip.active')?.dataset.estado;
+  const categoria = document.getElementById('segCatChips')?.querySelector('.seg-cat-chip.active')?.dataset.cat || 'Seguimiento';
   if (!_segQuoteId) return;
   const q = quotes.find(x => x.id === _segQuoteId);
   if (!q) return;
@@ -2748,16 +2805,20 @@ document.getElementById('segSaveBtn').addEventListener('click', async () => {
   if (newDate === '') updates.seguimiento = '';
   if (estadoCambio) updates.estado = newEstado;
   if (note) {
-    const now = new Date();
-    const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    const pad = n => String(n).padStart(2, '0');
-    const stamp = `[${pad(now.getDate())} ${months[now.getMonth()]} ${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}]`;
     const existing = q.notas || '';
-    updates.notas = existing ? `${existing}\n${stamp} ${note}` : `${stamp} ${note}`;
+    const entry = `${noteStamp({ tag: categoria })} ${note}`;
+    updates.notas = existing ? `${existing}\n${entry}` : entry;
   }
+  // Historial inmutable (_log): registra la nota y los cambios de esta interacción
+  const logs = [];
+  if (note) logs.push(`📝 ${categoria}: ${note.slice(0, 80)}`);
+  if (estadoCambio) logs.push(`Estado: ${q.estado || '—'} → ${newEstado}`);
+  if (newDate) logs.push(`Seguimiento → ${formatDate(newDate)}`);
+  else if (newDate === '' && q.seguimiento) logs.push('Seguimiento quitado');
+  if (logs.length) updates._log = arrayUnion({ t: new Date().toISOString(), u: currentUserName(), d: logs.join(' · ') });
   try {
     await setDoc(doc(quotesCol(), _segQuoteId), updates, { merge: true });
-    const actions = [note && 'nota', estadoCambio && `→ ${newEstado}`, newDate && `seg. ${formatDate(newDate)}`].filter(Boolean);
+    const actions = [note && `nota (${categoria})`, estadoCambio && `→ ${newEstado}`, newDate && `seg. ${formatDate(newDate)}`].filter(Boolean);
     logActivity('quote_contacto', `${q.numero}: ${actions.join(', ')}`).catch(() => {});
     document.getElementById('seguimientoSheet').classList.add('hidden');
     showToast('Guardado');
@@ -2962,22 +3023,22 @@ async function saveDictateNote() {
     : _dictateChunks.map(c => c.text).join('')
   ).trim();
   if (!text || !_dictateTarget) return;
-  const now = new Date();
-  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  const pad = n => String(n).padStart(2, '0');
-  const stamp = `[${pad(now.getDate())} ${months[now.getMonth()]} ${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}]`;
-  const entry = `${stamp} ${text}`;
+  const entry = `${noteStamp({ tag: '🎤 dictado' })} ${text}`;
   const { type, id } = _dictateTarget;
   try {
     const colRef = type === 'quote' ? quotesCol() : clientsCol();
     const ref = doc(colRef, id);
     const snap = await getDoc(ref);
     const existing = snap.exists() ? (snap.data().notas || '') : '';
-    await setDoc(ref, {
+    const writeData = {
       notas: existing ? existing + '\n' + entry : entry,
       updatedAt: serverTimestamp(),
       updatedBy: currentUser.uid,
-    }, { merge: true });
+    };
+    if (type === 'quote') {
+      writeData._log = arrayUnion({ t: new Date().toISOString(), u: currentUserName(), d: `🎤 Nota: ${text.slice(0, 80)}` });
+    }
+    await setDoc(ref, writeData, { merge: true });
     logActivity(type === 'quote' ? 'quote_note' : 'client_note', `${id}: ${text.slice(0, 80)}`).catch(() => {});
     if (_dictateRec) { try { _dictateRec.abort(); } catch {} }
     _stopVolumeMeter();
