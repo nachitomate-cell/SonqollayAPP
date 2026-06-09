@@ -1839,3 +1839,10 @@ main { padding: 14px 14px 20px; }
 .up-user-tok.on { color: var(--success); }
 .up-user-tok.off { color: var(--muted); }
 .up-user-send { flex-shrink: 0; background: rgba(249,115,22,.15); color: var(--accent); border: 1px solid rgba(249,115,22,.35); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+/* ── Selección múltiple en "Notificar usuarios" ── */
+.up-all-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); background: var(--card-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; cursor: pointer; }
+.up-all-row input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+.up-user { cursor: pointer; }
+.up-user.dim { opacity: .5; }
+.up-user .up-chk { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }

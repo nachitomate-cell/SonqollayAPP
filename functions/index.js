@@ -69,6 +69,10 @@ function chunk(arr, size) {
 async function sendToAll(notification, data = {}, opts = {}) {
   let tokens = await getAllTokens();
   if (opts.onlyUid) tokens = tokens.filter(t => t.uid === opts.onlyUid);
+  if (opts.onlyUids && opts.onlyUids.length) {
+    const set = new Set(opts.onlyUids);
+    tokens = tokens.filter(t => set.has(t.uid));
+  }
   if (opts.excludeUid) tokens = tokens.filter(t => t.uid !== opts.excludeUid);
   if (!tokens.length) return { sent: 0, removed: 0 };
 
@@ -282,11 +286,12 @@ exports.onQuoteWritten = onDocumentWritten(
 // ---------- 3) Broadcast manual desde panel de administración ----------
 // Soporta segmentación (target = 'all' | uid) y programación (scheduledFor).
 async function deliverBroadcast(ref, data) {
-  const onlyUid = data.target && data.target !== 'all' ? data.target : null;
+  const onlyUids = Array.isArray(data.targets) && data.targets.length ? data.targets : null;
+  const onlyUid = (!onlyUids && data.target && data.target !== 'all') ? data.target : null;
   const result = await sendToAll(
     { title: data.title, body: data.body || '' },
     { kind: 'admin_broadcast' },
-    { onlyUid }
+    { onlyUid, onlyUids }
   );
   await ref.update({ status: 'sent', sent: result.sent, removedTokens: result.removed, sentAt: new Date() });
   logger.info(`Broadcast enviado · target=${data.target || 'all'} · ${result.sent} tokens · ${result.removed} limpiados`);

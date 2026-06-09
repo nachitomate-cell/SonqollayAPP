@@ -1003,12 +1003,10 @@
       <label class="up-label">Mensaje (opcional)
         <textarea id="upBody" rows="2" maxlength="300" placeholder="Detalle del aviso…"></textarea>
       </label>
-      <label class="up-label">Destinatario
-        <select id="upTarget"><option value="all">📣 Todos los usuarios</option></select>
-      </label>
+      <label class="up-all-row"><input type="checkbox" id="upAll" checked /> <span>📣 Enviar a <b>todos</b> los usuarios</span></label>
       <button class="btn btn-block" id="upSend">Enviar notificación</button>
       <div id="upFeedback" class="up-feedback"></div>
-      <div class="up-users-title">Usuarios de la app</div>
+      <div class="up-users-title">Destinatarios <span id="upSelCount"></span></div>
       <div id="upUsersList" class="up-users"></div>
     </div>
   </div>
