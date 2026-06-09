@@ -1865,3 +1865,7 @@ main { padding: 14px 14px 20px; }
 .sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 0 16px 10px; flex-shrink: 0; }
 .sheet-title { margin: 0; font-family: var(--font-title); font-size: 16px; font-weight: 800; color: var(--text); }
 .bottom-sheet .af-list, .bottom-sheet .up-body { flex: 1; overflow-y: auto; }
+
+/* ── Insignia Desarrollador en vista admin ── */
+.dev-tag { display: inline-block; font-size: 10px; font-weight: 700; color: #a78bfa; background: rgba(139,92,246,.18); padding: 2px 7px; border-radius: 999px; vertical-align: middle; margin-left: 4px; white-space: nowrap; }
+.admin-user-card.is-dev { border-color: rgba(139,92,246,.45); background: linear-gradient(135deg, rgba(139,92,246,.09), transparent); }

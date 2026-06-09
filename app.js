@@ -269,7 +269,11 @@ function renderAdminUsers() {
     if (t && (!u.lastSeen || t > u.lastSeen)) u.lastSeen = t;
   });
 
-  const users = Object.values(map).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+  const users = Object.values(map).sort((a, b) => {
+    const ad = (a.email || '') === DEV_EMAIL, bd = (b.email || '') === DEV_EMAIL;
+    if (ad !== bd) return ad ? -1 : 1; // el desarrollador siempre arriba de todos
+    return (b.lastSeen || 0) - (a.lastSeen || 0);
+  });
   if (!users.length) { el.innerHTML = '<div class="empty"><span>Sin sesiones registradas aún</span></div>'; return; }
 
   el.innerHTML = users.map(u => {
@@ -282,14 +286,15 @@ function renderAdminUsers() {
         <span class="st-val">${fmtDuration(u.screenTime[v])}</span>
       </div>`;
     }).join('');
+    const isDev = (u.email || '') === DEV_EMAIL;
     const actionCount = _adminActivity.filter(a => a.uid === u.uid && !['login','logout'].includes(a.action)).length;
     const init = (u.displayName || u.email || '?').trim()[0].toUpperCase();
-    return `<div class="admin-user-card">
+    return `<div class="admin-user-card${isDev ? ' is-dev' : ''}">
       <div class="auc-header">
         ${u.photoURL ? `<img class="auc-avatar" src="${escapeHtml(u.photoURL)}" alt="" />`
                      : `<div class="auc-avatar auc-avatar-init">${escapeHtml(init)}</div>`}
         <div class="auc-info">
-          <span class="auc-name">${escapeHtml(u.displayName || u.email)}</span>
+          <span class="auc-name">${escapeHtml(u.displayName || u.email)}${isDev ? ' <span class="dev-tag">🛠️ Desarrollador</span>' : ''}</span>
           <span class="auc-email">${escapeHtml(u.email)}</span>
         </div>
         <div class="auc-stats">
@@ -299,7 +304,8 @@ function renderAdminUsers() {
         </div>
       </div>
       <div class="auc-st">${bars}</div>
-      ${actionCount ? `<div class="auc-foot">${actionCount} acciones registradas</div>` : ''}
+      ${isDev ? '<div class="auc-foot">🛠️ Desarrollador — construyendo SonqollayAPP</div>'
+              : (actionCount ? `<div class="auc-foot">${actionCount} acciones registradas</div>` : '')}
     </div>`;
   }).join('');
 }
@@ -317,11 +323,12 @@ function renderAdminActivity() {
     client_edit:   { text: 'editó cliente',         color: 'var(--warn)'    },
     client_delete: { text: 'eliminó cliente',       color: 'var(--danger)'  },
   };
-  const total = _adminActivity.length;
+  const acts = _adminActivity.filter(a => (a.email || '') !== DEV_EMAIL); // el desarrollador no genera ruido
+  const total = acts.length;
   const totalPages = Math.max(1, Math.ceil(total / HOME_ACT_PAGE_SIZE));
   if (_homeActPage >= totalPages) _homeActPage = totalPages - 1;
   const start = _homeActPage * HOME_ACT_PAGE_SIZE;
-  const items = _adminActivity.slice(start, start + HOME_ACT_PAGE_SIZE);
+  const items = acts.slice(start, start + HOME_ACT_PAGE_SIZE);
 
   if (!total) { el.innerHTML = '<div style="padding:20px 0;text-align:center;color:var(--muted);font-size:13px">Sin actividad registrada aún</div>'; }
   else {
