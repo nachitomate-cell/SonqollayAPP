@@ -206,9 +206,17 @@ async function endActivitySession() {
 async function checkAdminStatus() {
   try {
     const snap = await getDoc(doc(dbf, 'users', currentUser.uid));
-    isAdmin = snap.exists() && snap.data().isAdmin === true;
-  } catch (_) { isAdmin = false; }
+    isAdmin = (currentUser.email === DEV_EMAIL) || (snap.exists() && snap.data().isAdmin === true);
+  } catch (_) { isAdmin = (currentUser?.email === DEV_EMAIL); }
   document.getElementById('adminNavSection')?.classList.toggle('hidden', !isAdmin);
+  // Para admins, el tile de Clientes se reemplaza por "Notificar usuarios" (push dirigida/masiva)
+  document.getElementById('quickTilePush')?.classList.toggle('hidden', !isAdmin);
+  document.getElementById('quickTileClients')?.classList.toggle('hidden', isAdmin);
+  if (isAdmin) {
+    getDocs(collection(dbf, 'users')).then(s => {
+      const c = document.getElementById('quickCountUsers'); if (c) c.textContent = s.size;
+    }).catch(() => {});
+  }
 }
 
 // ─── Admin subscriptions ───
@@ -1895,6 +1903,84 @@ document.getElementById('themeToggleBtn')?.addEventListener('click', () => {
 // ---------- Quick Access Tiles ----------
 document.getElementById('quickTileQuotes')?.addEventListener('click', () => showView('quotes'));
 document.getElementById('quickTileClients')?.addEventListener('click', () => showView('clients'));
+
+// ── Notificar usuarios (admin): ver todos los usuarios + push dirigida o a todos ──
+function openUsersPush() {
+  document.getElementById('usersPushSheet')?.classList.remove('hidden');
+  loadPushUsers();
+}
+function closeUsersPush() {
+  document.getElementById('usersPushSheet')?.classList.add('hidden');
+}
+async function loadPushUsers() {
+  const listEl = document.getElementById('upUsersList');
+  const sel = document.getElementById('upTarget');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 2px">Cargando usuarios…</div>';
+  try {
+    const snap = await getDocs(collection(dbf, 'users'));
+    const users = await Promise.all(snap.docs.map(async d => {
+      let tokens = 0;
+      try { tokens = (await getDocs(collection(dbf, 'users', d.id, 'fcmTokens'))).size; } catch (_) {}
+      return { uid: d.id, ...d.data(), tokens };
+    }));
+    users.sort((a, b) => (b.tokens - a.tokens) || (a.displayName || '').localeCompare(b.displayName || ''));
+    const countEl = document.getElementById('quickCountUsers');
+    if (countEl) countEl.textContent = users.length;
+    if (sel) {
+      const prev = sel.value || 'all';
+      sel.innerHTML = '<option value="all">📣 Todos los usuarios</option>' +
+        users.map(u => `<option value="${escapeHtml(u.uid)}">${escapeHtml(u.displayName || u.email || u.uid.slice(0, 6))}</option>`).join('');
+      sel.value = [...sel.options].some(o => o.value === prev) ? prev : 'all';
+    }
+    if (!users.length) { listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 2px">Sin usuarios registrados.</div>'; return; }
+    listEl.innerHTML = users.map(u => {
+      const name = u.displayName || u.email || '—';
+      const init = (name.trim()[0] || '?').toUpperCase();
+      const av = u.photoURL ? `<div class="up-user-av"><img src="${escapeHtml(u.photoURL)}" alt=""></div>` : `<div class="up-user-av">${escapeHtml(init)}</div>`;
+      const tok = u.tokens > 0 ? `<span class="up-user-tok on">📱 ${u.tokens}</span>` : '<span class="up-user-tok off">sin push</span>';
+      return `<div class="up-user">
+        ${av}
+        <div class="up-user-info"><div class="up-user-name">${escapeHtml(name)}</div><div class="up-user-mail">${escapeHtml(u.email || '')}</div></div>
+        ${tok}
+        <button class="up-user-send" data-push-uid="${escapeHtml(u.uid)}"${u.tokens ? '' : ' disabled style="opacity:.45"'}>Enviar</button>
+      </div>`;
+    }).join('');
+    listEl.querySelectorAll('[data-push-uid]').forEach(b => b.addEventListener('click', () => {
+      if (sel) sel.value = b.dataset.pushUid;
+      document.getElementById('upTitle')?.focus();
+      showToast('Destinatario seleccionado · escribe el mensaje y envía');
+    }));
+  } catch (e) {
+    listEl.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:8px 2px">No se pudieron cargar los usuarios: ${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+document.getElementById('quickTilePush')?.addEventListener('click', openUsersPush);
+document.getElementById('usersPushClose')?.addEventListener('click', closeUsersPush);
+document.getElementById('usersPushSheet')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) closeUsersPush(); });
+document.getElementById('upSend')?.addEventListener('click', async () => {
+  const title = document.getElementById('upTitle')?.value.trim();
+  const body  = document.getElementById('upBody')?.value.trim() || '';
+  const target = document.getElementById('upTarget')?.value || 'all';
+  const fb  = document.getElementById('upFeedback');
+  const btn = document.getElementById('upSend');
+  if (!title) { if (fb) { fb.style.color = 'var(--warn)'; fb.textContent = 'Escribe un título.'; } return; }
+  btn.disabled = true; if (fb) { fb.style.color = 'var(--muted)'; fb.textContent = 'Enviando…'; }
+  try {
+    await setDoc(doc(collection(dbf, 'adminBroadcasts'), uid()), {
+      title, body, target,
+      status: 'sending',
+      createdAt: serverTimestamp(),
+      sentBy: currentUser?.displayName || currentUser?.email || 'Admin',
+    });
+    const tgt = target === 'all' ? 'todos los usuarios' : (document.getElementById('upTarget')?.selectedOptions[0]?.textContent || 'el usuario');
+    if (fb) { fb.style.color = 'var(--success)'; fb.textContent = `Notificación enviada a ${tgt}. Llega en segundos.`; }
+    document.getElementById('upTitle').value = '';
+    document.getElementById('upBody').value = '';
+  } catch (e) {
+    if (fb) { fb.style.color = 'var(--danger)'; fb.textContent = 'Error: ' + (e.message || e); }
+  } finally { btn.disabled = false; }
+});
 document.getElementById('quickNewQuote')?.addEventListener('click', () => openQuoteForm());
 document.getElementById('quickNewClient')?.addEventListener('click', () => openClientForm());
 

@@ -1804,3 +1804,38 @@ main { padding: 14px 14px 20px; }
 .cf-caret { color: var(--muted); transition: transform .2s ease; }
 .filter-panel:not(.collapsed) .cf-caret { transform: rotate(180deg); }
 .filter-panel.collapsed .cf-row { display: none; }
+
+/* ── Tile "Notificar usuarios" (admin) ── */
+.quick-tile-push {
+  background: linear-gradient(135deg, var(--accent), #b45309);
+  border-color: transparent;
+  box-shadow: 0 8px 28px rgba(249,115,22,.35);
+}
+.quick-tile-push .quick-tile-count,
+.quick-tile-push .quick-tile-label { color: #fff; }
+.quick-tile-push:active { transform: scale(.98); }
+
+/* ── Panel notificar usuarios ── */
+.up-body { padding: 4px 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.up-label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.up-label input, .up-label textarea, .up-label select {
+  font-family: var(--font-body); font-size: 14px; color: var(--text);
+  background: var(--card-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 11px 12px; width: 100%; resize: vertical;
+}
+.up-feedback { font-size: 13px; text-align: center; min-height: 18px; }
+.up-users-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-top: 6px; }
+.up-users { display: flex; flex-direction: column; gap: 6px; }
+.up-user {
+  display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+}
+.up-user-av { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; overflow: hidden; }
+.up-user-av img { width: 100%; height: 100%; object-fit: cover; }
+.up-user-info { flex: 1; min-width: 0; }
+.up-user-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-user-mail { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-user-tok { font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.up-user-tok.on { color: var(--success); }
+.up-user-tok.off { color: var(--muted); }
+.up-user-send { flex-shrink: 0; background: rgba(249,115,22,.15); color: var(--accent); border: 1px solid rgba(249,115,22,.35); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
