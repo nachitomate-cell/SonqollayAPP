@@ -130,8 +130,10 @@ function skeletonKpis() {
 }
 
 // ─── Activity logger ───
+const DEV_EMAIL = 'ignaciiio.mate@gmail.com'; // desarrollador: no ensucia el feed de actividad
 async function logActivity(action, detail) {
   if (!currentUser) return;
+  if (currentUser.email === DEV_EMAIL) return; // su "trabajo" se muestra aparte (sesiones/horas)
   try {
     await setDoc(doc(collection(dbf, 'activityLogs'), uid()), {
       uid: currentUser.uid,
@@ -381,6 +383,7 @@ function renderActivityFeed() {
 
   const filter = _actFeedFilter;
   const logs = _actFeedLogs.filter(a => {
+    if (a.email === DEV_EMAIL) return false; // el desarrollador no aparece en el feed
     const cfg = AF_CFG[a.action];
     if (!cfg) return false;
     if (filter === 'all') return true;
@@ -937,6 +940,13 @@ const TOUR_STEPS = [
 ];
 function launchTour() { startAppTour(TOUR_STEPS); }
 document.getElementById('startTourBtn')?.addEventListener('click', launchTour);
+
+// Persiana de filtros: el encabezado expande/colapsa los grupos (clientes y cotizaciones)
+document.addEventListener('click', (e) => {
+  const toggle = e.target.closest('.cf-head-toggle');
+  if (!toggle) return;
+  toggle.closest('.filter-panel')?.classList.toggle('collapsed');
+});
 
 // ── Menú del header (≡) ──
 (function setupHeaderMenu() {

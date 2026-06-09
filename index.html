@@ -298,9 +298,12 @@
           Filtros <span id="filterBadge" class="filter-badge hidden">0</span>
         </button>
       </div>
-      <div class="filter-panel hidden" id="quotesFilterBar">
+      <div class="filter-panel collapsed hidden" id="quotesFilterBar">
         <div class="cf-head">
-          <span class="cf-head-title">Filtros y orden</span>
+          <button type="button" class="cf-head-toggle">
+            <span class="cf-head-title">Filtros y orden</span>
+            <svg class="cf-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+          </button>
           <button class="cf-clear" id="filterClearBtn">Limpiar</button>
         </div>
         <div class="cf-row">
@@ -364,9 +367,12 @@
       </div>
 
       <!-- Panel de filtros -->
-      <div id="clientFilterPanel" class="filter-panel" hidden>
+      <div id="clientFilterPanel" class="filter-panel collapsed" hidden>
         <div class="cf-head">
-          <span class="cf-head-title">Filtros y orden</span>
+          <button type="button" class="cf-head-toggle">
+            <span class="cf-head-title">Filtros y orden</span>
+            <svg class="cf-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+          </button>
           <button id="clientFilterClear" class="cf-clear">Limpiar</button>
         </div>
         <div class="cf-row">

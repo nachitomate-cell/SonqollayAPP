@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap');
 
 :root {
+  color-scheme: dark;
   --bg:        #0a1628;
   --bg-2:      #0f1e36;
   --card:      #142035;
@@ -28,6 +29,7 @@
 
 /* ── Light Mode ── */
 [data-theme="light"] {
+  color-scheme: light;
   --bg:        #f5f7fa;
   --bg-2:      #eaeff6;
   --card:      #ffffff;
@@ -1793,3 +1795,12 @@ main { padding: 14px 14px 20px; }
   font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .push-prompt-btn:active { transform: scale(.97); }
+
+/* ── Persiana (acordeón) del panel de filtros ── */
+.cf-head-toggle {
+  display: flex; align-items: center; gap: 8px; background: none; border: none;
+  cursor: pointer; color: var(--text); font-family: var(--font-body); padding: 2px 0;
+}
+.cf-caret { color: var(--muted); transition: transform .2s ease; }
+.filter-panel:not(.collapsed) .cf-caret { transform: rotate(180deg); }
+.filter-panel.collapsed .cf-row { display: none; }

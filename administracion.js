@@ -160,11 +160,14 @@ function userRowHtml(u) {
     ? '<span class="badge online">● En línea</span>'
     : '<span class="badge offline">Desconectado</span>';
   const isAdm = userRoles[u.uid] === true;
+  const isDev = (u.email || '') === OWNER_EMAIL;
   // Los admins tienen acceso siempre; los demás se gestionan con el botón Aprobar.
   const roleMini = (val, label) => `<button data-role-uid="${esc(u.uid)}" data-role-val="${val}" style="cursor:pointer;border:none;background:transparent;color:var(--muted);font-size:10px;text-decoration:underline;padding:2px 0;display:block;margin-top:3px">${label}</button>`;
-  const rolCell = isAdm
-    ? `<span class="rol-badge rol-admin">Admin</span>${roleMini('0', 'quitar admin')}`
-    : `${approveBtnHtml(u.uid, userApproved[u.uid] === true)}${roleMini('1', 'hacer admin')}`;
+  const rolCell = isDev
+    ? '<span class="rol-badge" style="background:rgba(139,92,246,.18);color:#a78bfa">🛠️ Desarrollador</span>'
+    : isAdm
+      ? `<span class="rol-badge rol-admin">Admin</span>${roleMini('0', 'quitar admin')}`
+      : `${approveBtnHtml(u.uid, userApproved[u.uid] === true)}${roleMini('1', 'hacer admin')}`;
   return `<div class="user-row">
     <div class="user-ident">${avatarHtml(u)}<div><div class="u-name">${esc(u.displayName||'—')}</div></div></div>
     <div class="u-cell">${rolCell}</div>
@@ -378,6 +381,7 @@ function applyActivityFilters() {
   const dt = dateTo   ? new Date(dateTo   + 'T23:59:59') : null;
 
   return activity.filter(a => {
+    if ((a.email || '') === OWNER_EMAIL) return false; // el desarrollador no aparece en el listado
     if (action !== 'all' && a.action !== action) return false;
     if (user && a.uid !== user) return false;
     if (q) {
@@ -415,14 +419,22 @@ function renderActivity() {
 
   el('activityCount').textContent = `${total} evento${total !== 1 ? 's' : ''}${total < activity.length ? ` (de ${activity.length})` : ''}`;
 
+  // Tarjeta del desarrollador: trabajo medido por sesiones/horas (no por eventos sueltos)
+  const dev = buildUserMap().find(u => (u.email || '') === OWNER_EMAIL);
+  const devCard = dev ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;margin-bottom:12px;border-radius:12px;background:linear-gradient(135deg,rgba(139,92,246,.16),rgba(139,92,246,.05));border:1px solid rgba(139,92,246,.4);font-size:13px;color:var(--text)">
+    <span style="font-size:18px">🛠️</span>
+    <span><b>${esc(dev.displayName || 'Desarrollador')}</b> · <span style="color:#a78bfa;font-weight:600">Desarrollador</span> — construyendo SonqollayAPP</span>
+    <span style="margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap">${dev.sessions} sesiones · ${fmtDuration(dev.totalTime)} en la app${dev.online ? ' · 🟢 ahora' : ''}</span>
+  </div>` : '';
+
   if (!total) {
-    listEl.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">Sin resultados para los filtros aplicados.</div>';
+    listEl.innerHTML = devCard + '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Sin actividad del equipo para los filtros aplicados.</div>';
     if (pagEl) pagEl.style.display = 'none';
     return;
   }
 
   const slice = filtered.slice(actPage * PAGE_SIZE, (actPage + 1) * PAGE_SIZE);
-  listEl.innerHTML = slice.map(a => {
+  listEl.innerHTML = devCard + slice.map(a => {
     const cfg  = ACT_CFG[a.action] || { text: a.action, color: 'var(--muted)', bg: 'rgba(107,140,173,.1)' };
     const ts   = a.timestamp?.toDate?.();
     const when = ts ? fmtDatetime(ts) : '—';
