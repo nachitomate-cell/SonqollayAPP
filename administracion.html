@@ -1032,6 +1032,43 @@
   @media (prefers-reduced-motion: reduce) {
     .sec-anim * { animation: none !important; }
   }
+
+  /* ════ Modal de cotización — rediseño ════ */
+  .qm-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  #quoteModalCard { display: flex; flex-direction: column; max-height: 90vh; }
+  #quoteModalCard .admin-form-body { overflow-y: auto; flex: 1; }
+  #quoteModalCard .admin-modal-header, #quoteModalCard .admin-modal-footer { flex-shrink: 0; }
+  .admin-modal-card { animation: qmIn .3s cubic-bezier(.22,.61,.36,1); }
+  @keyframes qmIn { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+  .qm-section { margin-bottom: 20px; }
+  .qm-section:last-child { margin-bottom: 0; }
+  .qm-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin-bottom: 13px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
+  .qm-req { color: var(--danger); }
+  #quoteModalCard .admin-input:focus, #quoteModalCard .admin-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(249,115,22,.18); }
+
+  .qm-money { position: relative; }
+  .qm-money-pre { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 700; pointer-events: none; }
+  .qm-money .admin-input { padding-left: 26px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .qm-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .qm-chip { font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 999px; cursor: pointer; background: var(--bg-2); border: 1px solid var(--border); color: var(--muted); transition: all .15s ease; }
+  .qm-chip:hover { color: var(--text); border-color: var(--accent); }
+  .qm-chip.active { color: #fff; border-color: transparent; }
+  .qm-chip.active[data-estado="Borrador"]   { background: #64748b; }
+  .qm-chip.active[data-estado="Enviada"]     { background: #3b82f6; }
+  .qm-chip.active[data-estado="En revisión"] { background: #f59e0b; }
+  .qm-chip.active[data-estado="Adjudicada"]  { background: var(--success); }
+  .qm-chip.active[data-estado="Perdida"]     { background: var(--danger); }
+
+  .qm-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .qm-tags:empty { display: none; }
+  .qm-tag { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 999px; padding: 5px 6px 5px 11px; font-size: 12.5px; color: var(--text); }
+  .qm-tag button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+  .qm-tag button:hover { color: var(--danger); }
+
+  .qm-del { background: transparent !important; color: var(--danger) !important; border: 1px solid rgba(248,113,113,.35) !important; }
+  .qm-del:hover { background: rgba(248,113,113,.12) !important; }
 </style>
 
 <!-- Auth gate -->
@@ -1680,7 +1717,10 @@
 <div id="quoteModal" class="admin-modal" style="display:none">
   <div class="admin-modal-card" id="quoteModalCard">
     <div class="admin-modal-header">
-      <div class="admin-modal-title" id="quoteModalTitle">Nueva cotización</div>
+      <div>
+        <div class="admin-modal-title" id="quoteModalTitle">Nueva cotización</div>
+        <div class="qm-sub" id="quoteModalSub"></div>
+      </div>
       <button class="admin-modal-close" id="quoteModalClose">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -1688,53 +1728,96 @@
       </button>
     </div>
     <div class="admin-form-body">
-      <div class="admin-form-grid">
-        <div class="admin-form-group">
-          <label for="qEmpresa">Empresa</label>
-          <input class="admin-input" type="text" id="qEmpresa" placeholder="Nombre de la empresa" />
+      <!-- Datos -->
+      <div class="qm-section">
+        <div class="qm-section-title">Datos</div>
+        <div class="admin-form-grid">
+          <div class="admin-form-group">
+            <label for="qEmpresa">Empresa <span class="qm-req">*</span></label>
+            <input class="admin-input" type="text" id="qEmpresa" placeholder="Nombre de la empresa" />
+          </div>
+          <div class="admin-form-group">
+            <label for="qNumero">N° Cotización <span class="qm-req">*</span></label>
+            <input class="admin-input" type="text" id="qNumero" placeholder="Ej: COT-2025-001" />
+          </div>
+          <div class="admin-form-group">
+            <label for="qFecha">Fecha <span class="qm-req">*</span></label>
+            <input class="admin-input" type="date" id="qFecha" style="color-scheme:dark" />
+          </div>
+          <div class="admin-form-group">
+            <label for="qValor">Valor (opcional)</label>
+            <div class="qm-money">
+              <span class="qm-money-pre">$</span>
+              <input class="admin-input" type="text" inputmode="numeric" id="qValor" placeholder="0" autocomplete="off" />
+            </div>
+          </div>
+          <div class="admin-form-group full-width">
+            <label for="qDescripcion">Descripción</label>
+            <input class="admin-input" type="text" id="qDescripcion" placeholder="Descripción de la cotización" />
+          </div>
         </div>
-        <div class="admin-form-group">
-          <label for="qNumero">N° Cotización</label>
-          <input class="admin-input" type="text" id="qNumero" placeholder="Ej: COT-2025-001" />
+      </div>
+
+      <!-- Estado y seguimiento -->
+      <div class="qm-section">
+        <div class="qm-section-title">Estado y seguimiento</div>
+        <div class="admin-form-grid">
+          <div class="admin-form-group full-width">
+            <label>Estado</label>
+            <div class="qm-chips" id="qEstadoChips">
+              <button type="button" class="qm-chip" data-estado="Borrador">Borrador</button>
+              <button type="button" class="qm-chip" data-estado="Enviada">Enviada</button>
+              <button type="button" class="qm-chip" data-estado="En revisión">En revisión</button>
+              <button type="button" class="qm-chip" data-estado="Adjudicada">Adjudicada</button>
+              <button type="button" class="qm-chip" data-estado="Perdida">Perdida</button>
+            </div>
+            <input type="hidden" id="qEstado" value="Borrador" />
+          </div>
+          <div class="admin-form-group">
+            <label for="qSeguimiento">Seguimiento (opcional)</label>
+            <input class="admin-input" type="date" id="qSeguimiento" style="color-scheme:dark" />
+          </div>
+          <div class="admin-form-group">
+            <label for="qValidezDias">Validez (días)</label>
+            <input class="admin-input" type="number" id="qValidezDias" min="1" placeholder="30" />
+          </div>
         </div>
-        <div class="admin-form-group">
-          <label for="qFecha">Fecha</label>
-          <input class="admin-input" type="date" id="qFecha" style="color-scheme:dark" />
+      </div>
+
+      <!-- Detalle para el PDF -->
+      <div class="qm-section">
+        <div class="qm-section-title">Detalle para el PDF</div>
+        <div class="admin-form-grid">
+          <div class="admin-form-group">
+            <label for="qRut">RUT cliente</label>
+            <input class="admin-input" type="text" id="qRut" placeholder="76.123.456-7" />
+          </div>
+          <div class="admin-form-group">
+            <label for="qFormaPago">Forma de pago</label>
+            <input class="admin-input" type="text" id="qFormaPago" placeholder="Ej: 50% anticipo, 50% contra entrega" />
+          </div>
         </div>
-        <div class="admin-form-group">
-          <label for="qValor">Valor (opcional)</label>
-          <input class="admin-input" type="number" id="qValor" placeholder="Valor en CLP" min="0" />
-        </div>
-        <div class="admin-form-group full-width">
-          <label for="qDescripcion">Descripción</label>
-          <input class="admin-input" type="text" id="qDescripcion" placeholder="Descripción de la cotización" />
-        </div>
-        <div class="admin-form-group full-width">
-          <label for="qContactos">Contactos (emails separados por ;)</label>
-          <input class="admin-input" type="text" id="qContactos" placeholder="email1@empresa.com; email2@empresa.com" />
-        </div>
-        <div class="admin-form-group">
-          <label for="qEstado">Estado</label>
-          <select class="admin-select" id="qEstado">
-            <option value="Borrador">Borrador</option>
-            <option value="Enviada">Enviada</option>
-            <option value="En revisión">En revisión</option>
-            <option value="Adjudicada">Adjudicada</option>
-            <option value="Perdida">Perdida</option>
-          </select>
-        </div>
-        <div class="admin-form-group">
-          <label for="qSeguimiento">Seguimiento (opcional)</label>
-          <input class="admin-input" type="date" id="qSeguimiento" style="color-scheme:dark" />
-        </div>
-        <div class="admin-form-group full-width">
-          <label for="qNotas">Notas (opcional)</label>
-          <textarea class="admin-textarea" id="qNotas" placeholder="Notas internas sobre esta cotización..."></textarea>
+      </div>
+
+      <!-- Contactos y notas -->
+      <div class="qm-section">
+        <div class="qm-section-title">Contactos y notas</div>
+        <div class="admin-form-grid">
+          <div class="admin-form-group full-width">
+            <label for="qContactInput">Contactos</label>
+            <div class="qm-tags" id="qContactTags"></div>
+            <input class="admin-input" type="text" id="qContactInput" placeholder="Escribe un email y presiona Enter" autocomplete="off" />
+            <input type="hidden" id="qContactos" />
+          </div>
+          <div class="admin-form-group full-width">
+            <label for="qNotas">Notas (opcional)</label>
+            <textarea class="admin-textarea" id="qNotas" placeholder="Notas internas sobre esta cotización..."></textarea>
+          </div>
         </div>
       </div>
     </div>
     <div class="admin-modal-footer">
-      <button class="btn-delete" id="quoteDeleteBtn" style="display:none">Eliminar</button>
+      <button class="btn-delete qm-del" id="quoteDeleteBtn" style="display:none">🗑️ Eliminar</button>
       <button class="btn-cancel" id="quoteHistoryBtn" style="display:none">📜 Historial</button>
       <div class="spacer"></div>
       <button class="btn-cancel" id="quoteModalCancel">Cancelar</button>

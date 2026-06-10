@@ -1173,23 +1173,75 @@ function renderClients() {
 // ── Quote Modal ──
 let quoteEditId = null;
 
+// ── Helpers del modal de cotización ──
+function fmtMoneyInput(v) {
+  const n = String(v == null ? '' : v).replace(/\D/g, '');
+  return n ? Number(n).toLocaleString('es-CL') : '';
+}
+function setEstadoChips(estado) {
+  el('qEstado').value = estado || 'Borrador';
+  document.querySelectorAll('#qEstadoChips .qm-chip').forEach(c =>
+    c.classList.toggle('active', c.dataset.estado === el('qEstado').value));
+}
+let quoteContacts = [];
+function renderContactTags() {
+  const wrap = el('qContactTags');
+  if (!wrap) return;
+  wrap.innerHTML = quoteContacts.map((e, i) =>
+    `<span class="qm-tag">${esc(e)}<button type="button" data-ci="${i}" aria-label="Quitar">✕</button></span>`).join('');
+  wrap.querySelectorAll('[data-ci]').forEach(b => b.addEventListener('click', () => {
+    quoteContacts.splice(Number(b.dataset.ci), 1);
+    el('qContactos').value = quoteContacts.join('; ');
+    renderContactTags();
+  }));
+}
+function setContacts(arr) {
+  quoteContacts = (arr || []).map(s => String(s).trim()).filter(Boolean);
+  el('qContactos').value = quoteContacts.join('; ');
+  renderContactTags();
+}
+function addContactsFromInput() {
+  const inp = el('qContactInput');
+  if (!inp) return;
+  inp.value.split(/[;,]+/).map(s => s.trim()).filter(Boolean).forEach(e => {
+    if (!quoteContacts.includes(e)) quoteContacts.push(e);
+  });
+  el('qContactos').value = quoteContacts.join('; ');
+  renderContactTags();
+  inp.value = '';
+}
+
 function openQuoteModal(qt = null) {
   quoteEditId = qt ? qt.id : null;
   el('quoteModalTitle').textContent = qt ? 'Editar cotización' : 'Nueva cotización';
+  el('quoteModalSub').textContent = qt ? [qt.numero, qt.empresa].filter(Boolean).join(' · ') : 'Completa los datos de la nueva cotización';
   el('qEmpresa').value    = qt?.empresa     || '';
   el('qNumero').value     = qt?.numero      || '';
   el('qFecha').value      = qt?.fecha       || '';
-  el('qValor').value      = qt?.valor != null ? qt.valor : '';
+  el('qValor').value      = qt?.valor != null ? fmtMoneyInput(qt.valor) : '';
   el('qDescripcion').value= qt?.descripcion || '';
-  el('qContactos').value  = Array.isArray(qt?.contactos) ? qt.contactos.join('; ') : (qt?.contactos || '');
-  el('qEstado').value     = qt?.estado      || 'Borrador';
   el('qSeguimiento').value= qt?.seguimiento || '';
   el('qNotas').value      = qt?.notas       || '';
+  el('qRut').value        = qt?.rut         || '';
+  el('qFormaPago').value  = qt?.formaPago    || '';
+  el('qValidezDias').value= qt?.validezDias != null ? qt.validezDias : '';
+  setEstadoChips(qt?.estado || 'Borrador');
+  setContacts(Array.isArray(qt?.contactos) ? qt.contactos : (qt?.contactos ? String(qt.contactos).split(/[;,]+/) : []));
   el('quoteDeleteBtn').style.display = qt ? '' : 'none';
   quoteEditLog = Array.isArray(qt?._log) ? qt._log : [];
   el('quoteHistoryBtn').style.display = quoteEditLog.length ? '' : 'none';
   el('quoteModal').style.display = '';
 }
+
+// Interacciones del modal (una sola vez)
+el('qEstadoChips')?.addEventListener('click', e => {
+  const c = e.target.closest('.qm-chip'); if (c) setEstadoChips(c.dataset.estado);
+});
+el('qValor')?.addEventListener('input', e => { e.target.value = fmtMoneyInput(e.target.value); });
+el('qContactInput')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ';' || e.key === ',') { e.preventDefault(); addContactsFromInput(); }
+});
+el('qContactInput')?.addEventListener('blur', addContactsFromInput);
 
 let quoteEditLog = [];
 el('quoteHistoryBtn')?.addEventListener('click', () => {
@@ -1219,20 +1271,27 @@ el('quoteModal')?.addEventListener('click', e => {
 el('quoteModalCard')?.addEventListener('click', e => e.stopPropagation());
 
 el('quoteModalSave')?.addEventListener('click', async () => {
+  addContactsFromInput(); // captura el email que quedó escrito sin confirmar
   const empresa     = el('qEmpresa').value.trim();
   const numero      = el('qNumero').value.trim();
   const fecha       = el('qFecha').value;
-  const valorRaw    = el('qValor').value.trim();
   const descripcion = el('qDescripcion').value.trim();
-  const contactosRaw= el('qContactos').value.trim();
-  const estado      = el('qEstado').value;
+  const estado      = el('qEstado').value || 'Borrador';
   const seguimiento = el('qSeguimiento').value;
   const notas       = el('qNotas').value.trim();
+  const rut         = el('qRut').value.trim();
+  const formaPago   = el('qFormaPago').value.trim();
+  const validezRaw  = el('qValidezDias').value.trim();
 
-  const valor = valorRaw !== '' ? Number(valorRaw) : null;
-  const contactos = contactosRaw
-    ? contactosRaw.split(';').map(s => s.trim()).filter(Boolean)
-    : [];
+  const valorDigits = el('qValor').value.replace(/\D/g, '');
+  const valor = valorDigits ? Number(valorDigits) : null;
+  const contactos = quoteContacts.slice();
+  const validezDias = validezRaw ? Number(validezRaw) : null;
+
+  if (!empresa || !numero || !fecha) {
+    adminToast('Empresa, N° y fecha son obligatorios', true);
+    return;
+  }
 
   const btn = el('quoteModalSave');
   btn.disabled = true;
@@ -1243,7 +1302,7 @@ el('quoteModalSave')?.addEventListener('click', async () => {
       valor: valor !== null ? valor : null,
       contactos, estado,
       seguimiento: seguimiento || null,
-      notas,
+      notas, rut, formaPago, validezDias,
       updatedAt: serverTimestamp(),
     };
 
