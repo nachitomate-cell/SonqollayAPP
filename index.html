@@ -592,8 +592,14 @@
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
         </button>
         <h2>Administración</h2>
-        <div style="width:38px"></div>
+        <a class="icon-btn" href="/administracion" title="Abrir panel completo" aria-label="Abrir panel de administración completo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+        </a>
       </div>
+      <a class="admin-fullpanel-btn" href="/administracion">
+        <span>Abrir panel completo</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+      </a>
 
       <!-- Sin acceso -->
       <div id="adminGate" class="empty" style="margin-top:32px;display:none">
@@ -1016,6 +1022,41 @@
       <button class="aff" data-aff="clients">Clientes</button>
     </div>
     <div id="afList" class="af-list"></div>
+  </div>
+
+  <!-- ── Detalle de una actividad ── -->
+  <div id="afDetailModal" class="modal-overlay hidden">
+    <div class="af-detail-card">
+      <button class="icon-btn af-detail-close" id="afDetailClose" aria-label="Cerrar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+      <div class="af-detail-head">
+        <div class="af-avatar af-detail-avatar" id="afdAvatar"></div>
+        <div>
+          <div class="af-detail-name" id="afdName"></div>
+          <div class="af-detail-email" id="afdEmail"></div>
+        </div>
+      </div>
+      <div class="af-detail-action" id="afdAction"></div>
+      <div class="af-detail-rows">
+        <div class="af-detail-row" id="afdDetailRow">
+          <span class="af-detail-k">Detalle</span>
+          <span class="af-detail-v" id="afdDetail"></span>
+        </div>
+        <div class="af-detail-row">
+          <span class="af-detail-k">Fecha</span>
+          <span class="af-detail-v" id="afdFecha"></span>
+        </div>
+        <div class="af-detail-row">
+          <span class="af-detail-k">Hora</span>
+          <span class="af-detail-v" id="afdHora"></span>
+        </div>
+        <div class="af-detail-row">
+          <span class="af-detail-k">Hace</span>
+          <span class="af-detail-v" id="afdHace"></span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ── Notificar usuarios (solo admin) ── -->

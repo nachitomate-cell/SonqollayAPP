@@ -1,6 +1,6 @@
 // Service worker de la app (cache de shell para offline).
 // El SW de FCM es ./firebase-messaging-sw.js (registrado aparte).
-const CACHE = 'sonqollay-v36';
+const CACHE = 'sonqollay-v37';
 const ASSETS = [
   './',
   './index.html',
