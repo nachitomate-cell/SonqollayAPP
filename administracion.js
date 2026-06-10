@@ -24,6 +24,8 @@ let quotes     = [];
 let clients    = [];
 let adminNotes = [];
 let notifTemplates = []; // pool de plantillas de notificación push guardadas
+let acadEvents     = []; // eventos de Academia (reuniones/clases)
+let acadEditId     = null;
 let userRoles    = {}; // uid → boolean (isAdmin)
 let userApproved = {}; // uid → boolean (approved, acceso a datos)
 let userProfiles = {}; // uid → displayName || email (todos los usuarios registrados)
@@ -35,6 +37,7 @@ let unsubQuotes    = null;
 let unsubClients   = null;
 let unsubNotes     = null;
 let unsubNotifTpl  = null;
+let unsubAcad      = null;
 let currentSection = 'overview';
 
 // Activity filter + pagination state
@@ -659,6 +662,119 @@ el('addNoteBtn')?.addEventListener('click', async () => {
 });
 
 el('goRecordatoriosBtn')?.addEventListener('click', () => showSection('recordatorios'));
+
+// ── Academia ──
+function renderAcademia() {
+  const listEl = el('acadAdminList');
+  const countEl = el('acadCount');
+  if (!listEl) return;
+  if (countEl) countEl.textContent = `${acadEvents.length} evento${acadEvents.length !== 1 ? 's' : ''}`;
+  if (!acadEvents.length) {
+    listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Aún no hay reuniones ni clases agendadas.</div>';
+    return;
+  }
+  const now = Date.now();
+  const today = new Date();
+  const isToday = d => d.toDateString() === today.toDateString();
+  const fmtDT = d => d.toLocaleString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const groups = { hoy: [], prox: [], pasados: [] };
+  acadEvents.forEach(ev => {
+    const d = ev.fechaHora?.toDate?.(); if (!d) return;
+    if (isToday(d)) groups.hoy.push({ ev, d });
+    else if (d.getTime() >= now) groups.prox.push({ ev, d });
+    else groups.pasados.push({ ev, d });
+  });
+  groups.pasados.reverse();
+  const card = ({ ev, d }) => {
+    const past = d.getTime() < now;
+    const emoji = ev.tipo === 'Clase' ? '📚' : '🤝';
+    return `<div class="rec-card" style="${past ? 'opacity:.6;' : ''}display:flex;align-items:flex-start;gap:12px;margin-bottom:8px">
+      <div style="font-size:22px">${emoji}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;color:var(--text);font-size:14px">${esc(ev.titulo || '(sin título)')}</div>
+        <div style="color:var(--accent);font-weight:600;font-size:13px;text-transform:capitalize">${esc(fmtDT(d))}</div>
+        ${ev.descripcion ? `<div style="color:var(--muted);font-size:12.5px;margin-top:3px">${esc(ev.descripcion)}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="acad-edit" data-id="${esc(ev.id)}" style="background:var(--card-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer">Editar</button>
+        <button class="acad-del" data-id="${esc(ev.id)}" style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);color:#f87171;border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer">Eliminar</button>
+      </div>
+    </div>`;
+  };
+  const sep = t => `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 8px">${t}</div>`;
+  let html = '';
+  if (groups.hoy.length)     html += sep('Hoy') + groups.hoy.map(card).join('');
+  if (groups.prox.length)    html += sep('Próximos') + groups.prox.map(card).join('');
+  if (groups.pasados.length) html += sep('Pasados') + groups.pasados.map(card).join('');
+  listEl.innerHTML = html;
+  listEl.querySelectorAll('.acad-edit').forEach(b => b.addEventListener('click', () => acadStartEdit(b.dataset.id)));
+  listEl.querySelectorAll('.acad-del').forEach(b => b.addEventListener('click', () => acadDelete(b.dataset.id)));
+}
+
+function acadStartEdit(id) {
+  const ev = acadEvents.find(e => e.id === id); if (!ev) return;
+  acadEditId = id;
+  const pad = n => String(n).padStart(2, '0');
+  el('acadTipo').value = ev.tipo || 'Reunión';
+  el('acadTitulo').value = ev.titulo || '';
+  el('acadDesc').value = ev.descripcion || '';
+  const d = ev.fechaHora?.toDate?.();
+  el('acadFecha').value = d ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` : '';
+  el('acadHora').value = d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : '';
+  el('acadAddBtn').textContent = 'Actualizar';
+  el('acadCancelBtn').style.display = '';
+  el('acadFeedback').textContent = '';
+  el('sectionAcademia').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function acadResetForm() {
+  acadEditId = null;
+  el('acadTipo').value = 'Reunión';
+  el('acadTitulo').value = ''; el('acadDesc').value = '';
+  el('acadFecha').value = ''; el('acadHora').value = '';
+  el('acadAddBtn').textContent = 'Agendar';
+  el('acadCancelBtn').style.display = 'none';
+}
+
+async function acadDelete(id) {
+  if (!confirm('¿Eliminar este evento de la agenda?')) return;
+  try { await deleteDoc(doc(db, 'academiaEventos', id)); if (acadEditId === id) acadResetForm(); }
+  catch (e) { console.error('Eliminar evento', e); }
+}
+
+el('acadCancelBtn')?.addEventListener('click', acadResetForm);
+el('acadAddBtn')?.addEventListener('click', async () => {
+  const tipo = el('acadTipo').value;
+  const titulo = el('acadTitulo').value.trim();
+  const descripcion = el('acadDesc').value.trim();
+  const fecha = el('acadFecha').value;
+  const hora = el('acadHora').value;
+  const fb = el('acadFeedback');
+  if (!titulo) { fb.style.color = '#f59e0b'; fb.textContent = 'Escribe un título.'; return; }
+  if (!fecha || !hora) { fb.style.color = '#f59e0b'; fb.textContent = 'Indica fecha y hora.'; return; }
+  const dt = new Date(`${fecha}T${hora}`);
+  if (isNaN(dt.getTime())) { fb.style.color = '#f59e0b'; fb.textContent = 'Fecha u hora inválida.'; return; }
+  const btn = el('acadAddBtn'); btn.disabled = true;
+  fb.style.color = 'var(--muted)'; fb.textContent = 'Guardando…';
+  try {
+    const user = auth.currentUser;
+    if (acadEditId) {
+      await setDoc(doc(db, 'academiaEventos', acadEditId), {
+        tipo, titulo, descripcion, fechaHora: dt,
+        notified15: false, notifiedDay: false, updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } else {
+      await addDoc(collection(db, 'academiaEventos'), {
+        tipo, titulo, descripcion, fechaHora: dt,
+        notified15: false, notifiedDay: false,
+        createdBy: user?.displayName || user?.email || 'Admin', createdAt: serverTimestamp(),
+      });
+    }
+    acadResetForm();
+    fb.style.color = '#22c55e'; fb.textContent = 'Guardado · se avisará por push.';
+  } catch (e) { fb.style.color = '#ef4444'; fb.textContent = 'Error: ' + (e.message || e); }
+  finally { btn.disabled = false; }
+});
 
 // ── Quotes ──
 function estadoBadgeClass(estado) {
@@ -1399,6 +1515,12 @@ function subscribe() {
     notifTemplates = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderNotifTemplates();
   }, snapErr('las plantillas'));
+
+  const acadQ = query(collection(db, 'academiaEventos'), orderBy('fechaHora', 'asc'));
+  unsubAcad = onSnapshot(acadQ, snap => {
+    acadEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderAcademia();
+  }, snapErr('la agenda de Academia'));
 }
 
 function unsubscribe() {
@@ -1409,6 +1531,7 @@ function unsubscribe() {
   unsubClients?.();   unsubClients   = null;
   unsubNotes?.();     unsubNotes     = null;
   unsubNotifTpl?.();  unsubNotifTpl  = null;
+  unsubAcad?.();      unsubAcad      = null;
 }
 
 // ── Sections ──
@@ -1432,7 +1555,7 @@ const TITLES = {
   notifications:  ['Notificaciones', 'Envía mensajes push a todos los usuarios'],
   quotes:         ['Cotizaciones',   'Gestión de cotizaciones de la empresa'],
   clients:        ['Clientes',       'Gestión de clientes de la empresa'],
-  academia:       ['Academia',       'Próximamente — comparte tus sugerencias'],
+  academia:       ['Academia',       'Agenda de reuniones y clases con aviso por push'],
 };
 
 function showSection(name) {
@@ -1442,6 +1565,7 @@ function showSection(name) {
   el('pageTitle').textContent = TITLES[name][0];
   el('pageSub').textContent   = TITLES[name][1];
   if (name === 'comercial') renderComercial();
+  if (name === 'academia') renderAcademia();
 }
 
 // ── UI gates ──

@@ -1015,7 +1015,6 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5"/>
         </svg>
         Academia
-        <span style="font-size:9px;font-weight:700;background:var(--indigo);color:#fff;padding:2px 6px;border-radius:20px;margin-left:auto;letter-spacing:.04em">PRONTO</span>
       </button>
     </nav>
 
@@ -1406,18 +1405,43 @@
       </div>
 
       <!-- ACADEMIA -->
-      <div id="sectionAcademia" class="view academia-coming-soon">
-        <div class="academia-inner">
-          <img src="icon-512.png" alt="Sonqollay" class="academia-logo" />
-          <div class="academia-title">Academia Sonqollay</div>
-          <div class="academia-phrase">El conocimiento que transforma<br>está en camino.</div>
-          <div class="academia-badge">Próximamente</div>
-          <p class="academia-sub">
-            Estamos construyendo algo especial para ti.<br>
-            ¿Tienes ideas de qué quieres aprender?<br>
-            <strong>Tus sugerencias dan forma a lo que viene.</strong>
-          </p>
+      <div id="sectionAcademia" class="view">
+        <div class="section-header">
+          <div class="section-title-lg">Academia</div>
+          <span class="section-count" id="acadCount">0 eventos</span>
         </div>
+        <div class="rec-form">
+          <div class="form-label" style="margin-bottom:10px">Agendar reunión o clase</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <label class="form-label">Tipo</label>
+              <select id="acadTipo" class="admin-input" style="width:100%"><option value="Reunión">🤝 Reunión</option><option value="Clase">📚 Clase</option></select>
+            </div>
+            <div>
+              <label class="form-label">Título</label>
+              <input id="acadTitulo" class="admin-input" style="width:100%" type="text" maxlength="100" placeholder="Ej: Clase de Excel avanzado" />
+            </div>
+            <div style="grid-column:1 / -1">
+              <label class="form-label">Descripción (opcional)</label>
+              <textarea id="acadDesc" class="admin-input" style="width:100%;resize:vertical" rows="2" maxlength="300" placeholder="Tema, enlace de videollamada, sala…"></textarea>
+            </div>
+            <div>
+              <label class="form-label">Fecha</label>
+              <input id="acadFecha" class="admin-input" style="width:100%;color-scheme:dark" type="date" />
+            </div>
+            <div>
+              <label class="form-label">Hora</label>
+              <input id="acadHora" class="admin-input" style="width:100%;color-scheme:dark" type="time" />
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
+            <span id="acadFeedback" style="font-size:13px"></span>
+            <button class="new-btn" id="acadCancelBtn" style="margin-left:auto;display:none;background:var(--card-2);color:var(--text)">Cancelar</button>
+            <button class="new-btn" id="acadAddBtn" style="margin-left:auto">Agendar</button>
+          </div>
+          <p class="form-label" style="margin-top:10px;opacity:.75">Se envía push a todos los usuarios: el mismo día (08:00) y 15 minutos antes.</p>
+        </div>
+        <div id="acadAdminList"></div>
       </div>
 
     </div>
