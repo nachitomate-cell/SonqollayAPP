@@ -1869,3 +1869,17 @@ main { padding: 14px 14px 20px; }
 /* ── Insignia Desarrollador en vista admin ── */
 .dev-tag { display: inline-block; font-size: 10px; font-weight: 700; color: #a78bfa; background: rgba(139,92,246,.18); padding: 2px 7px; border-radius: 999px; vertical-align: middle; margin-left: 4px; white-space: nowrap; }
 .admin-user-card.is-dev { border-color: rgba(139,92,246,.45); background: linear-gradient(135deg, rgba(139,92,246,.09), transparent); }
+
+/* ── Academia ── */
+.acad-sub { color: var(--muted); font-size: 13px; padding: 0 16px 14px; line-height: 1.5; }
+.acad-list { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 28px; }
+.acad-sep { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 10px 0 2px; }
+.acad-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; cursor: pointer; font-family: var(--font-body); }
+.acad-card:active { transform: scale(.99); }
+.acad-card.past { opacity: .55; }
+.acad-card-icon { font-size: 22px; flex-shrink: 0; }
+.acad-card-body { flex: 1; min-width: 0; }
+.acad-card-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.acad-card-when { font-size: 12.5px; color: var(--accent); font-weight: 600; margin-top: 1px; text-transform: capitalize; }
+.acad-card-desc { font-size: 12px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acad-card-tag { flex-shrink: 0; font-size: 10px; font-weight: 700; color: var(--muted); background: var(--card-2); border-radius: 999px; padding: 3px 8px; }

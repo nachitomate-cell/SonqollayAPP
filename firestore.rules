@@ -69,6 +69,12 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // Academia: agenda de reuniones y clases del equipo (la Cloud Function actualiza
+    // los flags de aviso con Admin SDK, fuera de estas reglas)
+    match /academiaEventos/{id} {
+      allow read, write: if isMember();
+    }
+
     // Configuración global (versión de app, etc.)
     match /config/{id} {
       allow read: if request.auth != null;

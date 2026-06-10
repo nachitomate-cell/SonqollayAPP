@@ -6,7 +6,7 @@ const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onDocumentWritten } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
 const logger = require('firebase-functions/logger');
 
@@ -201,6 +201,63 @@ exports.dailyFollowUpReminders = onSchedule(
 exports.eveningFollowUpReminders = onSchedule(
   { schedule: '0 18 * * *', timeZone: 'America/Santiago', region: 'us-central1' },
   runFollowUpDigest
+);
+
+// ---------- Academia: recordatorios de reuniones/clases (15 min antes + el mismo día) ----------
+function fmtHoraCL(date) {
+  return date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+}
+function sameDayCL(a, b) {
+  const f = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Santiago' });
+  return f(a) === f(b);
+}
+function hourCL(date) {
+  const h = date.toLocaleString('en-US', { hour: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+  return parseInt(h, 10) || 0;
+}
+
+exports.academiaReminders = onSchedule(
+  { schedule: '*/5 * * * *', timeZone: 'America/Santiago', region: 'us-central1' },
+  async () => {
+    const now = new Date();
+    const in15 = new Date(now.getTime() + 15 * 60000);
+    const fromBuffer = Timestamp.fromDate(new Date(now.getTime() - 60 * 60000));
+    const dayAhead = Timestamp.fromDate(new Date(now.getTime() + 24 * 60 * 60000));
+    let snap;
+    try {
+      snap = await db.collection('academiaEventos')
+        .where('fechaHora', '>=', fromBuffer)
+        .where('fechaHora', '<=', dayAhead)
+        .get();
+    } catch (e) { logger.error('academiaReminders query', e); return; }
+
+    for (const docSnap of snap.docs) {
+      const ev = docSnap.data();
+      if (!ev.fechaHora || !ev.fechaHora.toDate) continue;
+      const when = ev.fechaHora.toDate();
+      const tipo = ev.tipo || 'Reunión';
+      const titulo = ev.titulo || '(sin título)';
+      const desc = ev.descripcion ? ' · ' + ev.descripcion : '';
+      try {
+        // Aviso "el mismo día" (a partir de las 08:00 de Chile, una sola vez)
+        if (!ev.notifiedDay && when > now && sameDayCL(when, now) && hourCL(now) >= 8) {
+          await sendToAll(
+            { title: `📅 Hoy ${tipo.toLowerCase()}: ${titulo}`, body: `A las ${fmtHoraCL(when)}${desc}` },
+            { kind: 'academia', eventoId: docSnap.id }
+          );
+          await docSnap.ref.update({ notifiedDay: true });
+        }
+        // Aviso 15 minutos antes
+        if (!ev.notified15 && when > now && when <= in15) {
+          await sendToAll(
+            { title: `⏰ ${tipo} en 15 min: ${titulo}`, body: `Comienza a las ${fmtHoraCL(when)}${desc}` },
+            { kind: 'academia', eventoId: docSnap.id }
+          );
+          await docSnap.ref.update({ notified15: true });
+        }
+      } catch (e) { logger.error('academiaReminders send', docSnap.id, e); }
+    }
+  }
 );
 
 // ---------- 2) Notificaciones sobre cotizaciones (trigger único consolidado) ----------

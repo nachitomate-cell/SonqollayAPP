@@ -606,6 +606,20 @@
         <div id="admin-act-pagination" class="home-pagination"></div>
       </div>
     </section>
+
+    <!-- ── Academia ── -->
+    <section id="view-academia" class="view">
+      <div class="admin-view-header">
+        <button class="icon-btn" id="acadBack" aria-label="Volver">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
+        </button>
+        <h2>Academia</h2>
+        <div style="width:38px"></div>
+      </div>
+      <p class="acad-sub">Agenda de reuniones y clases. Avisamos por push <b>el mismo día</b> y <b>15 minutos antes</b>.</p>
+      <button class="btn btn-block" id="acadNew" style="margin:0 16px 14px;width:calc(100% - 32px)">+ Agendar reunión o clase</button>
+      <div id="acadList" class="acad-list"></div>
+    </section>
   </main>
 
   <!-- ── Bottom Navigation ── -->
@@ -1008,6 +1022,35 @@
       <div id="upFeedback" class="up-feedback"></div>
       <div class="up-users-title">Destinatarios <span id="upSelCount"></span></div>
       <div id="upUsersList" class="up-users"></div>
+    </div>
+  </div>
+
+  <!-- ── Agendar / editar evento de Academia ── -->
+  <div id="acadSheet" class="bottom-sheet hidden">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header" style="flex-shrink:0">
+      <h2 class="sheet-title" id="acadSheetTitle">Agendar</h2>
+      <button class="icon-btn" id="acadClose" aria-label="Cerrar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="up-body">
+      <label class="up-label">Tipo
+        <select id="acadTipo"><option value="Reunión">🤝 Reunión</option><option value="Clase">📚 Clase</option></select>
+      </label>
+      <label class="up-label">Título
+        <input id="acadTitulo" type="text" maxlength="100" placeholder="Ej: Clase de Excel avanzado" />
+      </label>
+      <label class="up-label">Descripción (opcional)
+        <textarea id="acadDesc" rows="2" maxlength="300" placeholder="Tema, enlace, sala…"></textarea>
+      </label>
+      <div style="display:flex;gap:10px">
+        <label class="up-label" style="flex:1">Fecha<input id="acadFecha" type="date" /></label>
+        <label class="up-label" style="flex:1">Hora<input id="acadHora" type="time" /></label>
+      </div>
+      <button class="btn btn-block" id="acadSave">Guardar</button>
+      <button class="btn btn-outline btn-block hidden" id="acadDelete" style="color:var(--danger);border-color:rgba(248,113,113,.4)">Eliminar</button>
+      <div id="acadFeedback" class="up-feedback"></div>
     </div>
   </div>
 
