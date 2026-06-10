@@ -250,6 +250,17 @@ function _biBars(items, opts = {}) {
   }).join('') + '</div>';
 }
 
+// Dispara las animaciones de entrada solo al abrir la sección (no en cada snapshot)
+function triggerComAnim() {
+  const s = el('sectionComercial');
+  if (!s) return;
+  s.classList.remove('com-anim');
+  void s.offsetWidth; // reinicia las animaciones
+  s.classList.add('com-anim');
+  clearTimeout(triggerComAnim._t);
+  triggerComAnim._t = setTimeout(() => s.classList.remove('com-anim'), 1500);
+}
+
 function renderComercial() {
   const kpisEl = el('comKpis');
   const chartsEl = el('comCharts');
@@ -335,8 +346,12 @@ function renderComercial() {
     byUser[uid].creadas++;
     if (q.estado === 'Adjudicada') { byUser[uid].adjudicadas++; byUser[uid].monto += Number(q.valor) || 0; }
   });
-  const ranking = Object.values(byUser).sort((a, b) => b.monto - a.monto || b.adjudicadas - a.adjudicadas || b.creadas - a.creadas);
-  const nameOf = r => nameMap[r.uid] || (r.uid === 'desconocido' ? 'Sin autor' : 'Sin nombre');
+  // Solo creadores que son usuarios reales (con identidad resoluble). Las cotizaciones
+  // de ejemplo/semilla o de cuentas inexistentes no inflan el ranking del equipo.
+  const ranking = Object.values(byUser)
+    .filter(r => !!nameMap[r.uid])
+    .sort((a, b) => b.monto - a.monto || b.adjudicadas - a.adjudicadas || b.creadas - a.creadas);
+  const nameOf = r => nameMap[r.uid] || 'Sin nombre';
   const medals = ['🥇', '🥈', '🥉'];
   const podium = ranking.slice(0, 3);
   const rest = ranking.slice(3, 10);
@@ -1815,7 +1830,7 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.section === name));
   el('pageTitle').textContent = TITLES[name][0];
   el('pageSub').textContent   = TITLES[name][1];
-  if (name === 'comercial') renderComercial();
+  if (name === 'comercial') { renderComercial(); triggerComAnim(); }
   if (name === 'academia') renderAcademia();
 }
 
