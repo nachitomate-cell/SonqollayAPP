@@ -238,12 +238,22 @@ exports.academiaReminders = onSchedule(
       const tipo = ev.tipo || 'Reunión';
       const titulo = ev.titulo || '(sin título)';
       const desc = ev.descripcion ? ' · ' + ev.descripcion : '';
+      // Segmentación: si el evento es solo para participantes seleccionados, avisar
+      // únicamente a esos usuarios. Si participantesTodos !== false → a todos.
+      const soloSeleccion = ev.participantesTodos === false && Array.isArray(ev.participantes);
+      const targetOpts = soloSeleccion ? { onlyUids: ev.participantes } : {};
+      // Sin participantes asignados no hay a quién avisar: marca como notificado y sigue.
+      if (soloSeleccion && !ev.participantes.length) {
+        try { await docSnap.ref.update({ notifiedDay: true, notified15: true }); } catch (e) { /* noop */ }
+        continue;
+      }
       try {
         // Aviso "el mismo día" (a partir de las 08:00 de Chile, una sola vez)
         if (!ev.notifiedDay && when > now && sameDayCL(when, now) && hourCL(now) >= 8) {
           await sendToAll(
             { title: `📅 Hoy ${tipo.toLowerCase()}: ${titulo}`, body: `A las ${fmtHoraCL(when)}${desc}` },
-            { kind: 'academia', eventoId: docSnap.id }
+            { kind: 'academia', eventoId: docSnap.id },
+            targetOpts
           );
           await docSnap.ref.update({ notifiedDay: true });
         }
@@ -251,7 +261,8 @@ exports.academiaReminders = onSchedule(
         if (!ev.notified15 && when > now && when <= in15) {
           await sendToAll(
             { title: `⏰ ${tipo} en 15 min: ${titulo}`, body: `Comienza a las ${fmtHoraCL(when)}${desc}` },
-            { kind: 'academia', eventoId: docSnap.id }
+            { kind: 'academia', eventoId: docSnap.id },
+            targetOpts
           );
           await docSnap.ref.update({ notified15: true });
         }

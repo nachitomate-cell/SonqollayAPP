@@ -8,12 +8,16 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, addDoc, deleteDoc, setDoc, onSnapshot,
   query, orderBy, limit, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+import {
+  getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject
+} from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js';
 import { firebaseConfig } from './firebase-config.js';
 
 // ── Init ──
 const fbApp = initializeApp(firebaseConfig, 'admin-panel');
 const auth  = getAuth(fbApp);
 const db    = getFirestore(fbApp);
+const storage = getStorage(fbApp);
 const gProvider = new GoogleAuthProvider();
 
 // ── State ──
@@ -26,6 +30,7 @@ let adminNotes = [];
 let notifTemplates = []; // pool de plantillas de notificación push guardadas
 let acadEvents     = []; // eventos de Academia (reuniones/clases)
 let acadEditId     = null;
+let acadPendingFiles = []; // presentaciones (PowerPoint) seleccionadas en el formulario, aún sin subir
 let userRoles    = {}; // uid → boolean (isAdmin)
 let userApproved = {}; // uid → boolean (approved, acceso a datos)
 let userProfiles = {}; // uid → displayName || email (todos los usuarios registrados)
@@ -224,18 +229,25 @@ function _uidNameMap() {
   return m;
 }
 
-const _biCard = (title, inner) =>
-  `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px">
-     <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px">${title}</div>${inner}</div>`;
+const COM_PALETTE = ['#f97316', '#818cf8', '#34d399', '#38bdf8', '#f472b6', '#fbbf24', '#2dd4bf', '#a78bfa'];
 
-function _biBars(items, color) {
-  if (!items.length) return '<div style="color:var(--muted);font-size:13px">Sin datos</div>';
+const _biCard = (title, inner, sub) =>
+  `<div class="com-card"><div class="com-card-h">${title}${sub ? `<span class="com-card-sub">${sub}</span>` : ''}</div>${inner}</div>`;
+
+function _biBars(items, opts = {}) {
+  if (!items.length) return '<div class="com-empty">Sin datos</div>';
+  const total = items.reduce((s, i) => s + i.value, 0);
   const max = Math.max(1, ...items.map(i => i.value));
-  return items.map(i => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-    <div style="width:88px;flex-shrink:0;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(i.label)}</div>
-    <div style="flex:1;background:var(--card-2);border-radius:6px;height:18px;overflow:hidden"><div style="height:100%;border-radius:6px;width:${Math.max(2, Math.round(i.value / max * 100))}%;background:${i.color || color || 'var(--accent)'}"></div></div>
-    <div style="width:96px;flex-shrink:0;text-align:right;font-size:11px;color:var(--text);font-weight:600">${esc(i.sub)}</div>
-  </div>`).join('');
+  return '<div class="com-bars">' + items.map((i, idx) => {
+    const pct = Math.round(i.value / max * 100);
+    const share = total ? Math.round(i.value / total * 100) : 0;
+    const color = i.color || (opts.palette ? COM_PALETTE[idx % COM_PALETTE.length] : 'var(--accent)');
+    return `<div class="com-bar-row">
+      <div class="com-bar-lbl" title="${esc(i.label)}">${esc(i.label)}</div>
+      <div class="com-bar-track"><div class="com-bar-fill" style="width:${Math.max(3, pct)}%;background:${color}"></div></div>
+      <div class="com-bar-val">${esc(i.sub)}${opts.share ? ` <span class="com-bar-share">${share}%</span>` : ''}</div>
+    </div>`;
+  }).join('') + '</div>';
 }
 
 function renderComercial() {
@@ -253,18 +265,21 @@ function renderComercial() {
   const montoAdj = sum(adjudicadas), montoPerd = sum(perdidas), montoAbierto = sum(abiertas);
   const forecast = abiertas.reduce((s, q) => s + (Number(q.valor) || 0) * (COM_PROB[q.estado || 'Borrador'] ?? 0), 0);
 
-  const kpi = (label, val, color) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px">
-    <div style="font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em">${label}</div>
-    <div style="font-size:20px;font-weight:800;margin-top:4px;color:${color || 'var(--text)'}">${val}</div></div>`;
-  kpisEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
-    ${kpi('Pronóstico ponderado', formatCLPShort(forecast), 'var(--accent)')}
-    ${kpi('Adjudicado', formatCLPShort(montoAdj), 'var(--success)')}
-    ${kpi('Pipeline abierto', formatCLPShort(montoAbierto))}
-    ${kpi('Win-rate', winRate + '%')}
-    ${kpi('Cotizaciones', String(qs.length))}
+  const kpi = (ico, label, val, foot, cls) => `<div class="com-kpi ${cls || ''}">
+    <div class="com-kpi-ico">${ico}</div>
+    <div class="com-kpi-label">${label}</div>
+    <div class="com-kpi-val">${esc(val)}</div>
+    <div class="com-kpi-foot">${esc(foot)}</div>
+  </div>`;
+  kpisEl.innerHTML = `<div class="com-kpis">
+    ${kpi('📈', 'Pronóstico ponderado', formatCLPShort(forecast), `${abiertas.length} abiertas`, 'k-accent')}
+    ${kpi('🏆', 'Adjudicado', formatCLPShort(montoAdj), `${adjudicadas.length} ganadas`, 'k-green')}
+    ${kpi('📊', 'Pipeline abierto', formatCLPShort(montoAbierto), `${abiertas.length} en curso`, 'k-blue')}
+    ${kpi('🎯', 'Win-rate', winRate + '%', `${cerradas} cerradas`, 'k-purple')}
+    ${kpi('📄', 'Cotizaciones', String(qs.length), `${perdidas.length} perdidas`, 'k-amber')}
   </div>`;
 
-  // Por mes (últimos 6)
+  // Por mes (columnas, últimos 6 — alto por monto)
   const now = new Date();
   const months = [];
   for (let i = 5; i >= 0; i--) {
@@ -273,16 +288,36 @@ function renderComercial() {
   }
   const monthData = months.map(m => {
     const g = qs.filter(q => (q.fecha || '').slice(0, 7) === m.key);
-    return { label: m.label, value: g.length, sub: `${g.length} · ${formatCLPShort(sum(g))}` };
+    return { label: m.label, count: g.length, monto: sum(g) };
   });
+  const maxMonto = Math.max(1, ...monthData.map(m => m.monto));
+  const colsHtml = '<div class="com-cols">' + monthData.map(m => {
+    const h = Math.round(m.monto / maxMonto * 100);
+    return `<div class="com-col" title="${m.count} cotizaciones · ${esc(formatCLPShort(m.monto))}">
+      <div class="com-col-val">${m.monto ? esc(formatCLPShort(m.monto)) : ''}</div>
+      <div class="com-col-track"><div class="com-col-fill" style="height:${Math.max(2, h)}%">${m.count ? `<span class="com-col-cnt">${m.count}</span>` : ''}</div></div>
+      <div class="com-col-lbl">${esc(m.label)}</div>
+    </div>`;
+  }).join('') + '</div>';
 
-  // Adjudicado vs Perdido
-  const winLoss = [
-    { label: 'Adjudicado', value: montoAdj,  sub: `${adjudicadas.length} · ${formatCLPShort(montoAdj)}`,  color: 'var(--success)' },
-    { label: 'Perdido',    value: montoPerd, sub: `${perdidas.length} · ${formatCLPShort(montoPerd)}`, color: 'var(--danger)' },
-  ];
+  // Win-rate (dona)
+  const C = 2 * Math.PI * 52;
+  const off = C * (1 - winRate / 100);
+  const donut = `<div class="com-winloss">
+    <svg class="com-donut" viewBox="0 0 120 120" aria-hidden="true">
+      <circle class="com-donut-bg" cx="60" cy="60" r="52"></circle>
+      <circle class="com-donut-fg" cx="60" cy="60" r="52" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"></circle>
+      <text class="com-donut-num" x="60" y="58">${winRate}%</text>
+      <text class="com-donut-lbl" x="60" y="76">win-rate</text>
+    </svg>
+    <div class="com-wl-legend">
+      <div class="com-wl-row"><span class="com-dot" style="background:var(--success)"></span>Adjudicado <b>${adjudicadas.length}</b><span class="com-wl-amt">${esc(formatCLPShort(montoAdj))}</span></div>
+      <div class="com-wl-row"><span class="com-dot" style="background:var(--danger)"></span>Perdido <b>${perdidas.length}</b><span class="com-wl-amt">${esc(formatCLPShort(montoPerd))}</span></div>
+      <div class="com-wl-row muted"><span class="com-dot" style="background:var(--muted)"></span>Abiertas <b>${abiertas.length}</b><span class="com-wl-amt">${esc(formatCLPShort(montoAbierto))}</span></div>
+    </div>
+  </div>`;
 
-  // Por industria / por tipo (por monto)
+  // Por industria / por tipo (por monto, multicolor + %)
   const agg = (field, fallback) => {
     const m = {};
     qs.forEach(q => { const k = q[field] || fallback; m[k] = (m[k] || 0) + (Number(q.valor) || 0); });
@@ -291,7 +326,7 @@ function renderComercial() {
   const indData  = agg('industria', 'Sin industria');
   const tipoData = agg('tipoServicio', 'Sin tipo');
 
-  // Ranking por persona (createdBy)
+  // Ranking por persona (createdBy) — podio + resto
   const nameMap = _uidNameMap();
   const byUser = {};
   qs.forEach(q => {
@@ -301,26 +336,38 @@ function renderComercial() {
     if (q.estado === 'Adjudicada') { byUser[uid].adjudicadas++; byUser[uid].monto += Number(q.valor) || 0; }
   });
   const ranking = Object.values(byUser).sort((a, b) => b.monto - a.monto || b.adjudicadas - a.adjudicadas || b.creadas - a.creadas);
-  const rankRows = ranking.slice(0, 10).map((r, i) => `<tr style="border-top:1px solid var(--border)">
-    <td style="padding:7px 4px;color:var(--muted)">${i + 1}</td>
-    <td style="padding:7px 4px;font-weight:600">${esc(nameMap[r.uid] || (r.uid === 'desconocido' ? 'Sin autor' : 'Sin nombre'))}</td>
-    <td style="padding:7px 4px;text-align:center">${r.creadas}</td>
-    <td style="padding:7px 4px;text-align:center;color:var(--success);font-weight:600">${r.adjudicadas}</td>
-    <td style="padding:7px 4px;text-align:right;font-weight:600">${formatCLPShort(r.monto)}</td>
-  </tr>`).join('');
-  const rankTable = `<table style="width:100%;border-collapse:collapse;font-size:13px">
-    <thead><tr style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em">
-      <th style="padding:4px;text-align:left">#</th><th style="padding:4px;text-align:left">Persona</th>
-      <th style="padding:4px;text-align:center">Creadas</th><th style="padding:4px;text-align:center">Adjud.</th>
-      <th style="padding:4px;text-align:right">Monto adj.</th>
-    </tr></thead><tbody>${rankRows || '<tr><td colspan="5" style="padding:10px;color:var(--muted)">Sin datos</td></tr>'}</tbody></table>`;
+  const nameOf = r => nameMap[r.uid] || (r.uid === 'desconocido' ? 'Sin autor' : 'Sin nombre');
+  const medals = ['🥇', '🥈', '🥉'];
+  const podium = ranking.slice(0, 3);
+  const rest = ranking.slice(3, 10);
+  const podiumHtml = podium.length
+    ? '<div class="com-podium">' + podium.map((r, i) => `<div class="com-pod ${i === 0 ? 'first' : ''}">
+        <div class="com-pod-medal">${medals[i]}</div>
+        <div class="com-pod-av">${esc((nameOf(r).trim()[0] || '?').toUpperCase())}</div>
+        <div class="com-pod-name" title="${esc(nameOf(r))}">${esc(nameOf(r))}</div>
+        <div class="com-pod-monto">${esc(formatCLPShort(r.monto))}</div>
+        <div class="com-pod-sub">${r.adjudicadas} adj · ${r.creadas} creadas</div>
+      </div>`).join('') + '</div>'
+    : '<div class="com-empty">Sin datos</div>';
+  const restHtml = rest.length
+    ? '<div class="com-rank-rest">' + rest.map((r, i) => `<div class="com-rank-row">
+        <span class="com-rank-pos">${i + 4}</span>
+        <span class="com-rank-name" title="${esc(nameOf(r))}">${esc(nameOf(r))}</span>
+        <span class="com-rank-sub">${r.adjudicadas} adj</span>
+        <span class="com-rank-monto">${esc(formatCLPShort(r.monto))}</span>
+      </div>`).join('') + '</div>'
+    : '';
 
   chartsEl.innerHTML =
-    _biCard('Cotizaciones por mes', _biBars(monthData)) +
-    _biCard('Adjudicado vs Perdido', _biBars(winLoss)) +
-    _biCard('Por industria', _biBars(indData)) +
-    _biCard('Por tipo de servicio', _biBars(tipoData)) +
-    _biCard('Ranking del equipo (por monto adjudicado)', rankTable);
+    _biCard('Cotizaciones por mes', colsHtml, 'monto mensual · n° de cotizaciones') +
+    '<div class="com-grid-2">' +
+      _biCard('Adjudicado vs Perdido', donut) +
+      _biCard('Ranking del equipo', podiumHtml + restHtml) +
+    '</div>' +
+    '<div class="com-grid-2">' +
+      _biCard('Por industria', _biBars(indData, { palette: true, share: true })) +
+      _biCard('Por tipo de servicio', _biBars(tipoData, { palette: true, share: true })) +
+    '</div>';
 }
 
 // ── Aprobación de acceso ──
@@ -664,7 +711,58 @@ el('addNoteBtn')?.addEventListener('click', async () => {
 el('goRecordatoriosBtn')?.addEventListener('click', () => showSection('recordatorios'));
 
 // ── Academia ──
+// Catálogo de cursos de la Academia (alineado con sonqollay.cl). Cada uno con un color de badge.
+const ACAD_CURSOS = [
+  { id: '',            nombre: 'General / Sin curso', color: '#94a3b8' },
+  // Cursos activos hoy (sonqollay.cl) — ambos "Gestión Efectiva de Proyecto con Metodología AWP", sincrónicos.
+  { id: 'awp-abierto', nombre: 'Gestión de Proyecto AWP · Abierto', color: '#f97316' },
+  { id: 'awp-empresa', nombre: 'Gestión de Proyecto AWP · Cerrado a empresa', color: '#b45309' },
+  // Otros cursos del catálogo (para futuras ediciones)
+  { id: 'wfp',      nombre: 'WorkFace Planning Operativo', color: '#0ea5e9' },
+  { id: 'lean',     nombre: 'Lean Construction',   color: '#22c55e' },
+  { id: 'filolean', nombre: 'Filosofía Lean',      color: '#a855f7' },
+  { id: 'iso19650', nombre: 'BIM · ISO 19650',     color: '#3b82f6' },
+  { id: 'bimind',   nombre: 'BIM Industrial y Minero', color: '#eab308' },
+];
+const acadCurso = id => ACAD_CURSOS.find(c => c.id === (id || '')) || ACAD_CURSOS[0];
+
+// Llena el <select> de cursos (una sola vez).
+function acadPopulateCursos() {
+  const sel = el('acadCurso');
+  if (!sel || sel.options.length) return;
+  sel.innerHTML = ACAD_CURSOS.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+}
+
+// Lista de usuarios para asignar como participantes (checkboxes). `selected` = uids marcados.
+function acadRenderParticipantes(selected = []) {
+  const wrap = el('acadParticipantes');
+  if (!wrap) return;
+  const set = new Set(selected);
+  const entries = Object.entries(userProfiles).sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+  if (!entries.length) {
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:4px">Aún no hay usuarios registrados.</div>';
+    return;
+  }
+  wrap.innerHTML = entries.map(([uid, name]) => `
+    <label style="display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:13px;color:var(--text);cursor:pointer">
+      <input type="checkbox" class="acad-part-cb" value="${esc(uid)}" ${set.has(uid) ? 'checked' : ''} />
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span>
+    </label>`).join('');
+}
+
+// Muestra/oculta el panel de participantes según la audiencia elegida.
+function acadSyncAudiencia(selected = []) {
+  const sel = document.querySelector('input[name="acadAudiencia"]:checked')?.value || 'todos';
+  const panel = el('acadParticipantes');
+  if (panel) panel.style.display = sel === 'seleccion' ? '' : 'none';
+  if (sel === 'seleccion') acadRenderParticipantes(selected);
+}
+
+document.querySelectorAll('input[name="acadAudiencia"]').forEach(r =>
+  r.addEventListener('change', () => acadSyncAudiencia()));
+
 function renderAcademia() {
+  acadPopulateCursos();
   const listEl = el('acadAdminList');
   const countEl = el('acadCount');
   if (!listEl) return;
@@ -688,12 +786,40 @@ function renderAcademia() {
   const card = ({ ev, d }) => {
     const past = d.getTime() < now;
     const emoji = ev.tipo === 'Clase' ? '📚' : '🤝';
+    const curso = acadCurso(ev.curso);
+    const cursoBadge = curso.id
+      ? `<span style="display:inline-block;background:${curso.color}22;color:${curso.color};border:1px solid ${curso.color}55;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:600;margin-left:6px">${esc(curso.nombre)}</span>`
+      : '';
+    // Audiencia + confirmaciones
+    const todos = ev.participantesTodos !== false;
+    const invitados = todos ? null : (ev.participantes || []);
+    const confirmados = ev.confirmados || [];
+    const nombreDe = uid => userProfiles[uid] || uid;
+    const audienciaLine = todos
+      ? `<span style="color:var(--muted)">👥 Todos los usuarios</span>`
+      : `<span style="color:var(--muted)">👥 ${invitados.length} invitado${invitados.length !== 1 ? 's' : ''}</span>`;
+    const confLine = `<span style="color:#22c55e">✓ ${confirmados.length} confirmado${confirmados.length !== 1 ? 's' : ''}</span>`;
+    const confNames = confirmados.length
+      ? `<div style="color:var(--muted);font-size:11.5px;margin-top:2px">Confirmaron: ${confirmados.map(u => esc(nombreDe(u))).join(', ')}</div>`
+      : '';
+    const links = [
+      ev.enlaceSesion ? `<a href="${esc(ev.enlaceSesion)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-size:12px">🔗 Sesión</a>` : '',
+      ev.enlaceGrabacion ? `<a href="${esc(ev.enlaceGrabacion)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-size:12px">🎥 Grabación</a>` : '',
+    ].filter(Boolean).join('<span style="color:var(--border)">·</span>');
     return `<div class="rec-card" style="${past ? 'opacity:.6;' : ''}display:flex;align-items:flex-start;gap:12px;margin-bottom:8px">
       <div style="font-size:22px">${emoji}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;color:var(--text);font-size:14px">${esc(ev.titulo || '(sin título)')}</div>
+        <div style="font-weight:700;color:var(--text);font-size:14px">${esc(ev.titulo || '(sin título)')}${cursoBadge}</div>
         <div style="color:var(--accent);font-weight:600;font-size:13px;text-transform:capitalize">${esc(fmtDT(d))}</div>
         ${ev.descripcion ? `<div style="color:var(--muted);font-size:12.5px;margin-top:3px">${esc(ev.descripcion)}</div>` : ''}
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12px;margin-top:5px">${audienciaLine}${confLine}</div>
+        ${confNames}
+        ${links ? `<div style="display:flex;gap:8px;align-items:center;margin-top:5px">${links}</div>` : ''}
+        ${(ev.archivos && ev.archivos.length) ? `<div style="margin-top:7px;display:flex;flex-wrap:wrap;gap:6px">${ev.archivos.map((a, ai) => `
+          <span style="display:inline-flex;align-items:center;gap:7px;background:var(--card-2);border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12px">
+            <a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;display:inline-flex;align-items:center;gap:5px" title="Abrir presentación">📊 ${esc(a.name)}</a>
+            <button class="acad-file-rm" data-id="${esc(ev.id)}" data-i="${ai}" title="Quitar archivo" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;line-height:1;padding:0">×</button>
+          </span>`).join('')}</div>` : ''}
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         <button class="acad-edit" data-id="${esc(ev.id)}" style="background:var(--card-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer">Editar</button>
@@ -709,18 +835,80 @@ function renderAcademia() {
   listEl.innerHTML = html;
   listEl.querySelectorAll('.acad-edit').forEach(b => b.addEventListener('click', () => acadStartEdit(b.dataset.id)));
   listEl.querySelectorAll('.acad-del').forEach(b => b.addEventListener('click', () => acadDelete(b.dataset.id)));
+  listEl.querySelectorAll('.acad-file-rm').forEach(b => b.addEventListener('click', () => acadRemoveFile(b.dataset.id, Number(b.dataset.i))));
+}
+
+// Formatea un tamaño en bytes a algo legible (KB/MB).
+const acadFmtSize = b => b == null ? '' : b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+
+// Renderiza la lista de presentaciones seleccionadas (aún sin subir) bajo el formulario.
+function renderAcadPending() {
+  const wrap = el('acadFilesPending'); if (!wrap) return;
+  if (!acadPendingFiles.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = acadPendingFiles.map((f, i) => `
+    <div style="display:flex;align-items:center;gap:8px;background:var(--card-2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12.5px">
+      <span style="font-size:16px">📊</span>
+      <span style="flex:1;min-width:0;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</span>
+      <span style="color:var(--muted);flex-shrink:0">${acadFmtSize(f.size)}</span>
+      <button type="button" class="acad-pend-rm" data-i="${i}" title="Quitar" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0">×</button>
+    </div>`).join('');
+  wrap.querySelectorAll('.acad-pend-rm').forEach(b => b.addEventListener('click', () => {
+    acadPendingFiles.splice(Number(b.dataset.i), 1); renderAcadPending();
+  }));
+}
+
+// Sube una presentación a Cloud Storage y devuelve sus metadatos para guardar en Firestore.
+function acadUploadFile(eventId, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const safe = file.name.replace(/[^\w.\-]+/g, '_');
+    const path = `academia/${eventId}/${Date.now()}-${safe}`;
+    const task = uploadBytesResumable(storageRef(storage, path), file, {
+      contentType: file.type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    });
+    task.on('state_changed',
+      snap => { if (onProgress && snap.totalBytes) onProgress(Math.round(snap.bytesTransferred / snap.totalBytes * 100)); },
+      reject,
+      async () => {
+        try {
+          const url = await getDownloadURL(task.snapshot.ref);
+          resolve({ name: file.name, url, path, size: file.size, uploadedAt: Date.now() });
+        } catch (e) { reject(e); }
+      }
+    );
+  });
+}
+
+// Quita una presentación ya guardada: la borra del array en Firestore y del bucket de Storage.
+async function acadRemoveFile(eventId, index) {
+  const ev = acadEvents.find(e => e.id === eventId); if (!ev || !ev.archivos) return;
+  const file = ev.archivos[index]; if (!file) return;
+  if (!confirm(`¿Quitar la presentación "${file.name}"?`)) return;
+  try {
+    const remaining = ev.archivos.filter((_, i) => i !== index);
+    await setDoc(doc(db, 'academiaEventos', eventId), { archivos: remaining }, { merge: true });
+    if (file.path) { try { await deleteObject(storageRef(storage, file.path)); } catch (err) { console.warn('No se pudo borrar de Storage:', err); } }
+  } catch (e) { console.error('Quitar archivo', e); adminToast('No se pudo quitar el archivo.', true); }
 }
 
 function acadStartEdit(id) {
   const ev = acadEvents.find(e => e.id === id); if (!ev) return;
   acadEditId = id;
+  acadPopulateCursos();
   const pad = n => String(n).padStart(2, '0');
   el('acadTipo').value = ev.tipo || 'Reunión';
+  el('acadCurso').value = ev.curso || '';
   el('acadTitulo').value = ev.titulo || '';
   el('acadDesc').value = ev.descripcion || '';
   const d = ev.fechaHora?.toDate?.();
   el('acadFecha').value = d ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` : '';
   el('acadHora').value = d ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : '';
+  el('acadEnlace').value = ev.enlaceSesion || '';
+  el('acadGrabacion').value = ev.enlaceGrabacion || '';
+  // Audiencia
+  const todos = ev.participantesTodos !== false;
+  const radio = document.querySelector(`input[name="acadAudiencia"][value="${todos ? 'todos' : 'seleccion'}"]`);
+  if (radio) radio.checked = true;
+  acadSyncAudiencia(ev.participantes || []);
   el('acadAddBtn').textContent = 'Actualizar';
   el('acadCancelBtn').style.display = '';
   el('acadFeedback').textContent = '';
@@ -729,46 +917,109 @@ function acadStartEdit(id) {
 
 function acadResetForm() {
   acadEditId = null;
+  acadPendingFiles = [];
   el('acadTipo').value = 'Reunión';
+  if (el('acadCurso')) el('acadCurso').value = '';
   el('acadTitulo').value = ''; el('acadDesc').value = '';
   el('acadFecha').value = ''; el('acadHora').value = '';
+  if (el('acadEnlace')) el('acadEnlace').value = '';
+  if (el('acadGrabacion')) el('acadGrabacion').value = '';
+  const radioTodos = document.querySelector('input[name="acadAudiencia"][value="todos"]');
+  if (radioTodos) radioTodos.checked = true;
+  acadSyncAudiencia([]);
+  if (el('acadFiles')) el('acadFiles').value = '';
+  renderAcadPending();
   el('acadAddBtn').textContent = 'Agendar';
   el('acadCancelBtn').style.display = 'none';
 }
 
 async function acadDelete(id) {
   if (!confirm('¿Eliminar este evento de la agenda?')) return;
-  try { await deleteDoc(doc(db, 'academiaEventos', id)); if (acadEditId === id) acadResetForm(); }
+  try {
+    const ev = acadEvents.find(e => e.id === id);
+    await deleteDoc(doc(db, 'academiaEventos', id));
+    // Limpia las presentaciones asociadas del bucket para no dejar huérfanos.
+    if (ev?.archivos?.length) {
+      for (const a of ev.archivos) {
+        if (a.path) { try { await deleteObject(storageRef(storage, a.path)); } catch (err) { console.warn('No se pudo borrar de Storage:', err); } }
+      }
+    }
+    if (acadEditId === id) acadResetForm();
+  }
   catch (e) { console.error('Eliminar evento', e); }
 }
 
 el('acadCancelBtn')?.addEventListener('click', acadResetForm);
+
+// Selección de presentaciones: acepta solo PowerPoint y las apila para subir al guardar.
+el('acadFiles')?.addEventListener('change', e => {
+  const all = [...e.target.files];
+  const valid = all.filter(f => /\.(pptx?|ppsx?)$/i.test(f.name));
+  const rejected = all.length - valid.length;
+  acadPendingFiles.push(...valid);
+  e.target.value = '';
+  renderAcadPending();
+  if (rejected) {
+    const fb = el('acadFeedback');
+    fb.style.color = '#f59e0b';
+    fb.textContent = `${rejected} archivo(s) ignorado(s): solo se permiten PowerPoint (.ppt / .pptx).`;
+  }
+});
+
 el('acadAddBtn')?.addEventListener('click', async () => {
   const tipo = el('acadTipo').value;
+  const curso = el('acadCurso')?.value || '';
   const titulo = el('acadTitulo').value.trim();
   const descripcion = el('acadDesc').value.trim();
   const fecha = el('acadFecha').value;
   const hora = el('acadHora').value;
+  const enlaceSesion = el('acadEnlace')?.value.trim() || '';
+  const enlaceGrabacion = el('acadGrabacion')?.value.trim() || '';
+  const audiencia = document.querySelector('input[name="acadAudiencia"]:checked')?.value || 'todos';
+  const participantesTodos = audiencia !== 'seleccion';
+  const participantes = participantesTodos
+    ? []
+    : [...document.querySelectorAll('#acadParticipantes .acad-part-cb:checked')].map(cb => cb.value);
   const fb = el('acadFeedback');
   if (!titulo) { fb.style.color = '#f59e0b'; fb.textContent = 'Escribe un título.'; return; }
   if (!fecha || !hora) { fb.style.color = '#f59e0b'; fb.textContent = 'Indica fecha y hora.'; return; }
+  if (!participantesTodos && !participantes.length) { fb.style.color = '#f59e0b'; fb.textContent = 'Selecciona al menos un participante (o elige “Todos”).'; return; }
   const dt = new Date(`${fecha}T${hora}`);
   if (isNaN(dt.getTime())) { fb.style.color = '#f59e0b'; fb.textContent = 'Fecha u hora inválida.'; return; }
   const btn = el('acadAddBtn'); btn.disabled = true;
   fb.style.color = 'var(--muted)'; fb.textContent = 'Guardando…';
   try {
     const user = auth.currentUser;
+    let docId = acadEditId;
     if (acadEditId) {
       await setDoc(doc(db, 'academiaEventos', acadEditId), {
-        tipo, titulo, descripcion, fechaHora: dt,
+        tipo, curso, titulo, descripcion, fechaHora: dt,
+        enlaceSesion, enlaceGrabacion, participantesTodos, participantes,
         notified15: false, notifiedDay: false, updatedAt: serverTimestamp(),
       }, { merge: true });
     } else {
-      await addDoc(collection(db, 'academiaEventos'), {
-        tipo, titulo, descripcion, fechaHora: dt,
-        notified15: false, notifiedDay: false,
+      const ref = await addDoc(collection(db, 'academiaEventos'), {
+        tipo, curso, titulo, descripcion, fechaHora: dt,
+        enlaceSesion, enlaceGrabacion, participantesTodos, participantes,
+        notified15: false, notifiedDay: false, archivos: [], confirmados: [],
         createdBy: user?.displayName || user?.email || 'Admin', createdAt: serverTimestamp(),
       });
+      docId = ref.id;
+    }
+    // Sube las presentaciones seleccionadas y las anexa al array `archivos` del evento.
+    if (acadPendingFiles.length && docId) {
+      const base = acadEvents.find(e => e.id === docId)?.archivos || [];
+      const uploaded = [];
+      for (let i = 0; i < acadPendingFiles.length; i++) {
+        const file = acadPendingFiles[i];
+        fb.style.color = 'var(--muted)';
+        fb.textContent = `Subiendo ${i + 1}/${acadPendingFiles.length}: ${file.name}…`;
+        const meta = await acadUploadFile(docId, file, pct => {
+          fb.textContent = `Subiendo ${i + 1}/${acadPendingFiles.length}: ${file.name} (${pct}%)`;
+        });
+        uploaded.push(meta);
+      }
+      await setDoc(doc(db, 'academiaEventos', docId), { archivos: [...base, ...uploaded] }, { merge: true });
     }
     acadResetForm();
     fb.style.color = '#22c55e'; fb.textContent = 'Guardado · se avisará por push.';

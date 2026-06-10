@@ -7,7 +7,7 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDoc, onSnapshot, setDoc, deleteDoc,
-  serverTimestamp, query, orderBy, limit, writeBatch, getDocs, arrayUnion
+  serverTimestamp, query, orderBy, limit, writeBatch, getDocs, arrayUnion, arrayRemove
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import {
   getMessaging, getToken, onMessage, isSupported
@@ -1942,19 +1942,42 @@ function subscribeAcademia() {
   );
 }
 
+// Catálogo de cursos (debe coincidir con el del panel admin).
+const ACAD_CURSOS = {
+  '':            { nombre: '', color: '#94a3b8' },
+  'awp-abierto': { nombre: 'Gestión de Proyecto AWP · Abierto', color: '#f97316' },
+  'awp-empresa': { nombre: 'Gestión de Proyecto AWP · Cerrado a empresa', color: '#b45309' },
+  wfp:       { nombre: 'WorkFace Planning Operativo', color: '#0ea5e9' },
+  lean:      { nombre: 'Lean Construction', color: '#22c55e' },
+  filolean:  { nombre: 'Filosofía Lean', color: '#a855f7' },
+  iso19650:  { nombre: 'BIM · ISO 19650', color: '#3b82f6' },
+  bimind:    { nombre: 'BIM Industrial y Minero', color: '#eab308' },
+};
+
+// ¿Este usuario debe ver el evento? Lo ve si es para todos, si está invitado o si lo creó.
+function acadVisible(ev) {
+  if (ev.participantesTodos !== false) return true;
+  const me = currentUser?.uid;
+  if (Array.isArray(ev.participantes) && me && ev.participantes.includes(me)) return true;
+  if (ev.createdBy && me && ev.createdBy === me) return true;
+  return false;
+}
+
 function renderAcademia() {
   const el = document.getElementById('acadList');
   if (!el) return;
-  if (!_acadEvents.length) {
-    el.innerHTML = '<div class="empty" style="margin:24px 0"><span>Aún no hay reuniones ni clases agendadas.</span></div>';
+  const visibles = _acadEvents.filter(acadVisible);
+  if (!visibles.length) {
+    el.innerHTML = '<div class="empty" style="margin:24px 0"><span>Aún no hay reuniones ni clases para ti.</span></div>';
     return;
   }
   const now = Date.now();
   const today = new Date();
+  const me = currentUser?.uid;
   const isToday = (d) => d.toDateString() === today.toDateString();
   const fmtDT = (d) => d.toLocaleString('es-CL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const groups = { hoy: [], prox: [], pasados: [] };
-  _acadEvents.forEach(ev => {
+  visibles.forEach(ev => {
     const d = ev.fechaHora?.toDate?.();
     if (!d) return;
     if (isToday(d)) groups.hoy.push({ ev, d });
@@ -1965,15 +1988,31 @@ function renderAcademia() {
   const card = ({ ev, d }) => {
     const past = d.getTime() < now;
     const emoji = ev.tipo === 'Clase' ? '📚' : '🤝';
-    return `<button class="acad-card${past ? ' past' : ''}" data-acad-id="${escapeHtml(ev.id)}">
-      <div class="acad-card-icon">${emoji}</div>
-      <div class="acad-card-body">
-        <div class="acad-card-title">${escapeHtml(ev.titulo || '(sin título)')}</div>
-        <div class="acad-card-when">${escapeHtml(fmtDT(d))}</div>
-        ${ev.descripcion ? `<div class="acad-card-desc">${escapeHtml(ev.descripcion)}</div>` : ''}
-      </div>
-      <span class="acad-card-tag">${escapeHtml(ev.tipo || 'Reunión')}</span>
-    </button>`;
+    const curso = ACAD_CURSOS[ev.curso || ''] || ACAD_CURSOS[''];
+    const cursoBadge = curso.nombre
+      ? `<span class="acad-card-curso" style="background:${curso.color}22;color:${curso.color};border:1px solid ${curso.color}55">${escapeHtml(curso.nombre)}</span>`
+      : '';
+    const confirmado = me && Array.isArray(ev.confirmados) && ev.confirmados.includes(me);
+    const links = [
+      ev.enlaceSesion ? `<a href="${escapeHtml(ev.enlaceSesion)}" target="_blank" rel="noopener" class="acad-link">🔗 Entrar a la sesión</a>` : '',
+      ev.enlaceGrabacion ? `<a href="${escapeHtml(ev.enlaceGrabacion)}" target="_blank" rel="noopener" class="acad-link">🎥 Grabación</a>` : '',
+    ].filter(Boolean).join('');
+    const archivos = (ev.archivos && ev.archivos.length)
+      ? `<div class="acad-card-files">${ev.archivos.map(a => `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" class="acad-file">📊 ${escapeHtml(a.name)}</a>`).join('')}</div>`
+      : '';
+    const confirmBtn = past ? '' : `<button class="acad-confirm${confirmado ? ' on' : ''}" data-confirm-id="${escapeHtml(ev.id)}">${confirmado ? '✓ Asistiré' : 'Confirmar asistencia'}</button>`;
+    return `<div class="acad-card${past ? ' past' : ''}">
+      <button class="acad-card-main" data-acad-id="${escapeHtml(ev.id)}">
+        <div class="acad-card-icon">${emoji}</div>
+        <div class="acad-card-body">
+          <div class="acad-card-title">${escapeHtml(ev.titulo || '(sin título)')}${cursoBadge}</div>
+          <div class="acad-card-when">${escapeHtml(fmtDT(d))}</div>
+          ${ev.descripcion ? `<div class="acad-card-desc">${escapeHtml(ev.descripcion)}</div>` : ''}
+        </div>
+        <span class="acad-card-tag">${escapeHtml(ev.tipo || 'Reunión')}</span>
+      </button>
+      ${(links || archivos || confirmBtn) ? `<div class="acad-card-actions">${links}${archivos}${confirmBtn}</div>` : ''}
+    </div>`;
   };
   let html = '';
   if (groups.hoy.length)     html += '<div class="acad-sep">Hoy</div>' + groups.hoy.map(card).join('');
@@ -1981,6 +2020,21 @@ function renderAcademia() {
   if (groups.pasados.length) html += '<div class="acad-sep">Pasados</div>' + groups.pasados.map(card).join('');
   el.innerHTML = html;
   el.querySelectorAll('[data-acad-id]').forEach(b => b.addEventListener('click', () => openAcadSheet(b.dataset.acadId)));
+  el.querySelectorAll('[data-confirm-id]').forEach(b => b.addEventListener('click', () => acadToggleConfirm(b.dataset.confirmId)));
+}
+
+// Confirma o cancela la asistencia del usuario actual a un evento.
+async function acadToggleConfirm(id) {
+  const ev = _acadEvents.find(e => e.id === id);
+  const me = currentUser?.uid;
+  if (!ev || !me) return;
+  const yaConfirmado = Array.isArray(ev.confirmados) && ev.confirmados.includes(me);
+  try {
+    await setDoc(doc(dbf, 'academiaEventos', id),
+      { confirmados: yaConfirmado ? arrayRemove(me) : arrayUnion(me) },
+      { merge: true });
+    showToast(yaConfirmado ? 'Asistencia cancelada' : '✓ Asistencia confirmada');
+  } catch (e) { showToast('No se pudo actualizar'); }
 }
 
 function openAcadSheet(id) {
@@ -2160,7 +2214,7 @@ function renderMiDay() {
     return dleft !== null && dleft >= 0 && dleft <= 3;
   }).sort((a, b) => quoteDaysToExpire(a) - quoteDaysToExpire(b));
   const today = new Date();
-  const evHoy = _acadEvents.filter(ev => { const d = ev.fechaHora?.toDate?.(); return d && d.toDateString() === today.toDateString() && d.getTime() >= Date.now(); });
+  const evHoy = _acadEvents.filter(ev => { const d = ev.fechaHora?.toDate?.(); return d && acadVisible(ev) && d.toDateString() === today.toDateString() && d.getTime() >= Date.now(); });
 
   const sec = (title, dot, inner) => `<div class="hoy-section-header ${dot}"><span class="hoy-dot ${dot}"></span>${title}</div>${inner}`;
   const greet = (currentUser.displayName || currentUser.email || '').split(' ')[0];

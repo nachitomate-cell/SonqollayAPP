@@ -901,6 +901,84 @@
   </style>
 </head>
 <body>
+<style>
+  /* ════ Comercial — diseño premium ════ */
+  .com-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .com-kpi { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 16px 14px; overflow: hidden; transition: transform .15s ease, box-shadow .2s ease; }
+  .com-kpi:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,.22); }
+  .com-kpi::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--accent); }
+  .com-kpi.k-green::before { background: var(--success); }
+  .com-kpi.k-blue::before { background: #38bdf8; }
+  .com-kpi.k-purple::before { background: var(--indigo); }
+  .com-kpi.k-amber::before { background: #fbbf24; }
+  .com-kpi-ico { position: absolute; top: 13px; right: 14px; font-size: 17px; opacity: .85; }
+  .com-kpi-label { font-size: 10.5px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding-right: 24px; }
+  .com-kpi-val { font-size: 25px; font-weight: 800; margin-top: 6px; color: var(--text); line-height: 1.1; }
+  .com-kpi.k-accent .com-kpi-val { color: var(--accent); }
+  .com-kpi.k-green .com-kpi-val { color: var(--success); }
+  .com-kpi-foot { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+
+  .com-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin-bottom: 14px; }
+  .com-card-h { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 16px; display: flex; align-items: baseline; gap: 8px; }
+  .com-card-sub { font-size: 11px; font-weight: 500; color: var(--muted); }
+  .com-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+  .com-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .com-grid-2 > .com-card { margin-bottom: 0; }
+
+  /* Columnas por mes */
+  .com-cols { display: flex; align-items: flex-end; gap: 10px; height: 184px; padding-top: 6px; }
+  .com-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 6px; min-width: 0; }
+  .com-col-val { font-size: 10px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .com-col-track { width: 100%; flex: 1; display: flex; align-items: flex-end; }
+  .com-col-fill { width: 100%; min-height: 4px; border-radius: 8px 8px 4px 4px; background: linear-gradient(180deg, var(--accent), rgba(249,115,22,.4)); position: relative; display: flex; align-items: flex-start; justify-content: center; transition: height .55s cubic-bezier(.22,.61,.36,1); }
+  .com-col-cnt { position: absolute; top: 5px; font-size: 11px; font-weight: 800; color: #fff; }
+  .com-col-lbl { font-size: 11px; color: var(--muted); text-transform: capitalize; }
+
+  /* Dona win-rate */
+  .com-winloss { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .com-donut { width: 120px; height: 120px; flex-shrink: 0; }
+  .com-donut-bg { fill: none; stroke: var(--card-2); stroke-width: 12; }
+  .com-donut-fg { fill: none; stroke: var(--success); stroke-width: 12; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transition: stroke-dashoffset .7s cubic-bezier(.22,.61,.36,1); }
+  .com-donut-num { fill: var(--text); font-size: 26px; font-weight: 800; text-anchor: middle; }
+  .com-donut-lbl { fill: var(--muted); font-size: 9px; text-anchor: middle; text-transform: uppercase; letter-spacing: .08em; }
+  .com-wl-legend { flex: 1; min-width: 170px; display: flex; flex-direction: column; gap: 11px; }
+  .com-wl-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+  .com-wl-row.muted { color: var(--muted); }
+  .com-wl-row b { margin-left: auto; }
+  .com-wl-amt { color: var(--muted); font-size: 12px; min-width: 66px; text-align: right; }
+  .com-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Barras horizontales */
+  .com-bars { display: flex; flex-direction: column; gap: 11px; }
+  .com-bar-row { display: flex; align-items: center; gap: 10px; }
+  .com-bar-lbl { width: 96px; flex-shrink: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .com-bar-track { flex: 1; background: var(--card-2); border-radius: 7px; height: 20px; overflow: hidden; }
+  .com-bar-fill { height: 100%; border-radius: 7px; transition: width .6s cubic-bezier(.22,.61,.36,1); }
+  .com-bar-val { flex-shrink: 0; text-align: right; font-size: 11.5px; color: var(--text); font-weight: 600; min-width: 96px; }
+  .com-bar-share { color: var(--muted); font-weight: 500; }
+
+  /* Podio ranking */
+  .com-podium { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; align-items: end; }
+  .com-pod { background: var(--card-2); border: 1px solid var(--border); border-radius: 14px; padding: 14px 8px; text-align: center; }
+  .com-pod.first { background: linear-gradient(135deg, rgba(249,115,22,.18), rgba(249,115,22,.04)); border-color: rgba(249,115,22,.4); }
+  .com-pod-medal { font-size: 22px; }
+  .com-pod-av { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; margin: 6px auto 8px; }
+  .com-pod-name { font-size: 12.5px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .com-pod-monto { font-size: 14px; font-weight: 800; color: var(--accent); margin-top: 3px; }
+  .com-pod-sub { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .com-rank-rest { display: flex; flex-direction: column; }
+  .com-rank-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-top: 1px solid var(--border); font-size: 13px; }
+  .com-rank-pos { color: var(--muted); width: 18px; flex-shrink: 0; }
+  .com-rank-name { flex: 1; color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .com-rank-sub { color: var(--success); font-size: 11.5px; flex-shrink: 0; }
+  .com-rank-monto { font-weight: 700; color: var(--text); min-width: 74px; text-align: right; flex-shrink: 0; }
+
+  @media (max-width: 760px) {
+    .com-grid-2 { grid-template-columns: 1fr; }
+    .com-grid-2 > .com-card { margin-bottom: 14px; }
+    .com-cols { height: 150px; gap: 6px; }
+  }
+</style>
 
 <!-- Auth gate -->
 <div id="authGate" class="gate" style="display:none">
@@ -1418,12 +1496,16 @@
               <select id="acadTipo" class="admin-input" style="width:100%"><option value="Reunión">🤝 Reunión</option><option value="Clase">📚 Clase</option></select>
             </div>
             <div>
+              <label class="form-label">Curso</label>
+              <select id="acadCurso" class="admin-input" style="width:100%"></select>
+            </div>
+            <div style="grid-column:1 / -1">
               <label class="form-label">Título</label>
               <input id="acadTitulo" class="admin-input" style="width:100%" type="text" maxlength="100" placeholder="Ej: Clase de Excel avanzado" />
             </div>
             <div style="grid-column:1 / -1">
               <label class="form-label">Descripción (opcional)</label>
-              <textarea id="acadDesc" class="admin-input" style="width:100%;resize:vertical" rows="2" maxlength="300" placeholder="Tema, enlace de videollamada, sala…"></textarea>
+              <textarea id="acadDesc" class="admin-input" style="width:100%;resize:vertical" rows="2" maxlength="300" placeholder="Tema, agenda, sala…"></textarea>
             </div>
             <div>
               <label class="form-label">Fecha</label>
@@ -1432,6 +1514,27 @@
             <div>
               <label class="form-label">Hora</label>
               <input id="acadHora" class="admin-input" style="width:100%;color-scheme:dark" type="time" />
+            </div>
+            <div>
+              <label class="form-label">Enlace de sesión (Zoom / Meet)</label>
+              <input id="acadEnlace" class="admin-input" style="width:100%" type="url" placeholder="https://…" />
+            </div>
+            <div>
+              <label class="form-label">Enlace de grabación (después)</label>
+              <input id="acadGrabacion" class="admin-input" style="width:100%" type="url" placeholder="https://…" />
+            </div>
+            <div style="grid-column:1 / -1">
+              <label class="form-label">Participantes</label>
+              <div style="display:flex;gap:16px;margin:4px 0 8px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer"><input type="radio" name="acadAudiencia" value="todos" checked /> Todos los usuarios</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer"><input type="radio" name="acadAudiencia" value="seleccion" /> Solo seleccionados</label>
+              </div>
+              <div id="acadParticipantes" style="display:none;max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:8px;background:var(--card-2)"></div>
+            </div>
+            <div style="grid-column:1 / -1">
+              <label class="form-label">Presentaciones (PowerPoint)</label>
+              <input id="acadFiles" class="admin-input" style="width:100%" type="file" multiple accept=".ppt,.pptx,.pps,.ppsx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+              <div id="acadFilesPending" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
             </div>
           </div>
           <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
