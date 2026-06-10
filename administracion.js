@@ -250,15 +250,14 @@ function _biBars(items, opts = {}) {
   }).join('') + '</div>';
 }
 
-// Dispara las animaciones de entrada solo al abrir la sección (no en cada snapshot)
-function triggerComAnim() {
-  const s = el('sectionComercial');
+// Dispara la animación de entrada de una sección solo al navegar (one-shot, no en cada snapshot)
+function animateSection(s) {
   if (!s) return;
-  s.classList.remove('com-anim');
+  s.classList.remove('sec-anim');
   void s.offsetWidth; // reinicia las animaciones
-  s.classList.add('com-anim');
-  clearTimeout(triggerComAnim._t);
-  triggerComAnim._t = setTimeout(() => s.classList.remove('com-anim'), 1500);
+  s.classList.add('sec-anim');
+  clearTimeout(animateSection._t);
+  animateSection._t = setTimeout(() => s.classList.remove('sec-anim'), 1600);
 }
 
 function renderComercial() {
@@ -1830,8 +1829,9 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.section === name));
   el('pageTitle').textContent = TITLES[name][0];
   el('pageSub').textContent   = TITLES[name][1];
-  if (name === 'comercial') { renderComercial(); triggerComAnim(); }
+  if (name === 'comercial') renderComercial();
   if (name === 'academia') renderAcademia();
+  animateSection(el(SECTIONS[name]));
 }
 
 // ── UI gates ──

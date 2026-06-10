@@ -987,22 +987,41 @@
   .com-pod.first { transform: translateY(-10px); box-shadow: 0 12px 30px rgba(249,115,22,.25); }
   .com-donut-fg { filter: drop-shadow(0 0 7px rgba(52,211,153,.4)); }
 
-  /* ── Animaciones (solo al entrar a la sección: clase .com-anim) ── */
-  .com-anim .com-kpi, .com-anim #comCharts > * { animation: comRise .5s cubic-bezier(.22,.61,.36,1) both; }
-  .com-anim .com-kpi:nth-child(1) { animation-delay: .03s; }
-  .com-anim .com-kpi:nth-child(2) { animation-delay: .08s; }
-  .com-anim .com-kpi:nth-child(3) { animation-delay: .13s; }
-  .com-anim .com-kpi:nth-child(4) { animation-delay: .18s; }
-  .com-anim .com-kpi:nth-child(5) { animation-delay: .23s; }
-  .com-anim #comCharts > *:nth-child(1) { animation-delay: .10s; }
-  .com-anim #comCharts > *:nth-child(2) { animation-delay: .18s; }
-  .com-anim #comCharts > *:nth-child(3) { animation-delay: .26s; }
-  @keyframes comRise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-  .com-anim .com-col-fill { transform-origin: bottom; animation: comGrow .7s cubic-bezier(.22,.61,.36,1) both; animation-delay: .28s; }
+  /* ════ Animación de entrada por sección (.sec-anim: one-shot al navegar) ════
+     Se aplica a los BLOQUES (no a los contenedores) para evitar doble animación,
+     y el escalonado se hace con nth-child universal (solo afecta a lo que tiene animación). */
+  .sec-anim .section-header,
+  .sec-anim .stat-card,
+  .sec-anim .com-kpi,
+  .sec-anim .com-card,
+  .sec-anim .com-grid-2,
+  .sec-anim .user-table-head,
+  .sec-anim .user-row,
+  .sec-anim .rec-form,
+  .sec-anim .rec-card,
+  .sec-anim .act-row,
+  .sec-anim .card { animation: secRise .55s cubic-bezier(.22,.61,.36,1) both; }
+  @keyframes secRise { from { opacity: 0; transform: translateY(24px) scale(.98); } to { opacity: 1; transform: none; } }
+
+  .sec-anim *:nth-child(1) { animation-delay: .02s; }
+  .sec-anim *:nth-child(2) { animation-delay: .06s; }
+  .sec-anim *:nth-child(3) { animation-delay: .10s; }
+  .sec-anim *:nth-child(4) { animation-delay: .14s; }
+  .sec-anim *:nth-child(5) { animation-delay: .18s; }
+  .sec-anim *:nth-child(6) { animation-delay: .22s; }
+  .sec-anim *:nth-child(7) { animation-delay: .26s; }
+  .sec-anim *:nth-child(8) { animation-delay: .30s; }
+  .sec-anim *:nth-child(n+9) { animation-delay: .34s; }
+
+  /* Resumen (Overview): tarjetas con un leve "zoom-in" extra */
+  .sec-anim .stat-card.hero { animation-duration: .65s; }
+
+  /* Comercial: detalle dentro de las tarjetas (crecen/llenan/dibujan) */
+  .sec-anim .com-col-fill { transform-origin: bottom; animation: comGrow .75s cubic-bezier(.22,.61,.36,1) both; animation-delay: .3s; }
   @keyframes comGrow { from { transform: scaleY(0); } }
-  .com-anim .com-bar-fill { transform-origin: left; animation: comFill .7s cubic-bezier(.22,.61,.36,1) both; animation-delay: .30s; }
+  .sec-anim .com-bar-fill { transform-origin: left; animation: comFill .75s cubic-bezier(.22,.61,.36,1) both; animation-delay: .32s; }
   @keyframes comFill { from { transform: scaleX(0); } }
-  .com-anim .com-donut-fg { animation: comDraw 1.1s cubic-bezier(.22,.61,.36,1) both; animation-delay: .25s; }
+  .sec-anim .com-donut-fg { animation: comDraw 1.15s cubic-bezier(.22,.61,.36,1) both; animation-delay: .28s; }
   @keyframes comDraw { from { stroke-dashoffset: 327; } }
 
   @media (max-width: 760px) {
@@ -1011,7 +1030,7 @@
     .com-cols { height: 150px; gap: 6px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .com-anim .com-kpi, .com-anim #comCharts > *, .com-anim .com-col-fill, .com-anim .com-bar-fill, .com-anim .com-donut-fg { animation: none !important; }
+    .sec-anim * { animation: none !important; }
   }
 </style>
 
