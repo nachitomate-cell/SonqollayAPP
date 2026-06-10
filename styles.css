@@ -1907,3 +1907,60 @@ main { padding: 14px 14px 20px; }
 /* Mi día: variante "warn" del encabezado de sección */
 .hoy-section-header.warn { color: var(--warn); }
 .hoy-dot.warn { background: var(--warn); }
+
+/* ════════════════════════════════════════════════
+   Experiencia premium: transiciones y micro-interacciones
+   ════════════════════════════════════════════════ */
+html { scroll-behavior: smooth; }
+
+/* Entrada de vista al navegar */
+.view.active { animation: sqyViewIn .36s cubic-bezier(.22, .61, .36, 1); }
+@keyframes sqyViewIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* Micro-interacciones de toque */
+.btn, .quick-tile, .nav-btn, .icon-btn, .seg-chip, .sfchip, .fab, .cf-clear, .acad-card, .search-item {
+  transition: transform .13s ease, box-shadow .22s ease, background .2s ease, border-color .2s ease;
+}
+.btn:active, .quick-tile:active, .icon-btn:active, .seg-chip:active, .sfchip:active, .acad-card:active, .search-item:active { transform: scale(.96); }
+.fab:active { transform: scale(.9) rotate(8deg); }
+.nav-btn:active { transform: scale(.88); }
+.card { transition: transform .16s ease, box-shadow .22s ease, border-color .2s ease; }
+
+/* Realce al pasar el mouse (solo dispositivos con hover real) */
+@media (hover: hover) {
+  .quick-tile:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(0,0,0,.32); }
+  .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); border-color: var(--card-hover); }
+  .search-item:hover, .acad-card:hover { background: var(--card-hover); }
+  .btn:hover { filter: brightness(1.05); }
+}
+
+/* Indicador activo de la barra inferior con "pop" */
+.nav-btn.active svg { animation: sqyPop .34s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes sqyPop { 0% { transform: scale(.7); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+
+/* Modales: backdrop fade + contenido con escala suave */
+.modal:not(.hidden) { animation: sqyFade .2s ease; }
+.modal-content { animation: sqyModalIn .32s cubic-bezier(.22, .61, .36, 1); }
+@keyframes sqyFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sqyModalIn { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }
+
+/* Toast con spinner / estado */
+.toast { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.toast-msg { line-height: 1.3; }
+.toast-spinner { width: 15px; height: 15px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: sqySpin .7s linear infinite; flex-shrink: 0; opacity: .9; }
+.toast-ico { font-weight: 800; flex-shrink: 0; }
+.toast-ico.ok { color: var(--success); }
+.toast-ico.err { color: var(--danger); }
+.toast.toast-loading { opacity: 1; }
+@keyframes sqySpin { to { transform: rotate(360deg); } }
+
+/* Aparición de hojas inferiores ya animada (slideUp); reforzamos el realce de botones internos */
+.up-user:active, .trash-item:active { transform: scale(.99); }
+
+/* Respeto a quienes prefieren menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important; scroll-behavior: auto !important;
+  }
+}

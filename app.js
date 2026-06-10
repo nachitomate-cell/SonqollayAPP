@@ -65,12 +65,40 @@ function downloadICS(q) {
   showToast('Archivo .ics descargado · ábrelo para agregar al calendario');
 }
 
-function showToast(msg) {
+function showToast(msg, opts = {}) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
+  if (!t) return;
+  const ico = opts.loading ? '<span class="toast-spinner" aria-hidden="true"></span>'
+    : opts.ok === true ? '<span class="toast-ico ok">✓</span>'
+    : opts.ok === false ? '<span class="toast-ico err">✕</span>' : '';
+  t.innerHTML = `${ico}<span class="toast-msg">${escapeHtml(msg)}</span>`;
+  t.classList.toggle('toast-loading', !!opts.loading);
   t.classList.remove('hidden');
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => t.classList.add('hidden'), 2400);
+  if (!opts.loading) {
+    showToast._t = setTimeout(() => t.classList.add('hidden'), opts.duration || 2400);
+  }
+}
+// Toast persistente con spinner mientras se confirma una operación
+function toastLoading(msg = 'Guardando…') { showToast(msg, { loading: true }); }
+function toastDone(msg, ok = true) { showToast(msg, { ok }); }
+
+// Count-up suave para KPIs (anima del valor anterior al nuevo; respeta reduced-motion)
+function animateCount(el, to) {
+  if (!el) return;
+  to = Number(to) || 0;
+  const from = parseInt(el.dataset.cv || '0', 10) || 0;
+  el.dataset.cv = String(to);
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (from === to || reduce) { el.textContent = to; return; }
+  const dur = 650, t0 = performance.now();
+  const step = (t) => {
+    const p = Math.min(1, (t - t0) / dur);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(from + (to - from) * eased);
+    if (p < 1) requestAnimationFrame(step); else el.textContent = to;
+  };
+  requestAnimationFrame(step);
 }
 
 let _autoTourDone = false;
@@ -2094,14 +2122,16 @@ async function trashAction(kind, id, action) {
   const col = kind === 'quote' ? quotesCol() : clientsCol();
   try {
     if (action === 'restore') {
+      toastLoading('Restaurando…');
       await setDoc(doc(col, id), { deleted: false }, { merge: true });
-      showToast(kind === 'quote' ? 'Cotización restaurada' : 'Cliente restaurado');
+      toastDone(kind === 'quote' ? 'Cotización restaurada' : 'Cliente restaurado');
     } else {
       if (!confirm('¿Eliminar definitivamente? Esta acción no se puede deshacer.')) return;
+      toastLoading('Eliminando…');
       await deleteDoc(doc(col, id));
-      showToast('Eliminado definitivamente');
+      toastDone('Eliminado definitivamente');
     }
-  } catch (e) { showToast('Error: ' + (e.message || e)); }
+  } catch (e) { toastDone('Error: ' + (e.message || e), false); }
 }
 document.getElementById('trashClose')?.addEventListener('click', closeTrash);
 document.getElementById('trashSheet')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeTrash(); });
@@ -2296,10 +2326,8 @@ document.getElementById('quickNewQuote')?.addEventListener('click', () => openQu
 document.getElementById('quickNewClient')?.addEventListener('click', () => openClientForm());
 
 function updateQuickCounts() {
-  const qEl = document.getElementById('quickCountQuotes');
-  const cEl = document.getElementById('quickCountClients');
-  if (qEl) qEl.textContent = quotes.length;
-  if (cEl) cEl.textContent = clients.length;
+  animateCount(document.getElementById('quickCountQuotes'), quotes.length);
+  animateCount(document.getElementById('quickCountClients'), clients.length);
 }
 
 // ---------- FAB ----------
@@ -2423,6 +2451,7 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     showToast('Empresa, N° y fecha son obligatorios');
     return;
   }
+  toastLoading('Guardando cotización…');
   try {
     const id = editingQuoteId || uid();
     // Compute change log if editing
@@ -2452,23 +2481,24 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     logActivity(editingQuoteId ? 'quote_edit' : 'quote_new', `${data.numero} · ${data.empresa}`).catch(() => {});
     await ensureClientForCompany(data.empresa, data.contactos);
     quoteModal.classList.add('hidden');
-    showToast('Cotización guardada');
+    toastDone('Cotización guardada');
   } catch (e) {
-    console.error(e); showToast('Error guardando: ' + e.message);
+    console.error(e); toastDone('Error guardando: ' + e.message, false);
   }
 });
 
 document.getElementById('quoteDelete').addEventListener('click', async () => {
   if (!editingQuoteId) return;
   if (!confirm('¿Eliminar esta cotización?')) return;
+  toastLoading('Moviendo a la papelera…');
   try {
     const qDel = quotes.find(x => x.id === editingQuoteId);
     await setDoc(doc(quotesCol(), editingQuoteId), { deleted: true, deletedAt: serverTimestamp(), deletedBy: currentUser.uid }, { merge: true });
     if (qDel) logActivity('quote_delete', `${qDel.numero} · ${qDel.empresa}`).catch(() => {});
     quoteModal.classList.add('hidden');
-    showToast('Cotización movida a la papelera');
+    toastDone('Cotización movida a la papelera');
   } catch (e) {
-    showToast('Error: ' + e.message);
+    toastDone('Error: ' + e.message, false);
   }
 });
 
@@ -2973,6 +3003,7 @@ document.getElementById('clientSave').addEventListener('click', async () => {
     industria: _editingIndustriaClient,
   };
   if (!data.empresa) { showToast('La empresa es obligatoria'); return; }
+  toastLoading('Guardando cliente…');
   try {
     const id = editingClientId || uid();
     await setDoc(doc(clientsCol(), id), {
@@ -2983,20 +3014,23 @@ document.getElementById('clientSave').addEventListener('click', async () => {
     }, { merge: true });
     logActivity(editingClientId ? 'client_edit' : 'client_new', data.empresa).catch(() => {});
     clientModal.classList.add('hidden');
-    showToast('Cliente guardado');
+    toastDone('Cliente guardado');
   } catch (e) {
-    showToast('Error: ' + e.message);
+    toastDone('Error: ' + e.message, false);
   }
 });
 
 document.getElementById('clientDelete').addEventListener('click', async () => {
   if (!editingClientId) return;
   if (!confirm('¿Eliminar este cliente?')) return;
-  const cDel = clients.find(x => x.id === editingClientId);
-  await setDoc(doc(clientsCol(), editingClientId), { deleted: true, deletedAt: serverTimestamp(), deletedBy: currentUser.uid }, { merge: true });
-  if (cDel) logActivity('client_delete', cDel.empresa).catch(() => {});
-  clientModal.classList.add('hidden');
-  showToast('Cliente movido a la papelera');
+  toastLoading('Moviendo a la papelera…');
+  try {
+    const cDel = clients.find(x => x.id === editingClientId);
+    await setDoc(doc(clientsCol(), editingClientId), { deleted: true, deletedAt: serverTimestamp(), deletedBy: currentUser.uid }, { merge: true });
+    if (cDel) logActivity('client_delete', cDel.empresa).catch(() => {});
+    clientModal.classList.add('hidden');
+    toastDone('Cliente movido a la papelera');
+  } catch (e) { toastDone('Error: ' + e.message, false); }
 });
 
 // ---------- Buscadores ----------
