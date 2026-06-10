@@ -95,6 +95,11 @@
       <span class="rate-sep"></span>
       <span class="rate"><span class="rate-k">UF</span><span class="rate-v" id="rateUf">—</span></span>
     </button>
+    <button id="globalSearchBtn" class="icon-btn" aria-label="Buscar">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
+      </svg>
+    </button>
     <button id="activityFeedBtn" class="icon-btn" aria-label="Actividad reciente" style="position:relative">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
@@ -607,6 +612,18 @@
       </div>
     </section>
 
+    <!-- ── Mi día ── -->
+    <section id="view-miday" class="view">
+      <div class="admin-view-header">
+        <button class="icon-btn" id="midayBack" aria-label="Volver">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
+        </button>
+        <h2>Mi día</h2>
+        <div style="width:38px"></div>
+      </div>
+      <div id="midayContent" style="padding:0 16px 28px"></div>
+    </section>
+
     <!-- ── Academia ── -->
     <section id="view-academia" class="view">
       <div class="admin-view-header">
@@ -1051,6 +1068,31 @@
       <button class="btn btn-block" id="acadSave">Guardar</button>
       <button class="btn btn-outline btn-block hidden" id="acadDelete" style="color:var(--danger);border-color:rgba(248,113,113,.4)">Eliminar</button>
       <div id="acadFeedback" class="up-feedback"></div>
+    </div>
+  </div>
+
+  <!-- ── Búsqueda global ── -->
+  <div id="searchOverlay" class="search-overlay hidden">
+    <div class="search-bar">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+      <input id="searchInput" type="search" placeholder="Buscar clientes y cotizaciones…" autocomplete="off" />
+      <button id="searchClose" class="search-close">Cancelar</button>
+    </div>
+    <div id="searchResults" class="search-results"></div>
+  </div>
+
+  <!-- ── Papelera ── -->
+  <div id="trashSheet" class="bottom-sheet hidden">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header" style="flex-shrink:0">
+      <h2 class="sheet-title">Papelera</h2>
+      <button class="icon-btn" id="trashClose" aria-label="Cerrar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="up-body">
+      <p style="color:var(--muted);font-size:12.5px;margin:0 0 4px">Elementos eliminados. Se borran definitivamente a los 30 días.</p>
+      <div id="trashList"></div>
     </div>
   </div>
 

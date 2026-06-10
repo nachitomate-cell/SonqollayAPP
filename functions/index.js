@@ -260,6 +260,55 @@ exports.academiaReminders = onSchedule(
   }
 );
 
+// ---------- Recordatorio: cotizaciones por vencer (push al dueño ~3 días antes) ----------
+exports.quoteExpiryReminders = onSchedule(
+  { schedule: '0 9 * * *', timeZone: 'America/Santiago', region: 'us-central1' },
+  async () => {
+    const today = todayISO();
+    let snap;
+    try { snap = await db.collection('quotes').get(); } catch (e) { logger.error('quoteExpiry query', e); return; }
+    for (const docSnap of snap.docs) {
+      const q = docSnap.data();
+      if (q.deleted || q.notifiedVencimiento || !q.fecha || !q.createdBy) continue;
+      const estado = (q.estado || '').toLowerCase();
+      if (estado === 'adjudicada' || estado === 'perdida') continue;
+      const validez = Number(q.validezDias) || 30;
+      let dleft;
+      try { dleft = daysBetween(today, addDaysISO(q.fecha, validez)); } catch { continue; }
+      if (dleft < 0 || dleft > 3) continue;
+      const cuando = dleft === 0 ? 'vence hoy' : (dleft === 1 ? 'vence mañana' : `vence en ${dleft} días`);
+      try {
+        await sendToAll(
+          { title: `⏳ Cotización ${q.numero || ''} ${cuando}`, body: `${q.empresa || ''} · revisa antes de que caduque su validez.` },
+          { kind: 'quote_expiry', quoteId: docSnap.id },
+          { onlyUid: q.createdBy }
+        );
+        await docSnap.ref.update({ notifiedVencimiento: true });
+      } catch (e) { logger.error('quoteExpiry send', docSnap.id, e); }
+    }
+  }
+);
+
+// ---------- Papelera: purga definitiva a los 30 días ----------
+exports.purgeTrash = onSchedule(
+  { schedule: '0 3 * * *', timeZone: 'America/Santiago', region: 'us-central1' },
+  async () => {
+    const cutoffMs = Date.now() - 30 * 86400000;
+    for (const col of ['quotes', 'clients']) {
+      try {
+        const snap = await db.collection(col).where('deleted', '==', true).get();
+        const batch = db.batch();
+        let n = 0;
+        snap.docs.forEach(d => {
+          const dd = d.data().deletedAt;
+          if (dd && dd.toMillis && dd.toMillis() <= cutoffMs) { batch.delete(d.ref); n++; }
+        });
+        if (n) { await batch.commit(); logger.info(`purgeTrash: ${n} de ${col}`); }
+      } catch (e) { logger.error('purgeTrash', col, e); }
+    }
+  }
+);
+
 // ---------- 2) Notificaciones sobre cotizaciones (trigger único consolidado) ----------
 // Un solo trigger por escritura: evita la tormenta de push duplicadas (antes 5 funciones
 // sobre el mismo path) y reduce las lecturas de tokens de 5-6 a 1 por guardado.

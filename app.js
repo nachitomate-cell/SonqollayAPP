@@ -500,6 +500,8 @@ document.getElementById('afFilters')?.addEventListener('click', e => {
 let currentUser = null;
 let quotes = [];
 let clients = [];
+let quotesTrash = [];
+let clientsTrash = [];
 let unsubQuotes = null;
 let unsubClients = null;
 let quotesLoaded = false;
@@ -743,18 +745,24 @@ function subscribe() {
   clientsLoaded = false;
   renderAll();
   unsubQuotes = onSnapshot(query(quotesCol(), orderBy('fecha', 'desc')), (snap) => {
-    quotes = snap.docs.map(d => d.data());
+    const all = snap.docs.map(d => d.data());
+    quotes = all.filter(q => !q.deleted);
+    quotesTrash = all.filter(q => q.deleted);
     quotesLoaded = true;
     if (clientsLoaded) hideSplash();
     renderAll();
+    if (!document.getElementById('trashSheet')?.classList.contains('hidden')) renderTrash();
   }, (err) => {
     console.error(err); showToast('Error leyendo cotizaciones');
   });
   unsubClients = onSnapshot(query(clientsCol(), orderBy('empresa')), (snap) => {
-    clients = snap.docs.map(d => d.data());
+    const all = snap.docs.map(d => d.data());
+    clients = all.filter(c => !c.deleted);
+    clientsTrash = all.filter(c => c.deleted);
     clientsLoaded = true;
     if (quotesLoaded) hideSplash();
     renderAll();
+    if (!document.getElementById('trashSheet')?.classList.contains('hidden')) renderTrash();
   });
   unsubTemplates = onSnapshot(query(templatesCol()), snap => {
     templates = snap.docs.map(d => d.data());
@@ -976,13 +984,17 @@ document.addEventListener('click', (e) => {
     menu = document.createElement('div');
     menu.className = 'header-menu';
     menu.innerHTML = `
+      <button data-act="miday">📌 Mi día</button>
       <button data-act="academia">📚 Academia</button>
+      <button data-act="trash">🗑️ Papelera</button>
       <button data-act="tour">🎓 Cómo usar la app</button>
       <button data-act="settings">⚙️ Ajustes</button>`;
     document.body.appendChild(menu);
     const r = btn.getBoundingClientRect();
     menu.style.top = (r.bottom + 6) + 'px';
     menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    menu.querySelector('[data-act="miday"]').onclick = () => { close(); showView('miday'); };
+    menu.querySelector('[data-act="trash"]').onclick = () => { close(); openTrash(); };
     menu.querySelector('[data-act="academia"]').onclick = () => { close(); showView('academia'); };
     menu.querySelector('[data-act="tour"]').onclick = () => { close(); launchTour(); };
     menu.querySelector('[data-act="settings"]').onclick = () => { close(); document.querySelector('.bottom-nav [data-view="settings"]')?.click(); };
@@ -1880,6 +1892,7 @@ function showView(name) {
     if (isAdmin) subscribeAdmin();
   }
   if (name === 'academia') subscribeAcademia();
+  if (name === 'miday') { subscribeAcademia(); renderMiDay(); }
 }
 document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
 
@@ -2005,6 +2018,137 @@ document.getElementById('acadDelete')?.addEventListener('click', async () => {
   try { await deleteDoc(doc(dbf, 'academiaEventos', _acadEditId)); closeAcadSheet(); showToast('Evento eliminado'); }
   catch (e) { showToast('Error al eliminar'); }
 });
+
+// ---------- Búsqueda global ----------
+const _searchOverlay = document.getElementById('searchOverlay');
+const _searchInput = document.getElementById('searchInput');
+function openSearch() {
+  if (!_searchOverlay) return;
+  _searchOverlay.classList.remove('hidden');
+  _searchInput.value = '';
+  document.getElementById('searchResults').innerHTML = '<div class="search-hint">Escribe para buscar clientes y cotizaciones…</div>';
+  setTimeout(() => _searchInput.focus(), 50);
+}
+function closeSearch() { _searchOverlay?.classList.add('hidden'); }
+function renderSearch(term) {
+  const resEl = document.getElementById('searchResults');
+  const t = term.trim().toLowerCase();
+  if (!t) { resEl.innerHTML = '<div class="search-hint">Escribe para buscar clientes y cotizaciones…</div>'; return; }
+  const norm = s => String(s || '').toLowerCase();
+  const qz = quotes.filter(q => norm(q.numero).includes(t) || norm(q.empresa).includes(t) || norm(q.descripcion).includes(t)).slice(0, 12);
+  const cl = clients.filter(c => norm(c.empresa).includes(t) || norm(c.contactos).includes(t) || norm(c.email).includes(t) || norm(c.rut).includes(t)).slice(0, 12);
+  if (!cl.length && !qz.length) { resEl.innerHTML = `<div class="search-hint">Sin resultados para «${escapeHtml(term)}».</div>`; return; }
+  let html = '';
+  if (qz.length) html += '<div class="search-group">Cotizaciones</div>' + qz.map(q => `
+    <button class="search-item" data-kind="quote" data-id="${escapeHtml(q.id)}">
+      <span class="search-item-icon">📄</span>
+      <span class="search-item-main"><b>${escapeHtml(q.numero || '—')}</b> · ${escapeHtml(q.empresa || '')}</span>
+      <span class="search-item-sub">${escapeHtml(q.estado || '')}</span>
+    </button>`).join('');
+  if (cl.length) html += '<div class="search-group">Clientes</div>' + cl.map(c => `
+    <button class="search-item" data-kind="client" data-id="${escapeHtml(c.id)}">
+      <span class="search-item-icon">🏢</span>
+      <span class="search-item-main">${escapeHtml(c.empresa || '—')}</span>
+      <span class="search-item-sub">${escapeHtml(c.contactos || c.email || '')}</span>
+    </button>`).join('');
+  resEl.innerHTML = html;
+  resEl.querySelectorAll('.search-item').forEach(b => b.addEventListener('click', () => {
+    closeSearch();
+    if (b.dataset.kind === 'quote') openQuoteDetail(b.dataset.id);
+    else openClientForm(b.dataset.id);
+  }));
+}
+document.getElementById('globalSearchBtn')?.addEventListener('click', openSearch);
+document.getElementById('searchClose')?.addEventListener('click', closeSearch);
+_searchInput?.addEventListener('input', e => renderSearch(e.target.value));
+_searchInput?.addEventListener('keydown', e => { if (e.key === 'Escape') closeSearch(); });
+
+// ---------- Papelera (borrado suave, 30 días) ----------
+function openTrash() { document.getElementById('trashSheet')?.classList.remove('hidden'); renderTrash(); }
+function closeTrash() { document.getElementById('trashSheet')?.classList.add('hidden'); }
+function renderTrash() {
+  const el = document.getElementById('trashList');
+  if (!el) return;
+  const items = [
+    ...quotesTrash.map(q => ({ kind: 'quote', id: q.id, title: `${q.numero || '—'} · ${q.empresa || ''}`, when: q.deletedAt })),
+    ...clientsTrash.map(c => ({ kind: 'client', id: c.id, title: c.empresa || '—', when: c.deletedAt })),
+  ].sort((a, b) => (b.when?.toMillis?.() || 0) - (a.when?.toMillis?.() || 0));
+  if (!items.length) { el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">La papelera está vacía.</div>'; return; }
+  el.innerHTML = items.map(it => {
+    const d = it.when?.toDate?.();
+    const icon = it.kind === 'quote' ? '📄' : '🏢';
+    return `<div class="trash-item">
+      <span style="font-size:18px">${icon}</span>
+      <div style="flex:1;min-width:0">
+        <div class="trash-title">${escapeHtml(it.title)}</div>
+        <div class="trash-sub">${it.kind === 'quote' ? 'Cotización' : 'Cliente'}${d ? ' · eliminado ' + escapeHtml(timeAgo(d)) : ''}</div>
+      </div>
+      <button class="trash-restore" data-kind="${it.kind}" data-id="${escapeHtml(it.id)}">Restaurar</button>
+      <button class="trash-del" data-kind="${it.kind}" data-id="${escapeHtml(it.id)}" title="Eliminar definitivamente">✕</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.trash-restore').forEach(b => b.addEventListener('click', () => trashAction(b.dataset.kind, b.dataset.id, 'restore')));
+  el.querySelectorAll('.trash-del').forEach(b => b.addEventListener('click', () => trashAction(b.dataset.kind, b.dataset.id, 'delete')));
+}
+async function trashAction(kind, id, action) {
+  const col = kind === 'quote' ? quotesCol() : clientsCol();
+  try {
+    if (action === 'restore') {
+      await setDoc(doc(col, id), { deleted: false }, { merge: true });
+      showToast(kind === 'quote' ? 'Cotización restaurada' : 'Cliente restaurado');
+    } else {
+      if (!confirm('¿Eliminar definitivamente? Esta acción no se puede deshacer.')) return;
+      await deleteDoc(doc(col, id));
+      showToast('Eliminado definitivamente');
+    }
+  } catch (e) { showToast('Error: ' + (e.message || e)); }
+}
+document.getElementById('trashClose')?.addEventListener('click', closeTrash);
+document.getElementById('trashSheet')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeTrash(); });
+
+// ---------- Mi día ----------
+function quoteDaysToExpire(q) {
+  if (!q.fecha) return null;
+  const base = new Date(q.fecha + 'T00:00:00');
+  if (isNaN(base.getTime())) return null;
+  const dias = Number(q.validezDias) || 30;
+  const exp = new Date(base.getTime() + dias * 86400000);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((exp - today) / 86400000);
+}
+function renderMiDay() {
+  const el = document.getElementById('midayContent');
+  if (!el || !currentUser) return;
+  const uid = currentUser.uid;
+  const mine = quotes.filter(q => q.createdBy === uid);
+  const active = q => { const e = (q.estado || '').toLowerCase(); return e !== 'adjudicada' && e !== 'perdida'; };
+  const overdue = mine.filter(q => q.seguimiento && active(q) && daysUntil(q.seguimiento) <= 0)
+    .sort((a, b) => a.seguimiento.localeCompare(b.seguimiento));
+  const expiringSoon = mine.filter(q => {
+    if (!active(q)) return false;
+    const dleft = quoteDaysToExpire(q);
+    return dleft !== null && dleft >= 0 && dleft <= 3;
+  }).sort((a, b) => quoteDaysToExpire(a) - quoteDaysToExpire(b));
+  const today = new Date();
+  const evHoy = _acadEvents.filter(ev => { const d = ev.fechaHora?.toDate?.(); return d && d.toDateString() === today.toDateString() && d.getTime() >= Date.now(); });
+
+  const sec = (title, dot, inner) => `<div class="hoy-section-header ${dot}"><span class="hoy-dot ${dot}"></span>${title}</div>${inner}`;
+  const greet = (currentUser.displayName || currentUser.email || '').split(' ')[0];
+  let html = `<p style="color:var(--muted);font-size:13px;margin:4px 0 14px">Tu resumen de hoy${greet ? ', ' + escapeHtml(greet) : ''}.</p>`;
+  if (overdue.length) html += sec('Requieren seguimiento', 'urgent', `<div class="list">${overdue.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>`);
+  if (expiringSoon.length) html += sec('Por vencer (≤ 3 días)', 'warn', `<div class="list">${expiringSoon.map(q => cardQuoteHtml(q)).join('')}</div>`);
+  if (evHoy.length) html += sec('Academia hoy', '', '<div class="acad-list" style="padding:0">' + evHoy.map(ev => {
+    const d = ev.fechaHora.toDate();
+    const hh = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="acad-card"><div class="acad-card-icon">${ev.tipo === 'Clase' ? '📚' : '🤝'}</div><div class="acad-card-body"><div class="acad-card-title">${escapeHtml(ev.titulo || '')}</div><div class="acad-card-when">${hh}</div></div></div>`;
+  }).join('') + '</div>');
+  if (!overdue.length && !expiringSoon.length && !evHoy.length) {
+    html += '<div class="empty" style="margin:32px 0"><span>¡Todo al día! No tienes pendientes urgentes.</span></div>';
+  }
+  el.innerHTML = html;
+  bindQuoteCards(el);
+}
+document.getElementById('midayBack')?.addEventListener('click', () => showView('dashboard'));
 
 // ---------- Theme Toggle ----------
 function applyTheme(light, animate = false) {
@@ -2319,10 +2463,10 @@ document.getElementById('quoteDelete').addEventListener('click', async () => {
   if (!confirm('¿Eliminar esta cotización?')) return;
   try {
     const qDel = quotes.find(x => x.id === editingQuoteId);
-    await deleteDoc(doc(quotesCol(), editingQuoteId));
+    await setDoc(doc(quotesCol(), editingQuoteId), { deleted: true, deletedAt: serverTimestamp(), deletedBy: currentUser.uid }, { merge: true });
     if (qDel) logActivity('quote_delete', `${qDel.numero} · ${qDel.empresa}`).catch(() => {});
     quoteModal.classList.add('hidden');
-    showToast('Cotización eliminada');
+    showToast('Cotización movida a la papelera');
   } catch (e) {
     showToast('Error: ' + e.message);
   }
@@ -2849,10 +2993,10 @@ document.getElementById('clientDelete').addEventListener('click', async () => {
   if (!editingClientId) return;
   if (!confirm('¿Eliminar este cliente?')) return;
   const cDel = clients.find(x => x.id === editingClientId);
-  await deleteDoc(doc(clientsCol(), editingClientId));
+  await setDoc(doc(clientsCol(), editingClientId), { deleted: true, deletedAt: serverTimestamp(), deletedBy: currentUser.uid }, { merge: true });
   if (cDel) logActivity('client_delete', cDel.empresa).catch(() => {});
   clientModal.classList.add('hidden');
-  showToast('Cliente eliminado');
+  showToast('Cliente movido a la papelera');
 });
 
 // ---------- Buscadores ----------

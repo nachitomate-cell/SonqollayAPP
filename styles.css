@@ -1883,3 +1883,27 @@ main { padding: 14px 14px 20px; }
 .acad-card-when { font-size: 12.5px; color: var(--accent); font-weight: 600; margin-top: 1px; text-transform: capitalize; }
 .acad-card-desc { font-size: 12px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .acad-card-tag { flex-shrink: 0; font-size: 10px; font-weight: 700; color: var(--muted); background: var(--card-2); border-radius: 999px; padding: 3px 8px; }
+
+/* ── Búsqueda global ── */
+.search-overlay { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: flex; flex-direction: column; }
+.search-bar { display: flex; align-items: center; gap: 10px; padding: calc(12px + var(--safe-top)) 16px 12px; border-bottom: 1px solid var(--border); color: var(--muted); }
+.search-bar input { flex: 1; min-width: 0; background: var(--card-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; color: var(--text); font-size: 15px; font-family: var(--font-body); }
+.search-close { background: none; border: none; color: var(--accent); font-weight: 600; font-size: 14px; cursor: pointer; font-family: var(--font-body); flex-shrink: 0; }
+.search-results { flex: 1; overflow-y: auto; padding: 10px 16px 24px; }
+.search-hint { color: var(--muted); font-size: 13px; text-align: center; padding: 28px 16px; }
+.search-group { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 6px; }
+.search-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; font-family: var(--font-body); }
+.search-item-icon { font-size: 16px; flex-shrink: 0; }
+.search-item-main { flex: 1; min-width: 0; color: var(--text); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-item-sub { flex-shrink: 0; color: var(--muted); font-size: 11.5px; }
+
+/* ── Papelera ── */
+.trash-item { display: flex; align-items: center; gap: 10px; padding: 10px 11px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; }
+.trash-title { font-size: 13.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trash-sub { font-size: 11.5px; color: var(--muted); }
+.trash-restore { flex-shrink: 0; background: rgba(52,211,153,.14); color: var(--success); border: 1px solid rgba(52,211,153,.35); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.trash-del { flex-shrink: 0; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; width: 30px; height: 30px; cursor: pointer; }
+
+/* Mi día: variante "warn" del encabezado de sección */
+.hoy-section-header.warn { color: var(--warn); }
+.hoy-dot.warn { background: var(--warn); }
