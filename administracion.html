@@ -868,12 +868,31 @@
     .academia-suggest-btn:hover { opacity: .9; transform: translateY(-2px); }
 
     /* ── Responsive ── */
+    .adm-menu-btn { display: none; }
+    .sidebar-backdrop { display: none; }
     @media (max-width: 900px) {
-      .sidebar { transform: translateX(-100%); }
-      .main { margin-left: 0; }
-      .user-table-head, .user-row {
-        grid-template-columns: 2fr 70px 2fr;
+      .sidebar {
+        position: fixed; top: 0; left: 0; bottom: 0; z-index: 200;
+        transform: translateX(-100%); transition: transform .25s ease;
+        box-shadow: 4px 0 24px rgba(0,0,0,.45);
       }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-backdrop {
+        display: block; position: fixed; inset: 0; z-index: 150;
+        background: rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .25s;
+      }
+      .sidebar-backdrop.show { opacity: 1; pointer-events: auto; }
+      .main { margin-left: 0; }
+      .topbar { gap: 10px; }
+      .adm-menu-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; cursor: pointer;
+        background: var(--card); border: 1px solid var(--border); color: var(--text);
+      }
+      .live-dot { margin-left: auto; }
+      .content { padding: 16px !important; }
+      .stats-row { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; }
+      .user-table-head, .user-row { grid-template-columns: 2fr 70px 2fr; }
       .user-table-head span:nth-child(n+4),
       .user-row > *:nth-child(n+4) { display: none; }
       .admin-form-grid { grid-template-columns: 1fr; }
@@ -1041,9 +1060,15 @@
     </div>
   </aside>
 
+  <!-- Fondo para cerrar el menú lateral en móvil -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
   <!-- Main content -->
   <main class="main">
     <div class="topbar">
+      <button class="adm-menu-btn" id="admMenuBtn" aria-label="Abrir menú">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5"/></svg>
+      </button>
       <div>
         <div class="page-title" id="pageTitle">Resumen</div>
         <div class="page-sub" id="pageSub">Vista general de uso de la aplicación</div>
@@ -1585,6 +1610,19 @@
   </div>
 </div>
 
+<script>
+  // Menú lateral deslizable en móvil (hamburguesa + fondo)
+  (function () {
+    var sb = document.querySelector('.sidebar');
+    var bd = document.getElementById('sidebarBackdrop');
+    var btn = document.getElementById('admMenuBtn');
+    function closeDrawer() { if (sb) sb.classList.remove('open'); if (bd) bd.classList.remove('show'); }
+    function openDrawer() { if (sb) sb.classList.add('open'); if (bd) bd.classList.add('show'); }
+    if (btn) btn.addEventListener('click', function () { (sb && sb.classList.contains('open')) ? closeDrawer() : openDrawer(); });
+    if (bd) bd.addEventListener('click', closeDrawer);
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(function (b) { b.addEventListener('click', closeDrawer); });
+  })();
+</script>
 <script type="module" src="administracion.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
