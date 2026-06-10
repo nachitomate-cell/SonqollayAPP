@@ -5,7 +5,7 @@ import {
   setPersistence, browserLocalPersistence, browserSessionPersistence
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
 import {
-  getFirestore, collection, doc, getDoc, addDoc, deleteDoc, setDoc, onSnapshot,
+  getFirestore, collection, doc, getDoc, getDocs, addDoc, deleteDoc, setDoc, onSnapshot,
   query, orderBy, limit, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
@@ -26,6 +26,7 @@ let adminNotes = [];
 let notifTemplates = []; // pool de plantillas de notificación push guardadas
 let userRoles    = {}; // uid → boolean (isAdmin)
 let userApproved = {}; // uid → boolean (approved, acceso a datos)
+let userProfiles = {}; // uid → displayName || email (todos los usuarios registrados)
 const OWNER_EMAIL = 'ignaciiio.mate@gmail.com';
 let unsubSessions  = null;
 let unsubActivity  = null;
@@ -213,6 +214,8 @@ const COM_PROB = { 'Borrador': 0.10, 'Enviada': 0.40, 'En revisión': 0.60 };
 
 function _uidNameMap() {
   const m = {};
+  // Base: colección users (nombre o email); luego sesiones/actividad (displayName) tiene prioridad
+  Object.entries(userProfiles).forEach(([uid, name]) => { if (name) m[uid] = name; });
   sessions.forEach(s => { if (s.uid && s.displayName) m[s.uid] = s.displayName; });
   activity.forEach(a => { if (a.uid && a.displayName) m[a.uid] = a.displayName; });
   return m;
@@ -297,7 +300,7 @@ function renderComercial() {
   const ranking = Object.values(byUser).sort((a, b) => b.monto - a.monto || b.adjudicadas - a.adjudicadas || b.creadas - a.creadas);
   const rankRows = ranking.slice(0, 10).map((r, i) => `<tr style="border-top:1px solid var(--border)">
     <td style="padding:7px 4px;color:var(--muted)">${i + 1}</td>
-    <td style="padding:7px 4px;font-weight:600">${esc(nameMap[r.uid] || (r.uid === 'desconocido' ? 'Sin autor' : r.uid.slice(0, 6)))}</td>
+    <td style="padding:7px 4px;font-weight:600">${esc(nameMap[r.uid] || (r.uid === 'desconocido' ? 'Sin autor' : 'Sin nombre'))}</td>
     <td style="padding:7px 4px;text-align:center">${r.creadas}</td>
     <td style="padding:7px 4px;text-align:center;color:var(--success);font-weight:600">${r.adjudicadas}</td>
     <td style="padding:7px 4px;text-align:right;font-weight:600">${formatCLPShort(r.monto)}</td>
@@ -1337,6 +1340,12 @@ el('synapNotifBtn')?.addEventListener('click', () => {
 // ── Subscriptions ──
 function subscribe() {
   if (unsubSessions) return;
+
+  // Perfiles de TODOS los usuarios registrados (resuelve nombres aunque no tengan sesión)
+  getDocs(collection(db, 'users')).then(snap => {
+    snap.forEach(d => { const u = d.data() || {}; const n = u.displayName || u.email; if (n) userProfiles[d.id] = n; });
+    renderAll();
+  }).catch(() => {});
 
   const sesQ = query(collection(db, 'sessions'), orderBy('startTime', 'desc'), limit(500));
   unsubSessions = onSnapshot(sesQ, async snap => {
