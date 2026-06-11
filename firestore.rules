@@ -75,6 +75,13 @@ service cloud.firestore {
       allow read, write: if isMember();
     }
 
+    // Chat del equipo: todos los miembros leen; cada uno crea solo sus mensajes; admin puede borrar
+    match /chatMensajes/{id} {
+      allow read:   if isMember();
+      allow create: if isMember() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
     // Configuración global (versión de app, etc.)
     match /config/{id} {
       allow read: if request.auth != null;

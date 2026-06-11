@@ -3,7 +3,7 @@
 // Las notificaciones push se envían a todos los usuarios con tokens registrados.
 
 const { onSchedule } = require('firebase-functions/v2/scheduler');
-const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onDocumentWritten, onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
@@ -317,6 +317,23 @@ exports.purgeTrash = onSchedule(
         if (n) { await batch.commit(); logger.info(`purgeTrash: ${n} de ${col}`); }
       } catch (e) { logger.error('purgeTrash', col, e); }
     }
+  }
+);
+
+// ---------- Chat del equipo: avisa a los demás miembros ----------
+exports.onChatMessage = onDocumentCreated(
+  { document: 'chatMensajes/{id}', region: 'us-central1' },
+  async (event) => {
+    const m = event.data && event.data.data();
+    if (!m || !m.text) return;
+    const autor = (m.displayName || 'Equipo').split(' ')[0];
+    try {
+      await sendToAll(
+        { title: `💬 ${autor}`, body: String(m.text).slice(0, 140) },
+        { kind: 'chat' },
+        { excludeUid: m.uid } // no notificar a quien lo envió
+      );
+    } catch (e) { logger.error('onChatMessage', e); }
   }
 );
 

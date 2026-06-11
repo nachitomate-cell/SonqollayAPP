@@ -751,6 +751,8 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubTemplates) { unsubTemplates(); unsubTemplates = null; }
     if (unsubAppVersion) { unsubAppVersion(); unsubAppVersion = null; }
     if (unsubActivityFeed) { unsubActivityFeed(); unsubActivityFeed = null; }
+    if (unsubChat) { unsubChat(); unsubChat = null; }
+    _chatMsgs = [];
     _actFeedLogs = [];
     _appVersionKnown = null;
     currentUser = null;
@@ -769,6 +771,7 @@ onAuthStateChanged(auth, async (user) => {
   await Promise.all([checkAdminStatus(), maybeSeed()]);
   renderAll();
   subscribe();
+  subscribeChat();
   startActivitySession().catch(() => {});
   setupFcm().catch(e => console.warn('FCM setup', e));
   setupAppVersionListener();
@@ -1084,6 +1087,7 @@ document.addEventListener('click', (e) => {
     menu = document.createElement('div');
     menu.className = 'header-menu';
     menu.innerHTML = `
+      <button data-act="chat">💬 Chat del equipo</button>
       <button data-act="miday">📌 Mi día</button>
       <button data-act="academia">📚 Academia</button>
       <button data-act="trash">🗑️ Papelera</button>
@@ -1093,6 +1097,7 @@ document.addEventListener('click', (e) => {
     const r = btn.getBoundingClientRect();
     menu.style.top = (r.bottom + 6) + 'px';
     menu.style.right = Math.max(8, window.innerWidth - r.right) + 'px';
+    menu.querySelector('[data-act="chat"]').onclick = () => { close(); openChat(); };
     menu.querySelector('[data-act="miday"]').onclick = () => { close(); showView('miday'); };
     menu.querySelector('[data-act="trash"]').onclick = () => { close(); openTrash(); };
     menu.querySelector('[data-act="academia"]').onclick = () => { close(); showView('academia'); };
@@ -2305,6 +2310,91 @@ function renderMiDay() {
   bindQuoteCards(el);
 }
 document.getElementById('midayBack')?.addEventListener('click', () => showView('dashboard'));
+
+// ---------- Chat del equipo ----------
+let _chatMsgs = [];
+let unsubChat = null;
+let _chatLastSeen = (() => { try { return Number(localStorage.getItem('chat_seen_ts')) || 0; } catch (_) { return 0; } })();
+
+function subscribeChat() {
+  if (unsubChat) return;
+  unsubChat = onSnapshot(
+    query(collection(dbf, 'chatMensajes'), orderBy('createdAt', 'asc'), limit(300)),
+    snap => {
+      _chatMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const open = !document.getElementById('chatOverlay')?.classList.contains('hidden');
+      if (open) { renderChat(); markChatSeen(); } else updateChatBadge();
+    },
+    err => console.warn('Chat', err)
+  );
+}
+function updateChatBadge() {
+  const badge = document.getElementById('chatBadge');
+  if (!badge) return;
+  const unread = _chatMsgs.filter(m => (m.createdAt?.toMillis?.() || 0) > _chatLastSeen && m.uid !== currentUser?.uid).length;
+  badge.textContent = unread > 9 ? '9+' : String(unread);
+  badge.classList.toggle('hidden', unread === 0);
+}
+function markChatSeen() {
+  const newest = _chatMsgs.length ? (_chatMsgs[_chatMsgs.length - 1].createdAt?.toMillis?.() || Date.now()) : Date.now();
+  _chatLastSeen = Math.max(_chatLastSeen, newest);
+  try { localStorage.setItem('chat_seen_ts', String(_chatLastSeen)); } catch (_) {}
+  updateChatBadge();
+}
+function renderChat() {
+  const el = document.getElementById('chatMessages');
+  if (!el) return;
+  if (!_chatMsgs.length) { el.innerHTML = '<div class="chat-empty">Aún no hay mensajes.<br>¡Saluda al equipo! 👋</div>'; return; }
+  let lastDay = '', html = '';
+  _chatMsgs.forEach(m => {
+    const d = m.createdAt?.toDate?.();
+    const dayKey = d ? d.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
+    if (dayKey && dayKey !== lastDay) { html += `<div class="chat-day">${escapeHtml(dayKey)}</div>`; lastDay = dayKey; }
+    const mine = m.uid === currentUser?.uid;
+    const time = d ? d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '';
+    const who = (m.displayName || 'Anónimo').split(' ')[0];
+    html += `<div class="chat-msg ${mine ? 'mine' : ''}">
+      ${mine ? '' : `<span class="chat-msg-who">${escapeHtml(who)}</span>`}
+      <div class="chat-bubble">${escapeHtml(m.text || '')}</div>
+      <span class="chat-time">${escapeHtml(time)}</span>
+    </div>`;
+  });
+  el.innerHTML = html;
+  el.scrollTop = el.scrollHeight;
+}
+function openChat() {
+  subscribeChat();
+  document.getElementById('chatOverlay')?.classList.remove('hidden');
+  renderChat();
+  markChatSeen();
+  setTimeout(() => {
+    const el = document.getElementById('chatMessages'); if (el) el.scrollTop = el.scrollHeight;
+    document.getElementById('chatInput')?.focus();
+  }, 60);
+}
+function closeChat() { document.getElementById('chatOverlay')?.classList.add('hidden'); }
+
+document.getElementById('chatBtn')?.addEventListener('click', openChat);
+document.getElementById('chatClose')?.addEventListener('click', closeChat);
+document.getElementById('chatForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const inp = document.getElementById('chatInput');
+  const text = inp.value.trim();
+  if (!text || !currentUser) return;
+  inp.value = '';
+  try {
+    await setDoc(doc(collection(dbf, 'chatMensajes'), uid()), {
+      text,
+      uid: currentUser.uid,
+      displayName: currentUser.displayName || currentUser.email || 'Anónimo',
+      photoURL: currentUser.photoURL || '',
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    showToast('No se pudo enviar: ' + (err.message || err));
+    inp.value = text;
+  }
+});
 
 // ---------- Theme Toggle ----------
 function applyTheme(light, animate = false) {
