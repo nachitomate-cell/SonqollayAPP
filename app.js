@@ -1990,6 +1990,9 @@ function renderCompaniesDatalist() {
 function showView(name) {
   const wasAdmin = document.getElementById('view-admin')?.classList.contains('active');
   if (wasAdmin && name !== 'admin') unsubscribeAdmin();
+  // Cerrar overlays/hojas flotantes al navegar (no deben quedar fijos sobre otra vista)
+  document.getElementById('chatMembersSheet')?.classList.add('hidden');
+  document.getElementById('chatMsgMenu')?.remove();
 
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
@@ -2527,6 +2530,8 @@ function openChat() {
 }
 function closeChat() {
   document.getElementById('chatOverlay')?.classList.add('hidden');
+  document.getElementById('chatMembersSheet')?.classList.add('hidden');
+  document.getElementById('chatMsgMenu')?.remove();
   clearTyping();
   if (unsubTyping) { unsubTyping(); unsubTyping = null; }
 }
@@ -2551,6 +2556,7 @@ async function openChatMembers() {
     const isOwner = u => u.email === DEV_EMAIL;
     const isAdm = u => u.isAdmin === true || isOwner(u);
     let users = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+      .filter(u => u.email !== DEV_EMAIL) // el desarrollador no aparece en el roster
       .filter(adminCh ? isAdm : (u => u.approved === true || isAdm(u)));
     users.sort((a, b) => (isAdm(b) - isAdm(a)) || String(a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
     title.textContent = `${adminCh ? 'Administradores' : 'Miembros del equipo'} · ${users.length}`;
@@ -2689,6 +2695,42 @@ function subscribeTyping(ch) {
   );
 }
 document.getElementById('chatInput')?.addEventListener('input', (e) => { if (e.target.value.trim()) writeTyping(); });
+
+// ── Compartir una cotización al chat (con selector de canal) ──
+function openSharePicker(anchor, q) {
+  document.getElementById('sharePicker')?.remove();
+  const menu = document.createElement('div');
+  menu.id = 'sharePicker';
+  menu.className = 'chat-msg-menu';
+  menu.innerHTML = `
+    <div style="font-size:11px;color:var(--muted);padding:4px 10px 6px">Enviar cotización a…</div>
+    <button data-ch="team">👥 Equipo</button>
+    ${isAdmin ? '<button data-ch="admin">🔒 Admins</button>' : ''}`;
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  menu.style.top = Math.max(8, r.top - menu.offsetHeight - 6) + 'px';
+  menu.style.left = Math.min(Math.max(8, r.left), window.innerWidth - menu.offsetWidth - 8) + 'px';
+  const close = () => { menu.remove(); document.removeEventListener('click', onDoc, true); };
+  const onDoc = (e) => { if (!menu.contains(e.target)) close(); };
+  setTimeout(() => document.addEventListener('click', onDoc, true), 0);
+  menu.querySelectorAll('button[data-ch]').forEach(b => b.addEventListener('click', () => { close(); shareQuoteToChat(q, b.dataset.ch); }));
+}
+async function shareQuoteToChat(q, channel) {
+  if (!currentUser) return;
+  const coll = channel === 'admin' ? 'chatMensajesAdmin' : 'chatMensajes';
+  toastLoading('Enviando al chat…');
+  try {
+    await setDoc(doc(collection(dbf, coll), uid()), {
+      text: '',
+      quoteRef: { id: q.id, numero: q.numero || '', empresa: q.empresa || '', estado: q.estado || 'Borrador', valor: Number(q.valor) || 0 },
+      uid: currentUser.uid,
+      displayName: currentUser.displayName || currentUser.email || 'Anónimo',
+      photoURL: currentUser.photoURL || '',
+      createdAt: serverTimestamp(),
+    });
+    toastDone(channel === 'admin' ? 'Enviada al chat de admins' : 'Enviada al chat del equipo');
+  } catch (e) { toastDone('No se pudo enviar: ' + (e.message || e), false); }
+}
 
 // ── Buscador dentro del chat ──
 document.getElementById('chatSearchBtn')?.addEventListener('click', () => {
@@ -3170,17 +3212,23 @@ function openQuoteDetail(id) {
       </div>
     </div>` : ''}
 
+    <button class="detail-dictate" id="detailDictate">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z"/></svg>
+      Dictar avance por voz
+    </button>
     <div class="detail-actions">
-      <button class="btn btn-outline" id="detailDictate">🎤 Dictar avance</button>
-      ${emails.length ? `<a class="btn" href="mailto:${escapeHtml(emails.join(','))}?subject=${encodeURIComponent('Cotización ' + q.numero + ' - ' + q.empresa)}">✉ Enviar correo</a>` : ''}
+      ${emails.length ? `<a class="btn" href="mailto:${escapeHtml(emails.join(','))}?subject=${encodeURIComponent('Cotización ' + q.numero + ' - ' + q.empresa)}">✉ Correo</a>` : ''}
       <a class="btn btn-outline" href="${waUrl}" target="_blank" rel="noopener" style="background:rgba(37,211,102,.1);border-color:rgba(37,211,102,.3);color:#25D366">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:4px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
         WhatsApp
       </a>
       <button class="btn btn-outline" id="detailPDF" style="background:rgba(249,115,22,.1);border-color:rgba(249,115,22,.35);color:var(--accent)">📄 PDF</button>
+    </div>
+    <button class="detail-more-toggle" id="detailMoreToggle">Más acciones ▾</button>
+    <div class="detail-actions detail-more hidden" id="detailMore">
+      <button class="btn btn-outline" id="detailToChat" style="background:rgba(99,102,241,.12);border-color:rgba(99,102,241,.35);color:#a5b4fc">💬 Al chat</button>
       <button class="btn btn-outline" id="detailExportHist">⬇ Historial</button>
       <button class="btn btn-outline" id="detailShare">Compartir</button>
-      <button class="btn btn-outline" id="detailToChat" style="background:rgba(99,102,241,.12);border-color:rgba(99,102,241,.35);color:#a5b4fc">💬 Al chat</button>
       <button class="btn btn-outline" id="detailDuplicate">Duplicar</button>
       <button class="btn btn-outline" id="detailNewVersion">Nueva versión</button>
       <button class="btn btn-outline" id="detailSaveTemplate">Guardar plantilla</button>
@@ -3256,30 +3304,13 @@ function openQuoteDetail(id) {
     showToast('Historial exportado');
   });
 
-  document.getElementById('detailToChat')?.addEventListener('click', async () => {
-    if (!currentUser) return;
-    const btn = document.getElementById('detailToChat');
-    btn.disabled = true;
-    toastLoading('Enviando al chat…');
-    try {
-      await setDoc(doc(collection(dbf, 'chatMensajes'), uid()), {
-        text: '',
-        quoteRef: {
-          id: q.id,
-          numero: q.numero || '',
-          empresa: q.empresa || '',
-          estado: q.estado || 'Borrador',
-          valor: Number(q.valor) || 0,
-        },
-        uid: currentUser.uid,
-        displayName: currentUser.displayName || currentUser.email || 'Anónimo',
-        photoURL: currentUser.photoURL || '',
-        createdAt: serverTimestamp(),
-      });
-      toastDone('Cotización enviada al chat');
-    } catch (e) {
-      toastDone('No se pudo enviar: ' + (e.message || e), false);
-    } finally { btn.disabled = false; }
+  document.getElementById('detailMoreToggle')?.addEventListener('click', (e) => {
+    const more = document.getElementById('detailMore');
+    const hidden = more.classList.toggle('hidden');
+    e.currentTarget.textContent = hidden ? 'Más acciones ▾' : 'Menos acciones ▲';
+  });
+  document.getElementById('detailToChat')?.addEventListener('click', (ev) => {
+    if (currentUser) openSharePicker(ev.currentTarget, q);
   });
 
   const shareBtn = document.getElementById('detailShare');

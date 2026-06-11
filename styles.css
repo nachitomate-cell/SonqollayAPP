@@ -2132,3 +2132,21 @@ html { scroll-behavior: smooth; }
 .chat-qr-title { font-weight: 700; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-qr-sub { font-size: 11.5px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-quoteref + .chat-bubble-text { margin-top: 6px; }
+
+/* Detalle de cotización: dictado prominente + "Más acciones" colapsable */
+.detail-dictate {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; margin: 6px 0 12px; padding: 15px; border: none; border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), #b45309); color: #fff;
+  font-family: var(--font-body); font-size: 15.5px; font-weight: 800; cursor: pointer;
+  box-shadow: 0 8px 24px rgba(249,115,22,.35); transition: transform .12s ease;
+}
+.detail-dictate:active { transform: scale(.98); }
+.detail-more-toggle {
+  width: 100%; margin-top: 10px; padding: 11px; border: 1px dashed var(--border);
+  background: transparent; color: var(--muted); border-radius: 12px;
+  font-family: var(--font-body); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.detail-more-toggle:hover { color: var(--text); border-color: var(--accent); }
+.detail-more.hidden { display: none; }
+.detail-more { margin-top: 10px; }
