@@ -2214,12 +2214,13 @@ const _searchOverlay = document.getElementById('searchOverlay');
 const _searchInput = document.getElementById('searchInput');
 function openSearch() {
   if (!_searchOverlay) return;
+  lockBodyScroll(true);
   _searchOverlay.classList.remove('hidden');
   _searchInput.value = '';
   document.getElementById('searchResults').innerHTML = '<div class="search-hint">Escribe para buscar clientes y cotizaciones…</div>';
   setTimeout(() => _searchInput.focus(), 50);
 }
-function closeSearch() { _searchOverlay?.classList.add('hidden'); }
+function closeSearch() { _searchOverlay?.classList.add('hidden'); lockBodyScroll(false); }
 function renderSearch(term) {
   const resEl = document.getElementById('searchResults');
   const t = term.trim().toLowerCase();
@@ -2535,8 +2536,24 @@ function setChatChannel(ch) {
   markChatSeen(ch);
   subscribeTyping(ch);
 }
+// Bloquea el scroll del fondo (evita que iOS empuje la página y se vea lo de atrás)
+let _lockScrollY = 0;
+function lockBodyScroll(on) {
+  const b = document.body;
+  if (on) {
+    _lockScrollY = window.scrollY || 0;
+    b.style.position = 'fixed';
+    b.style.top = `-${_lockScrollY}px`;
+    b.style.left = '0'; b.style.right = '0'; b.style.width = '100%';
+  } else {
+    b.style.position = ''; b.style.top = ''; b.style.left = ''; b.style.right = ''; b.style.width = '';
+    window.scrollTo(0, _lockScrollY);
+  }
+}
+
 function openChat() {
   subscribeChat();
+  lockBodyScroll(true);
   document.getElementById('chatOverlay')?.classList.remove('hidden');
   if (_chatChannel === 'admin' && !isAdmin) _chatChannel = 'team';
   setChatChannel(_chatChannel);
@@ -2549,6 +2566,7 @@ function closeChat() {
   document.getElementById('chatOverlay')?.classList.add('hidden');
   document.getElementById('chatMembersSheet')?.classList.add('hidden');
   document.getElementById('chatMsgMenu')?.remove();
+  lockBodyScroll(false);
   clearTyping();
   if (unsubTyping) { unsubTyping(); unsubTyping = null; }
 }
