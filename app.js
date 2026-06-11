@@ -753,7 +753,9 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubAppVersion) { unsubAppVersion(); unsubAppVersion = null; }
     if (unsubActivityFeed) { unsubActivityFeed(); unsubActivityFeed = null; }
     if (unsubChat) { unsubChat(); unsubChat = null; }
+    if (unsubChatAdmin) { unsubChatAdmin(); unsubChatAdmin = null; }
     _chatMsgs = [];
+    _chatAdminMsgs = [];
     _actFeedLogs = [];
     _appVersionKnown = null;
     currentUser = null;
@@ -2315,42 +2317,68 @@ function renderMiDay() {
 }
 document.getElementById('midayBack')?.addEventListener('click', () => showView('dashboard'));
 
-// ---------- Chat del equipo ----------
-let _chatMsgs = [];
-let unsubChat = null;
-let _chatLastSeen = (() => { try { return Number(localStorage.getItem('chat_seen_ts')) || 0; } catch (_) { return 0; } })();
+// ---------- Chat del equipo / Admins ----------
+let _chatChannel = 'team';
+let _chatMsgs = [], _chatAdminMsgs = [];
+let unsubChat = null, unsubChatAdmin = null;
+const CHAT_COLL = { team: 'chatMensajes', admin: 'chatMensajesAdmin' };
+const _chatSeen = {
+  team:  (() => { try { return Number(localStorage.getItem('chat_seen_ts')) || 0; } catch (_) { return 0; } })(),
+  admin: (() => { try { return Number(localStorage.getItem('chat_seen_admin_ts')) || 0; } catch (_) { return 0; } })(),
+};
+const chatMsgsOf = ch => ch === 'admin' ? _chatAdminMsgs : _chatMsgs;
 
 function subscribeChat() {
-  if (unsubChat) return;
-  unsubChat = onSnapshot(
-    query(collection(dbf, 'chatMensajes'), orderBy('createdAt', 'asc'), limit(300)),
-    snap => {
-      _chatMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const open = !document.getElementById('chatOverlay')?.classList.contains('hidden');
-      if (open) { renderChat(); markChatSeen(); } else updateChatBadge();
-    },
-    err => console.warn('Chat', err)
-  );
+  if (!unsubChat) {
+    unsubChat = onSnapshot(
+      query(collection(dbf, CHAT_COLL.team), orderBy('createdAt', 'asc'), limit(300)),
+      snap => { _chatMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() })); onChatSnap('team'); },
+      err => console.warn('Chat', err)
+    );
+  }
+  if (isAdmin && !unsubChatAdmin) {
+    unsubChatAdmin = onSnapshot(
+      query(collection(dbf, CHAT_COLL.admin), orderBy('createdAt', 'asc'), limit(300)),
+      snap => { _chatAdminMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() })); onChatSnap('admin'); },
+      err => console.warn('ChatAdmin', err)
+    );
+  }
+  document.getElementById('chatTabAdmin')?.classList.toggle('hidden', !isAdmin);
+}
+function onChatSnap(ch) {
+  const open = !document.getElementById('chatOverlay')?.classList.contains('hidden');
+  if (open && _chatChannel === ch) { renderChat(); markChatSeen(ch); } else updateChatBadge();
+}
+function unreadOf(ch) {
+  return chatMsgsOf(ch).filter(m => (m.createdAt?.toMillis?.() || 0) > _chatSeen[ch] && m.uid !== currentUser?.uid).length;
 }
 function updateChatBadge() {
   const badge = document.getElementById('chatBadgeNav');
-  if (!badge) return;
-  const unread = _chatMsgs.filter(m => (m.createdAt?.toMillis?.() || 0) > _chatLastSeen && m.uid !== currentUser?.uid).length;
-  badge.textContent = unread > 9 ? '9+' : String(unread);
-  badge.classList.toggle('hidden', unread === 0);
+  const unread = unreadOf('team') + (isAdmin ? unreadOf('admin') : 0);
+  if (badge) {
+    badge.textContent = unread > 9 ? '9+' : String(unread);
+    badge.classList.toggle('hidden', unread === 0);
+  }
+  document.getElementById('chatTabAdmin')?.classList.toggle('has-unread', isAdmin && unreadOf('admin') > 0);
+  document.querySelector('.chat-tab[data-ch="team"]')?.classList.toggle('has-unread', unreadOf('team') > 0);
 }
-function markChatSeen() {
-  const newest = _chatMsgs.length ? (_chatMsgs[_chatMsgs.length - 1].createdAt?.toMillis?.() || Date.now()) : Date.now();
-  _chatLastSeen = Math.max(_chatLastSeen, newest);
-  try { localStorage.setItem('chat_seen_ts', String(_chatLastSeen)); } catch (_) {}
+function markChatSeen(ch = _chatChannel) {
+  const arr = chatMsgsOf(ch);
+  const newest = arr.length ? (arr[arr.length - 1].createdAt?.toMillis?.() || Date.now()) : Date.now();
+  _chatSeen[ch] = Math.max(_chatSeen[ch], newest);
+  try { localStorage.setItem(ch === 'admin' ? 'chat_seen_admin_ts' : 'chat_seen_ts', String(_chatSeen[ch])); } catch (_) {}
   updateChatBadge();
 }
 function renderChat() {
   const el = document.getElementById('chatMessages');
   if (!el) return;
-  if (!_chatMsgs.length) { el.innerHTML = '<div class="chat-empty">Aún no hay mensajes.<br>¡Saluda al equipo! 👋</div>'; return; }
+  const msgs = chatMsgsOf(_chatChannel);
+  if (!msgs.length) {
+    el.innerHTML = `<div class="chat-empty">Aún no hay mensajes${_chatChannel === 'admin' ? ' entre administradores' : ''}.<br>¡Escribe el primero! 👋</div>`;
+    return;
+  }
   let lastDay = '', html = '';
-  _chatMsgs.forEach(m => {
+  msgs.forEach(m => {
     const d = m.createdAt?.toDate?.();
     const dayKey = d ? d.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
     if (dayKey && dayKey !== lastDay) { html += `<div class="chat-day">${escapeHtml(dayKey)}</div>`; lastDay = dayKey; }
@@ -2366,11 +2394,20 @@ function renderChat() {
   el.innerHTML = html;
   el.scrollTop = el.scrollHeight;
 }
+function setChatChannel(ch) {
+  if (ch === 'admin' && !isAdmin) return;
+  _chatChannel = ch;
+  document.querySelectorAll('#chatTabs .chat-tab').forEach(t => t.classList.toggle('active', t.dataset.ch === ch));
+  const inp = document.getElementById('chatInput');
+  if (inp) inp.placeholder = ch === 'admin' ? 'Mensaje solo para administradores…' : 'Escribe un mensaje…';
+  renderChat();
+  markChatSeen(ch);
+}
 function openChat() {
   subscribeChat();
   document.getElementById('chatOverlay')?.classList.remove('hidden');
-  renderChat();
-  markChatSeen();
+  if (_chatChannel === 'admin' && !isAdmin) _chatChannel = 'team';
+  setChatChannel(_chatChannel);
   setTimeout(() => {
     const el = document.getElementById('chatMessages'); if (el) el.scrollTop = el.scrollHeight;
     document.getElementById('chatInput')?.focus();
@@ -2378,8 +2415,10 @@ function openChat() {
 }
 function closeChat() { document.getElementById('chatOverlay')?.classList.add('hidden'); }
 
-document.getElementById('chatBtn')?.addEventListener('click', openChat);
 document.getElementById('chatClose')?.addEventListener('click', closeChat);
+document.getElementById('chatTabs')?.addEventListener('click', e => {
+  const t = e.target.closest('.chat-tab'); if (t) setChatChannel(t.dataset.ch);
+});
 document.getElementById('chatForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const inp = document.getElementById('chatInput');
@@ -2387,7 +2426,7 @@ document.getElementById('chatForm')?.addEventListener('submit', async (e) => {
   if (!text || !currentUser) return;
   inp.value = '';
   try {
-    await setDoc(doc(collection(dbf, 'chatMensajes'), uid()), {
+    await setDoc(doc(collection(dbf, CHAT_COLL[_chatChannel]), uid()), {
       text,
       uid: currentUser.uid,
       displayName: currentUser.displayName || currentUser.email || 'Anónimo',

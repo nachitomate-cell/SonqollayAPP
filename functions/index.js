@@ -337,6 +337,32 @@ exports.onChatMessage = onDocumentCreated(
   }
 );
 
+// uids de administradores (isAdmin==true o el dueño por email)
+async function getAdminUids() {
+  const snap = await db.collection('users').get();
+  return snap.docs
+    .filter(d => d.data().isAdmin === true || d.data().email === 'ignaciiio.mate@gmail.com')
+    .map(d => d.id);
+}
+
+// ---------- Chat de admins: avisa solo a los demás administradores ----------
+exports.onAdminChatMessage = onDocumentCreated(
+  { document: 'chatMensajesAdmin/{id}', region: 'us-central1' },
+  async (event) => {
+    const m = event.data && event.data.data();
+    if (!m || !m.text) return;
+    const autor = (m.displayName || 'Admin').split(' ')[0];
+    try {
+      const adminUids = await getAdminUids();
+      await sendToAll(
+        { title: `🔒 Admins · ${autor}`, body: String(m.text).slice(0, 140) },
+        { kind: 'chat_admin' },
+        { onlyUids: adminUids, excludeUid: m.uid }
+      );
+    } catch (e) { logger.error('onAdminChatMessage', e); }
+  }
+);
+
 // ---------- 2) Notificaciones sobre cotizaciones (trigger único consolidado) ----------
 // Un solo trigger por escritura: evita la tormenta de push duplicadas (antes 5 funciones
 // sobre el mismo path) y reduce las lecturas de tokens de 5-6 a 1 por guardado.

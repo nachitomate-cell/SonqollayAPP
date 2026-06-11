@@ -1144,9 +1144,9 @@
       <button class="icon-btn" id="chatClose" aria-label="Cerrar">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
       </button>
-      <div class="chat-header-info">
-        <div class="chat-header-title">Chat del equipo</div>
-        <div class="chat-header-sub" id="chatHeaderSub">Todos los miembros</div>
+      <div class="chat-tabs" id="chatTabs">
+        <button type="button" class="chat-tab active" data-ch="team">👥 Equipo</button>
+        <button type="button" class="chat-tab hidden" data-ch="admin" id="chatTabAdmin">🔒 Admins</button>
       </div>
     </div>
     <div id="chatMessages" class="chat-messages"></div>

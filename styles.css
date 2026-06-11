@@ -2058,3 +2058,9 @@ html { scroll-behavior: smooth; }
   background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
   display: flex; align-items: center; justify-content: center; line-height: 1;
 }
+
+/* Pestañas de canal del chat (Equipo / Admins) */
+.chat-tabs { display: flex; gap: 6px; flex: 1; min-width: 0; }
+.chat-tab { position: relative; font-family: var(--font-body); font-size: 13px; font-weight: 700; padding: 7px 14px; border-radius: 999px; cursor: pointer; background: var(--card); border: 1px solid var(--border); color: var(--muted); }
+.chat-tab.active { background: var(--accent); border-color: transparent; color: #fff; }
+.chat-tab.has-unread:not(.active)::after { content: ''; position: absolute; top: 4px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
