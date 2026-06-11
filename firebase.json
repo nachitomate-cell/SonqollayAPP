@@ -10,6 +10,7 @@
       "functions/**",
       "scripts/**",
       "firestore.rules",
+      "storage.rules",
       "README.md"
     ],
     "rewrites": [
@@ -74,6 +75,9 @@
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
   },
   "functions": [
     {
