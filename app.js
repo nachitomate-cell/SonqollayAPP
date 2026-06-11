@@ -107,8 +107,9 @@ function hideSplash() {
   if (!el || el.classList.contains('hidden')) return;
   el.classList.add('hiding');
   setTimeout(() => el.classList.add('hidden'), 350);
-  // Auto-arranque del tutorial la primera vez que un usuario entra
-  if (!_autoTourDone && !tourSeen()) {
+  // Auto-arranque del tutorial la primera vez que un usuario entra.
+  // Solo con sesión iniciada: nunca en la pantalla de login.
+  if (currentUser && !_autoTourDone && !tourSeen()) {
     _autoTourDone = true;
     setTimeout(() => { try { startAppTour(TOUR_STEPS); } catch (_) {} }, 1000);
   }
@@ -347,9 +348,14 @@ function renderAdminActivity() {
     quote_new:     { text: 'creó cotización',       color: 'var(--accent)'  },
     quote_edit:    { text: 'editó cotización',      color: 'var(--warn)'    },
     quote_delete:  { text: 'eliminó cotización',    color: 'var(--danger)'  },
+    quote_estado:  { text: 'cambió estado',         color: '#8b5cf6'        },
+    quote_note:    { text: 'agregó nota',           color: 'var(--success)' },
+    quote_contacto:{ text: 'registró seguimiento',  color: '#06b6d4'        },
+    quote_pdf:     { text: 'generó PDF',             color: 'var(--muted)'   },
     client_new:    { text: 'creó cliente',          color: 'var(--accent)'  },
     client_edit:   { text: 'editó cliente',         color: 'var(--warn)'    },
     client_delete: { text: 'eliminó cliente',       color: 'var(--danger)'  },
+    client_note:   { text: 'agregó nota',           color: 'var(--success)' },
   };
   const acts = _adminActivity.filter(a => (a.email || '') !== DEV_EMAIL); // el desarrollador no genera ruido
   const total = acts.length;
@@ -360,10 +366,11 @@ function renderAdminActivity() {
 
   if (!total) { el.innerHTML = '<div style="padding:20px 0;text-align:center;color:var(--muted);font-size:13px">Sin actividad registrada aún</div>'; }
   else {
-    el.innerHTML = items.map(a => {
+    _homeActRendered = items.slice();
+    el.innerHTML = items.map((a, i) => {
       const c = cfg[a.action] || { text: a.action, color: 'var(--muted)' };
       const when = a.timestamp?.toDate ? timeAgo(a.timestamp.toDate()) : '—';
-      return `<div class="act-item">
+      return `<div class="act-item act-clickable" data-act-id="${i}" role="button" tabindex="0">
         <div class="act-dot" style="background:${c.color}"></div>
         <div class="act-body">
           <span class="act-who">${escapeHtml(a.displayName || a.email)}</span>
@@ -371,8 +378,11 @@ function renderAdminActivity() {
           ${a.detail ? `<span class="act-detail">${escapeHtml(a.detail)}</span>` : ''}
         </div>
         <span class="act-time">${when}</span>
+        <svg class="act-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
       </div>`;
     }).join('');
+    el.querySelectorAll('.act-item[data-act-id]').forEach(item =>
+      item.addEventListener('click', () => openActivityDetail(_homeActRendered[Number(item.dataset.actId)])));
   }
 
   const pgEl = document.getElementById('admin-act-pagination');
@@ -451,6 +461,7 @@ function renderActivityFeed() {
     groups[dayKey].push(a);
   });
 
+  _afRendered = [];
   let html = '';
   groupOrder.forEach(day => {
     html += `<div class="af-day-sep">${escapeHtml(day)}</div>`;
@@ -461,8 +472,9 @@ function renderActivityFeed() {
       const firstName = who.trim().split(' ')[0];
       const init = firstName[0].toUpperCase();
       const avatarBg = afAvatarColor(who);
+      const idx = _afRendered.push(a) - 1;
 
-      html += `<div class="af-item">
+      html += `<div class="af-item" data-af-id="${idx}" role="button" tabindex="0">
         <div class="af-avatar" style="background:${avatarBg}">${escapeHtml(init)}</div>
         <div class="af-body">
           <div class="af-who-row">
@@ -474,11 +486,54 @@ function renderActivityFeed() {
           ${a.detail ? `<span class="af-detail">${escapeHtml(a.detail)}</span>` : ''}
         </div>
         <span class="af-time">${escapeHtml(when)}</span>
+        <svg class="af-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
       </div>`;
     });
   });
 
   el.innerHTML = html;
+}
+
+// Etiquetas/colores de cada acción (cubre feed ⚡ y panel de inicio, incl. login/logout).
+const ACT_META = {
+  login:          { label: 'inició sesión',       color: '#22c55e' },
+  logout:         { label: 'cerró sesión',         color: '#94a3b8' },
+  quote_new:      { label: 'creó cotización',      color: '#f97316' },
+  quote_edit:     { label: 'editó cotización',     color: '#f59e0b' },
+  quote_delete:   { label: 'eliminó cotización',   color: '#ef4444' },
+  quote_estado:   { label: 'cambió estado',        color: '#8b5cf6' },
+  quote_note:     { label: 'agregó nota',          color: '#22c55e' },
+  quote_contacto: { label: 'registró seguimiento', color: '#06b6d4' },
+  client_new:     { label: 'creó cliente',         color: '#f97316' },
+  client_edit:    { label: 'editó cliente',        color: '#f59e0b' },
+  client_delete:  { label: 'eliminó cliente',      color: '#ef4444' },
+};
+
+// Abre el detalle completo de una actividad (texto sin recortar + fecha/hora exactas).
+function openActivityDetail(a) {
+  if (!a) return;
+  const cfg = ACT_META[a.action] || { label: a.action, color: 'var(--muted)' };
+  const who = a.displayName || a.email || '?';
+  const init = (who.trim()[0] || '?').toUpperCase();
+  const d = a.timestamp?.toDate ? a.timestamp.toDate() : null;
+  const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+  const avatar = document.getElementById('afdAvatar');
+  if (avatar) { avatar.textContent = init; avatar.style.background = afAvatarColor(who); }
+  set('afdName', who);
+  set('afdEmail', a.email || '');
+  const actEl = document.getElementById('afdAction');
+  if (actEl) actEl.innerHTML = `<span class="af-dot" style="background:${cfg.color}"></span>${escapeHtml(cfg.label)}`;
+  const detailRow = document.getElementById('afdDetailRow');
+  if (detailRow) detailRow.style.display = a.detail ? '' : 'none';
+  set('afdDetail', a.detail || '');
+  set('afdFecha', d ? d.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '—');
+  set('afdHora', d ? d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—');
+  set('afdHace', d ? timeAgo(d) : '—');
+  document.getElementById('afDetailModal')?.classList.remove('hidden');
+}
+
+function closeActivityDetail() {
+  document.getElementById('afDetailModal')?.classList.add('hidden');
 }
 
 function subscribeActivityFeed() {
@@ -514,6 +569,21 @@ document.getElementById('activityFeedBtn')?.addEventListener('click', openActivi
 document.getElementById('afClose')?.addEventListener('click', closeActivityFeed);
 document.getElementById('activityFeedSheet')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeActivityFeed();
+});
+
+// Abrir el detalle al tocar una actividad (delegación) — clic o Enter/Espacio.
+document.getElementById('afList')?.addEventListener('click', e => {
+  const item = e.target.closest('.af-item');
+  if (item) openActivityDetail(_afRendered[Number(item.dataset.afId)]);
+});
+document.getElementById('afList')?.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const item = e.target.closest('.af-item');
+  if (item) { e.preventDefault(); openActivityDetail(_afRendered[Number(item.dataset.afId)]); }
+});
+document.getElementById('afDetailClose')?.addEventListener('click', closeActivityDetail);
+document.getElementById('afDetailModal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeActivityDetail();
 });
 
 document.getElementById('afFilters')?.addEventListener('click', e => {
@@ -564,11 +634,13 @@ let unsubAdminSessions = null;
 let unsubAppVersion    = null;
 let unsubActivityFeed  = null;
 let _actFeedLogs       = [];
+let _afRendered        = []; // logs en orden de render, para abrir el detalle por índice
 let _actFeedFilter     = 'all';
 let _actFeedLastSeen   = 0;
 let _appVersionKnown   = null;
 let _adminSessions = [];
 let _adminActivity = [];
+let _homeActRendered = []; // página actual de actividad del inicio, para abrir el detalle
 let _homeActPage = 0;
 const HOME_ACT_PAGE_SIZE = 15;
 
@@ -3599,7 +3671,11 @@ async function saveDictateNote() {
       writeData._log = arrayUnion({ t: new Date().toISOString(), u: currentUserName(), d: `🎤 Nota: ${text.slice(0, 80)}` });
     }
     await setDoc(ref, writeData, { merge: true });
-    logActivity(type === 'quote' ? 'quote_note' : 'client_note', `${id}: ${text.slice(0, 80)}`).catch(() => {});
+    const refData = snap.exists() ? snap.data() : {};
+    const refLabel = type === 'quote'
+      ? [refData.numero, refData.empresa].filter(Boolean).join(' · ')
+      : (refData.empresa || '');
+    logActivity(type === 'quote' ? 'quote_note' : 'client_note', `${refLabel || id}: ${text.slice(0, 80)}`).catch(() => {});
     if (_dictateRec) { try { _dictateRec.abort(); } catch {} }
     _stopVolumeMeter();
     document.getElementById('dictateSheet').classList.add('hidden');
