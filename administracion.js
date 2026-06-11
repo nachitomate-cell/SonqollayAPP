@@ -449,6 +449,7 @@ function applyActivityFilters() {
 
   return activity.filter(a => {
     if ((a.email || '') === OWNER_EMAIL) return false; // el desarrollador no aparece en el listado
+    if (['login', 'logout'].includes(a.action)) return false; // inicios de sesión: ruido, no relevantes
     if (action !== 'all' && a.action !== action) return false;
     if (user && a.uid !== user) return false;
     if (q) {

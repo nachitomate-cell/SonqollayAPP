@@ -224,14 +224,14 @@ async function startActivitySession() {
       screenTime: { dashboard: 0, quotes: 0, clients: 0, settings: 0 },
     });
   } catch (_) {}
-  logActivity('login', '');
+  // Los inicios/cierres de sesión NO se registran como actividad (ruido); el conteo de
+  // sesiones y horas sale de la colección `sessions`.
   _scheduleFlush();
 }
 
 async function endActivitySession() {
   clearTimeout(_flushTimer);
   if (!_sessionRef) return;
-  await logActivity('logout', '');
   await _writeSession(true);
   _sessionRef = null;
 }
@@ -344,6 +344,20 @@ function renderAdminUsers() {
   }).join('');
 }
 
+// Reemplaza un ID interno al inicio del detalle (registros viejos) por N°·empresa / empresa
+function prettyActivityDetail(detail) {
+  if (!detail) return '';
+  const idx = detail.indexOf(': ');
+  if (idx > 0) {
+    const pre = detail.slice(0, idx);
+    const q = quotes.find(x => x.id === pre) || quotesTrash.find(x => x.id === pre);
+    if (q) return `${q.numero || pre}${q.empresa ? ' · ' + q.empresa : ''}${detail.slice(idx)}`;
+    const c = clients.find(x => x.id === pre) || clientsTrash.find(x => x.id === pre);
+    if (c) return `${c.empresa || pre}${detail.slice(idx)}`;
+  }
+  return detail;
+}
+
 function renderAdminActivity() {
   const el = document.getElementById('admin-activity');
   if (!el) return;
@@ -362,7 +376,10 @@ function renderAdminActivity() {
     client_delete: { text: 'eliminó cliente',       color: 'var(--danger)'  },
     client_note:   { text: 'agregó nota',           color: 'var(--success)' },
   };
-  const acts = _adminActivity.filter(a => (a.email || '') !== DEV_EMAIL); // el desarrollador no genera ruido
+  const acts = _adminActivity.filter(a =>
+    (a.email || '') !== DEV_EMAIL &&            // el desarrollador no genera ruido
+    !['login', 'logout'].includes(a.action)     // los inicios de sesión no son relevantes
+  );
   const total = acts.length;
   const totalPages = Math.max(1, Math.ceil(total / HOME_ACT_PAGE_SIZE));
   if (_homeActPage >= totalPages) _homeActPage = totalPages - 1;
@@ -380,7 +397,7 @@ function renderAdminActivity() {
         <div class="act-body">
           <span class="act-who">${escapeHtml(a.displayName || a.email)}</span>
           <span class="act-what">${c.text}</span>
-          ${a.detail ? `<span class="act-detail">${escapeHtml(a.detail)}</span>` : ''}
+          ${a.detail ? `<span class="act-detail">${escapeHtml(prettyActivityDetail(a.detail))}</span>` : ''}
         </div>
         <span class="act-time">${when}</span>
         <svg class="act-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -530,7 +547,7 @@ function openActivityDetail(a) {
   if (actEl) actEl.innerHTML = `<span class="af-dot" style="background:${cfg.color}"></span>${escapeHtml(cfg.label)}`;
   const detailRow = document.getElementById('afdDetailRow');
   if (detailRow) detailRow.style.display = a.detail ? '' : 'none';
-  set('afdDetail', a.detail || '');
+  set('afdDetail', prettyActivityDetail(a.detail) || '');
   set('afdFecha', d ? d.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '—');
   set('afdHora', d ? d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—');
   set('afdHace', d ? timeAgo(d) : '—');
