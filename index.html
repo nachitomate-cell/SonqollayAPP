@@ -90,11 +90,6 @@
         <p class="subtitle">Clientes y cotizaciones</p>
       </div>
     </div>
-    <button id="ratesWidget" class="rates-widget" type="button" title="Dólar y UF de hoy · toca para actualizar" aria-label="Indicadores: dólar y UF">
-      <span class="rate"><span class="rate-k">USD</span><span class="rate-v" id="rateUsd">—</span></span>
-      <span class="rate-sep"></span>
-      <span class="rate"><span class="rate-k">UF</span><span class="rate-v" id="rateUf">—</span></span>
-    </button>
     <button id="globalSearchBtn" class="icon-btn" aria-label="Buscar">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
@@ -123,6 +118,13 @@
         <div id="hoyGreeting" class="greeting-text"></div>
         <div id="hoyDate" class="greeting-date"></div>
       </div>
+
+      <button id="ratesWidget" class="rates-card" type="button" title="Dólar y UF de hoy · toca para actualizar" aria-label="Indicadores: dólar y UF">
+        <div class="rates-card-item"><span class="rate-k">Dólar</span><span class="rate-v" id="rateUsd">—</span></div>
+        <div class="rates-card-sep"></div>
+        <div class="rates-card-item"><span class="rate-k">UF</span><span class="rate-v" id="rateUf">—</span></div>
+        <svg class="rates-card-refresh" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+      </button>
 
       <!-- Activar notificaciones (solo si no están activas) -->
       <div id="pushPromptCard" class="push-prompt hidden">
@@ -1148,13 +1150,25 @@
         <button type="button" class="chat-tab active" data-ch="team">👥 Equipo</button>
         <button type="button" class="chat-tab hidden" data-ch="admin" id="chatTabAdmin">🔒 Admins</button>
       </div>
+      <button class="icon-btn" id="chatSearchBtn" aria-label="Buscar en el chat">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+      </button>
       <button class="icon-btn" id="chatMembersBtn" aria-label="Ver miembros">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
         </svg>
       </button>
     </div>
-    <div id="chatMessages" class="chat-messages"></div>
+    <div id="chatSearchBar" class="chat-search-bar hidden">
+      <input id="chatSearchInput" type="search" placeholder="Buscar en la conversación…" autocomplete="off" />
+      <button id="chatSearchClear" class="chat-ctx-cancel" aria-label="Cerrar búsqueda">✕</button>
+    </div>
+    <div class="chat-messages-wrap">
+      <div id="chatMessages" class="chat-messages"></div>
+      <button id="chatScrollDown" class="chat-scroll-down hidden" aria-label="Ir al último">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+      </button>
+    </div>
     <div id="chatTyping" class="chat-typing hidden"></div>
     <div id="chatComposeCtx" class="chat-compose-ctx hidden">
       <div class="chat-ctx-info"><span class="chat-ctx-label" id="chatCtxLabel"></span><span class="chat-ctx-text" id="chatCtxText"></span></div>

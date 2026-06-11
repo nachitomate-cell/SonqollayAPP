@@ -2093,3 +2093,21 @@ html { scroll-behavior: smooth; }
 .chat-ctx-cancel { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; flex-shrink: 0; padding: 4px 8px; }
 .chat-attach { flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--card-2); color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .chat-attach:active { transform: scale(.92); }
+
+/* Indicadores USD/UF como tarjeta en Inicio (movido desde el header) */
+.rates-card { display: flex; align-items: center; gap: 16px; width: calc(100% - 32px); margin: 0 16px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; cursor: pointer; color: var(--text); font-family: var(--font-body); transition: transform .1s ease, border-color .15s; }
+.rates-card:active { transform: scale(.99); }
+.rates-card-item { display: flex; flex-direction: column; gap: 1px; }
+.rates-card .rate-k { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.rates-card .rate-v { font-size: 17px; font-weight: 800; color: var(--text); }
+.rates-card-sep { width: 1px; align-self: stretch; background: var(--border); }
+.rates-card-refresh { margin-left: auto; color: var(--muted); flex-shrink: 0; }
+
+/* Chat: wrapper de mensajes + botón "ir al último" + buscador */
+.chat-messages-wrap { flex: 1; position: relative; display: flex; min-height: 0; }
+.chat-messages-wrap > .chat-messages { flex: 1; }
+.chat-scroll-down { position: absolute; right: 14px; bottom: 14px; width: 40px; height: 40px; border-radius: 50%; background: var(--card); border: 1px solid var(--border); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--shadow-sm); }
+.chat-scroll-down:active { transform: scale(.92); }
+.chat-search-bar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--bg-2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.chat-search-bar input { flex: 1; min-width: 0; background: var(--card-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; color: var(--text); font-size: 14px; font-family: var(--font-body); }
+.chat-search-bar input:focus { outline: none; border-color: var(--accent); }

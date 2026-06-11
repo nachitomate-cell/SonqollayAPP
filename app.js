@@ -2336,6 +2336,7 @@ let _chatReplyTo = null;   // { who, text } del mensaje citado
 let _chatEditId = null;    // id del mensaje que se está editando
 let unsubTyping = null;
 let _typingClearTimer = null, _typingLastWrite = 0;
+let _chatSearch = '';      // término de búsqueda dentro del chat
 
 function subscribeChat() {
   if (!unsubChat) {
@@ -2381,8 +2382,13 @@ function markChatSeen(ch = _chatChannel) {
 function renderChat() {
   const el = document.getElementById('chatMessages');
   if (!el) return;
-  const msgs = chatMsgsOf(_chatChannel);
-  if (!msgs.length) {
+  const stick = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+  let msgs = chatMsgsOf(_chatChannel);
+  if (_chatSearch) {
+    const t = _chatSearch.toLowerCase();
+    msgs = msgs.filter(m => (m.text || '').toLowerCase().includes(t));
+    if (!msgs.length) { el.innerHTML = `<div class="chat-empty">Sin resultados para «${escapeHtml(_chatSearch)}».</div>`; return; }
+  } else if (!msgs.length) {
     el.innerHTML = `<div class="chat-empty">Aún no hay mensajes${_chatChannel === 'admin' ? ' entre administradores' : ''}.<br>¡Escribe el primero! 👋</div>`;
     return;
   }
@@ -2405,7 +2411,15 @@ function renderChat() {
     </div>`;
   });
   el.innerHTML = html;
-  el.scrollTop = el.scrollHeight;
+  if (stick || _chatSearch) el.scrollTop = el.scrollHeight;
+  updateChatScrollBtn();
+}
+function updateChatScrollBtn() {
+  const el = document.getElementById('chatMessages');
+  const btn = document.getElementById('chatScrollDown');
+  if (!el || !btn) return;
+  const far = el.scrollHeight - el.scrollTop - el.clientHeight > 200;
+  btn.classList.toggle('hidden', !far);
 }
 
 // ── Menú de acciones de un mensaje (responder / editar / eliminar) ──
@@ -2648,6 +2662,29 @@ function subscribeTyping(ch) {
   );
 }
 document.getElementById('chatInput')?.addEventListener('input', (e) => { if (e.target.value.trim()) writeTyping(); });
+
+// ── Buscador dentro del chat ──
+document.getElementById('chatSearchBtn')?.addEventListener('click', () => {
+  const bar = document.getElementById('chatSearchBar');
+  const show = bar.classList.contains('hidden');
+  bar.classList.toggle('hidden', !show);
+  if (show) { document.getElementById('chatSearchInput')?.focus(); }
+  else { _chatSearch = ''; document.getElementById('chatSearchInput').value = ''; renderChat(); }
+});
+document.getElementById('chatSearchInput')?.addEventListener('input', (e) => { _chatSearch = e.target.value.trim(); renderChat(); });
+document.getElementById('chatSearchClear')?.addEventListener('click', () => {
+  _chatSearch = '';
+  document.getElementById('chatSearchInput').value = '';
+  document.getElementById('chatSearchBar')?.classList.add('hidden');
+  renderChat();
+});
+
+// ── Ir al último mensaje ──
+document.getElementById('chatMessages')?.addEventListener('scroll', updateChatScrollBtn);
+document.getElementById('chatScrollDown')?.addEventListener('click', () => {
+  const el = document.getElementById('chatMessages');
+  if (el) el.scrollTop = el.scrollHeight;
+});
 
 // ---------- Theme Toggle ----------
 function applyTheme(light, animate = false) {
