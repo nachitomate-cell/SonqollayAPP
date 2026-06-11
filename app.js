@@ -7,7 +7,7 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDoc, onSnapshot, setDoc, deleteDoc,
-  serverTimestamp, query, orderBy, limit, writeBatch, getDocs, arrayUnion, arrayRemove
+  serverTimestamp, query, orderBy, limit, where, writeBatch, getDocs, arrayUnion, arrayRemove
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
 import {
   getMessaging, getToken, onMessage, isSupported
@@ -18,6 +18,9 @@ import {
 import {
   getFunctions, httpsCallable
 } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js';
+import {
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL
+} from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js';
 import { firebaseConfig, VAPID_KEY } from './firebase-config.js';
 import {
   formatCLP, formatCLPShort, parseValor, formatDate, daysUntil, daysSinceUpdated,
@@ -35,6 +38,7 @@ const dbf = initializeFirestore(app, {
 });
 const googleProvider = new GoogleAuthProvider();
 const fbFunctions = getFunctions(app, 'us-central1');
+const storage = getStorage(app);
 
 analyticsSupported().then(ok => { if (ok) getAnalytics(app); }).catch(() => {});
 
@@ -754,6 +758,7 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubActivityFeed) { unsubActivityFeed(); unsubActivityFeed = null; }
     if (unsubChat) { unsubChat(); unsubChat = null; }
     if (unsubChatAdmin) { unsubChatAdmin(); unsubChatAdmin = null; }
+    if (unsubTyping) { unsubTyping(); unsubTyping = null; }
     _chatMsgs = [];
     _chatAdminMsgs = [];
     _actFeedLogs = [];
@@ -2327,6 +2332,10 @@ const _chatSeen = {
   admin: (() => { try { return Number(localStorage.getItem('chat_seen_admin_ts')) || 0; } catch (_) { return 0; } })(),
 };
 const chatMsgsOf = ch => ch === 'admin' ? _chatAdminMsgs : _chatMsgs;
+let _chatReplyTo = null;   // { who, text } del mensaje citado
+let _chatEditId = null;    // id del mensaje que se está editando
+let unsubTyping = null;
+let _typingClearTimer = null, _typingLastWrite = 0;
 
 function subscribeChat() {
   if (!unsubChat) {
@@ -2385,23 +2394,89 @@ function renderChat() {
     const mine = m.uid === currentUser?.uid;
     const time = d ? d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '';
     const who = (m.displayName || 'Anónimo').split(' ')[0];
-    html += `<div class="chat-msg ${mine ? 'mine' : ''}">
+    const reply = m.replyTo ? `<div class="chat-quote"><span class="chat-quote-who">${escapeHtml(m.replyTo.who || '')}</span><span class="chat-quote-text">${escapeHtml(m.replyTo.text || '')}</span></div>` : '';
+    const img = m.imageUrl ? `<img class="chat-img" src="${escapeHtml(m.imageUrl)}" alt="imagen" loading="lazy" data-img="${escapeHtml(m.imageUrl)}" />` : '';
+    const txt = m.text ? `<div class="chat-bubble-text">${escapeHtml(m.text)}</div>` : '';
+    const edited = m.edited ? ' · editado' : '';
+    html += `<div class="chat-msg ${mine ? 'mine' : ''}" data-mid="${escapeHtml(m.id)}">
       ${mine ? '' : `<span class="chat-msg-who">${escapeHtml(who)}</span>`}
-      <div class="chat-bubble">${escapeHtml(m.text || '')}</div>
-      <span class="chat-time">${escapeHtml(time)}</span>
+      <div class="chat-bubble">${reply}${img}${txt}</div>
+      <span class="chat-time">${escapeHtml(time)}${edited}</span>
     </div>`;
   });
   el.innerHTML = html;
   el.scrollTop = el.scrollHeight;
 }
+
+// ── Menú de acciones de un mensaje (responder / editar / eliminar) ──
+function findChatMsg(id) { return chatMsgsOf(_chatChannel).find(m => m.id === id); }
+function openMsgMenu(msg, anchor) {
+  document.getElementById('chatMsgMenu')?.remove();
+  const mine = msg.uid === currentUser?.uid;
+  const menu = document.createElement('div');
+  menu.id = 'chatMsgMenu';
+  menu.className = 'chat-msg-menu';
+  menu.innerHTML = `
+    <button data-act="reply">↩️ Responder</button>
+    ${mine ? '<button data-act="edit">✏️ Editar</button><button data-act="del">🗑️ Eliminar</button>' : ''}`;
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  const mw = menu.offsetWidth;
+  menu.style.top = Math.min(r.bottom + 6, window.innerHeight - menu.offsetHeight - 12) + 'px';
+  menu.style.left = Math.min(Math.max(8, r.left), window.innerWidth - mw - 8) + 'px';
+  const close = () => { menu.remove(); document.removeEventListener('click', onDoc, true); };
+  const onDoc = (e) => { if (!menu.contains(e.target)) close(); };
+  setTimeout(() => document.addEventListener('click', onDoc, true), 0);
+  menu.querySelector('[data-act="reply"]').onclick = () => { close(); setChatReply(msg); };
+  menu.querySelector('[data-act="edit"]')?.addEventListener('click', () => { close(); startChatEdit(msg); });
+  menu.querySelector('[data-act="del"]')?.addEventListener('click', () => { close(); deleteChatMsg(msg); });
+}
+function setChatReply(msg) {
+  _chatEditId = null;
+  _chatReplyTo = { who: (msg.displayName || 'Anónimo').split(' ')[0], text: msg.text || (msg.imageUrl ? '📷 Imagen' : '') };
+  renderComposeCtx();
+  document.getElementById('chatInput')?.focus();
+}
+function startChatEdit(msg) {
+  if (msg.imageUrl && !msg.text) { showToast('Las imágenes no se editan; puedes eliminarla.'); return; }
+  _chatReplyTo = null;
+  _chatEditId = msg.id;
+  const inp = document.getElementById('chatInput');
+  if (inp) { inp.value = msg.text || ''; inp.focus(); }
+  renderComposeCtx();
+}
+async function deleteChatMsg(msg) {
+  if (!confirm('¿Eliminar este mensaje?')) return;
+  try { await deleteDoc(doc(dbf, CHAT_COLL[_chatChannel], msg.id)); }
+  catch (e) { showToast('No se pudo eliminar'); }
+}
+function clearComposeCtx() { _chatReplyTo = null; _chatEditId = null; renderComposeCtx(); }
+function renderComposeCtx() {
+  const bar = document.getElementById('chatComposeCtx');
+  if (!bar) return;
+  if (_chatEditId) {
+    bar.classList.remove('hidden');
+    document.getElementById('chatCtxLabel').textContent = 'Editando';
+    document.getElementById('chatCtxText').textContent = '';
+  } else if (_chatReplyTo) {
+    bar.classList.remove('hidden');
+    document.getElementById('chatCtxLabel').textContent = 'Respondiendo a ' + _chatReplyTo.who;
+    document.getElementById('chatCtxText').textContent = _chatReplyTo.text;
+  } else {
+    bar.classList.add('hidden');
+  }
+}
 function setChatChannel(ch) {
   if (ch === 'admin' && !isAdmin) return;
+  clearTyping();
   _chatChannel = ch;
   document.querySelectorAll('#chatTabs .chat-tab').forEach(t => t.classList.toggle('active', t.dataset.ch === ch));
   const inp = document.getElementById('chatInput');
   if (inp) inp.placeholder = ch === 'admin' ? 'Mensaje solo para administradores…' : 'Escribe un mensaje…';
+  clearComposeCtx();
   renderChat();
   markChatSeen(ch);
+  subscribeTyping(ch);
 }
 function openChat() {
   subscribeChat();
@@ -2413,7 +2488,11 @@ function openChat() {
     document.getElementById('chatInput')?.focus();
   }, 60);
 }
-function closeChat() { document.getElementById('chatOverlay')?.classList.add('hidden'); }
+function closeChat() {
+  document.getElementById('chatOverlay')?.classList.add('hidden');
+  clearTyping();
+  if (unsubTyping) { unsubTyping(); unsubTyping = null; }
+}
 
 document.getElementById('chatClose')?.addEventListener('click', closeChat);
 document.getElementById('chatTabs')?.addEventListener('click', e => {
@@ -2464,19 +2543,111 @@ document.getElementById('chatForm')?.addEventListener('submit', async (e) => {
   const text = inp.value.trim();
   if (!text || !currentUser) return;
   inp.value = '';
+  clearTyping();
   try {
-    await setDoc(doc(collection(dbf, CHAT_COLL[_chatChannel]), uid()), {
-      text,
-      uid: currentUser.uid,
-      displayName: currentUser.displayName || currentUser.email || 'Anónimo',
-      photoURL: currentUser.photoURL || '',
-      createdAt: serverTimestamp(),
-    });
+    if (_chatEditId) {
+      await setDoc(doc(dbf, CHAT_COLL[_chatChannel], _chatEditId), { text, edited: true, editedAt: serverTimestamp() }, { merge: true });
+    } else {
+      const payload = {
+        text,
+        uid: currentUser.uid,
+        displayName: currentUser.displayName || currentUser.email || 'Anónimo',
+        photoURL: currentUser.photoURL || '',
+        createdAt: serverTimestamp(),
+      };
+      if (_chatReplyTo) payload.replyTo = _chatReplyTo;
+      await setDoc(doc(collection(dbf, CHAT_COLL[_chatChannel]), uid()), payload);
+    }
+    clearComposeCtx();
   } catch (err) {
     showToast('No se pudo enviar: ' + (err.message || err));
     inp.value = text;
   }
 });
+
+// Click en mensaje → menú; click en imagen → ampliar
+document.getElementById('chatMessages')?.addEventListener('click', (e) => {
+  const img = e.target.closest('.chat-img');
+  if (img) { window.open(img.dataset.img, '_blank', 'noopener'); return; }
+  const msgEl = e.target.closest('.chat-msg');
+  if (msgEl) { const m = findChatMsg(msgEl.dataset.mid); if (m) openMsgMenu(m, msgEl); }
+});
+document.getElementById('chatCtxCancel')?.addEventListener('click', () => {
+  if (_chatEditId) { const inp = document.getElementById('chatInput'); if (inp) inp.value = ''; }
+  clearComposeCtx();
+});
+
+// ── Adjuntar imagen ──
+document.getElementById('chatAttach')?.addEventListener('click', () => document.getElementById('chatFile')?.click());
+document.getElementById('chatFile')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file || !currentUser) return;
+  if (!file.type.startsWith('image/')) { showToast('Solo imágenes'); return; }
+  if (file.size > 8 * 1024 * 1024) { showToast('La imagen supera 8 MB'); return; }
+  toastLoading('Subiendo imagen…');
+  try {
+    const path = `chat/${_chatChannel}/${currentUser.uid}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '')}`;
+    const sref = storageRef(storage, path);
+    await uploadBytes(sref, file, { contentType: file.type });
+    const url = await getDownloadURL(sref);
+    const payload = {
+      text: '', imageUrl: url,
+      uid: currentUser.uid,
+      displayName: currentUser.displayName || currentUser.email || 'Anónimo',
+      photoURL: currentUser.photoURL || '',
+      createdAt: serverTimestamp(),
+    };
+    if (_chatReplyTo) payload.replyTo = _chatReplyTo;
+    await setDoc(doc(collection(dbf, CHAT_COLL[_chatChannel]), uid()), payload);
+    clearComposeCtx();
+    toastDone('Imagen enviada');
+  } catch (err) {
+    toastDone('No se pudo subir: ' + (err.message || err), false);
+  }
+});
+
+// ── "Escribiendo…" (presencia efímera) ──
+function typingDocId() { return `${_chatChannel}_${currentUser?.uid}`; }
+function writeTyping() {
+  if (!currentUser) return;
+  const now = Date.now();
+  if (now - _typingLastWrite > 2000) {
+    _typingLastWrite = now;
+    setDoc(doc(dbf, 'chatTyping', typingDocId()), {
+      channel: _chatChannel, uid: currentUser.uid,
+      displayName: (currentUser.displayName || currentUser.email || 'Alguien').split(' ')[0],
+      at: serverTimestamp(),
+    }).catch(() => {});
+  }
+  clearTimeout(_typingClearTimer);
+  _typingClearTimer = setTimeout(clearTyping, 4000);
+}
+function clearTyping() {
+  clearTimeout(_typingClearTimer);
+  _typingLastWrite = 0;
+  if (currentUser) deleteDoc(doc(dbf, 'chatTyping', typingDocId())).catch(() => {});
+}
+function subscribeTyping(ch) {
+  if (unsubTyping) { unsubTyping(); unsubTyping = null; }
+  unsubTyping = onSnapshot(
+    query(collection(dbf, 'chatTyping'), where('channel', '==', ch)),
+    snap => {
+      const now = Date.now();
+      const names = snap.docs.map(d => d.data())
+        .filter(t => t.uid !== currentUser?.uid && (now - (t.at?.toMillis?.() || 0) < 6000))
+        .map(t => t.displayName || 'Alguien');
+      const el = document.getElementById('chatTyping');
+      if (!el) return;
+      if (names.length) {
+        el.textContent = names.length === 1 ? `${names[0]} está escribiendo…` : `${names.slice(0, 2).join(', ')} están escribiendo…`;
+        el.classList.remove('hidden');
+      } else { el.classList.add('hidden'); }
+    },
+    () => {}
+  );
+}
+document.getElementById('chatInput')?.addEventListener('input', (e) => { if (e.target.value.trim()) writeTyping(); });
 
 // ---------- Theme Toggle ----------
 function applyTheme(light, animate = false) {

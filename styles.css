@@ -2070,3 +2070,26 @@ html { scroll-behavior: smooth; }
 .cm-role.adm { background: rgba(249,115,22,.16); color: var(--accent); }
 .cm-role.dev { background: rgba(139,92,246,.18); color: #a78bfa; }
 .cm-you { font-size: 11px; font-weight: 500; color: var(--muted); }
+
+/* ── Chat: pulido (cita, imagen, menú, escribiendo, adjuntar) ── */
+.chat-msg { cursor: pointer; }
+.chat-bubble-text { white-space: pre-wrap; word-break: break-word; }
+.chat-quote { border-left: 3px solid rgba(255,255,255,.5); padding: 3px 8px; margin-bottom: 5px; border-radius: 4px; background: rgba(0,0,0,.12); font-size: 12px; display: flex; flex-direction: column; }
+.chat-msg:not(.mine) .chat-quote { border-left-color: var(--accent); background: var(--card-2); }
+.chat-quote-who { font-weight: 700; opacity: .9; }
+.chat-quote-text { opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.chat-img { max-width: 220px; max-height: 260px; border-radius: 12px; display: block; cursor: zoom-in; object-fit: cover; }
+.chat-bubble-text + .chat-img, .chat-img + .chat-bubble-text { margin-top: 6px; }
+
+.chat-msg-menu { position: fixed; z-index: 500; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 6px; box-shadow: var(--shadow); display: flex; flex-direction: column; min-width: 150px; }
+.chat-msg-menu button { background: none; border: none; text-align: left; padding: 9px 12px; border-radius: 8px; font-family: var(--font-body); font-size: 13.5px; color: var(--text); cursor: pointer; }
+.chat-msg-menu button:hover { background: var(--card-2); }
+
+.chat-typing { padding: 2px 16px 6px; font-size: 12px; color: var(--muted); font-style: italic; flex-shrink: 0; }
+.chat-compose-ctx { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--bg-2); border-top: 1px solid var(--border); flex-shrink: 0; }
+.chat-ctx-info { flex: 1; min-width: 0; display: flex; flex-direction: column; border-left: 3px solid var(--accent); padding-left: 10px; }
+.chat-ctx-label { font-size: 11px; font-weight: 700; color: var(--accent); }
+.chat-ctx-text { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-ctx-cancel { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; flex-shrink: 0; padding: 4px 8px; }
+.chat-attach { flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--card-2); color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.chat-attach:active { transform: scale(.92); }

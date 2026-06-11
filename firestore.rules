@@ -77,18 +77,27 @@ service cloud.firestore {
       allow read, write: if isMember();
     }
 
-    // Chat del equipo: todos los miembros leen; cada uno crea solo sus mensajes; admin puede borrar
+    // Chat del equipo: miembros leen; cada uno crea/edita/borra solo lo suyo; admin borra cualquiera
     match /chatMensajes/{id} {
       allow read:   if isMember();
       allow create: if isMember() && request.resource.data.uid == request.auth.uid;
-      allow delete: if isAdmin();
+      allow update: if isMember() && resource.data.uid == request.auth.uid;
+      allow delete: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
     }
 
-    // Chat de administradores: solo admins leen/escriben
+    // Chat de administradores: solo admins leen/escriben; edita/borra el autor (o admin)
     match /chatMensajesAdmin/{id} {
       allow read:   if isAdmin();
       allow create: if isAdmin() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAdmin() && resource.data.uid == request.auth.uid;
       allow delete: if isAdmin();
+    }
+
+    // Presencia "escribiendo…": efímera, cada uno escribe/borra solo la suya
+    match /chatTyping/{id} {
+      allow read:           if isMember();
+      allow create, update: if isMember() && request.resource.data.uid == request.auth.uid;
+      allow delete:         if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
     // Configuración global (versión de app, etc.)

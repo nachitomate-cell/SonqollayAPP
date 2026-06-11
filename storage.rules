@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Reglas de Cloud Storage para SonqollayAPP.
+// Las presentaciones de Academia se guardan bajo academia/{eventId}/{archivo}.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Admin = dueño por correo, o usuario con flag isAdmin en Firestore.
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == 'ignaciiio.mate@gmail.com' ||
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin == true
+      );
+    }
+
+    // Presentaciones de Academia: cualquier usuario autenticado puede verlas/descargarlas;
+    // solo un admin puede subir o borrar. Límite de 50 MB y solo tipos de PowerPoint.
+    match /academia/{eventId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin()
+        && request.resource.size < 50 * 1024 * 1024
+        && request.resource.contentType.matches('application/vnd.*(powerpoint|presentation).*');
+      allow delete: if isAdmin();
+    }
+
+    // Imágenes del chat: cualquier usuario autenticado las ve; sube imágenes (<8 MB)
+    match /chat/{channel}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+  }
+}
