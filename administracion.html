@@ -1069,6 +1069,36 @@
 
   .qm-del { background: transparent !important; color: var(--danger) !important; border: 1px solid rgba(248,113,113,.35) !important; }
   .qm-del:hover { background: rgba(248,113,113,.12) !important; }
+
+  /* ════ Academia — tarjetas ════ */
+  .acad-sep-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 10px; display: flex; align-items: center; gap: 10px; }
+  .acad-sep-h::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .acad-ev { display: flex; gap: 14px; align-items: stretch; background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; transition: transform .12s ease, box-shadow .2s; }
+  .acad-ev:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(0,0,0,.2); }
+  .acad-ev.is-clase { border-left-color: #818cf8; }
+  .acad-ev.is-reunion { border-left-color: #06b6d4; }
+  .acad-ev.past { opacity: .55; }
+  .acad-ev-date { flex-shrink: 0; width: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-2); border: 1px solid var(--border); border-radius: 11px; padding: 7px 4px; }
+  .acad-ev-d { font-size: 21px; font-weight: 800; color: var(--text); line-height: 1; }
+  .acad-ev-m { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-top: 1px; }
+  .acad-ev-t { font-size: 11px; font-weight: 700; color: var(--accent); margin-top: 4px; }
+  .acad-ev-body { flex: 1; min-width: 0; }
+  .acad-ev-title { font-weight: 700; color: var(--text); font-size: 14.5px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .acad-ev-emoji { font-size: 16px; }
+  .acad-ev-desc { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  .acad-ev-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 12px; margin-top: 7px; }
+  .acad-ev-links { display: flex; gap: 10px; align-items: center; margin-top: 7px; }
+  .acad-ev-links a { color: var(--accent); text-decoration: none; font-size: 12px; }
+  .acad-ev-files { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .acad-ev-file { display: inline-flex; align-items: center; gap: 7px; background: var(--card-2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; font-size: 12px; }
+  .acad-ev-file a { color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+  .acad-ev-file button { background: none; border: none; color: #f87171; cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+  .acad-ev-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+  .acad-ev-actions button { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border); background: var(--card-2); cursor: pointer; font-size: 14px; transition: transform .1s; }
+  .acad-ev-actions button:active { transform: scale(.9); }
+  .acad-ev-actions .acad-del { background: rgba(248,113,113,.12); border-color: rgba(248,113,113,.35); }
+  .acad-empty { text-align: center; color: var(--muted); font-size: 13px; padding: 36px 16px; line-height: 1.6; }
+  .acad-empty-ico { font-size: 34px; margin-bottom: 8px; }
 </style>
 
 <!-- Auth gate -->

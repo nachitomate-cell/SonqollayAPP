@@ -783,7 +783,7 @@ function renderAcademia() {
   if (!listEl) return;
   if (countEl) countEl.textContent = `${acadEvents.length} evento${acadEvents.length !== 1 ? 's' : ''}`;
   if (!acadEvents.length) {
-    listEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Aún no hay reuniones ni clases agendadas.</div>';
+    listEl.innerHTML = '<div class="acad-empty"><div class="acad-empty-ico">📅</div>Aún no hay reuniones ni clases agendadas.<br>Agenda la primera con el formulario de arriba.</div>';
     return;
   }
   const now = Date.now();
@@ -821,28 +821,35 @@ function renderAcademia() {
       ev.enlaceSesion ? `<a href="${esc(ev.enlaceSesion)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-size:12px">🔗 Sesión</a>` : '',
       ev.enlaceGrabacion ? `<a href="${esc(ev.enlaceGrabacion)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-size:12px">🎥 Grabación</a>` : '',
     ].filter(Boolean).join('<span style="color:var(--border)">·</span>');
-    return `<div class="rec-card" style="${past ? 'opacity:.6;' : ''}display:flex;align-items:flex-start;gap:12px;margin-bottom:8px">
-      <div style="font-size:22px">${emoji}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;color:var(--text);font-size:14px">${esc(ev.titulo || '(sin título)')}${cursoBadge}</div>
-        <div style="color:var(--accent);font-weight:600;font-size:13px;text-transform:capitalize">${esc(fmtDT(d))}</div>
-        ${ev.descripcion ? `<div style="color:var(--muted);font-size:12.5px;margin-top:3px">${esc(ev.descripcion)}</div>` : ''}
-        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12px;margin-top:5px">${audienciaLine}${confLine}</div>
-        ${confNames}
-        ${links ? `<div style="display:flex;gap:8px;align-items:center;margin-top:5px">${links}</div>` : ''}
-        ${(ev.archivos && ev.archivos.length) ? `<div style="margin-top:7px;display:flex;flex-wrap:wrap;gap:6px">${ev.archivos.map((a, ai) => `
-          <span style="display:inline-flex;align-items:center;gap:7px;background:var(--card-2);border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12px">
-            <a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;display:inline-flex;align-items:center;gap:5px" title="Abrir presentación">📊 ${esc(a.name)}</a>
-            <button class="acad-file-rm" data-id="${esc(ev.id)}" data-i="${ai}" title="Quitar archivo" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;line-height:1;padding:0">×</button>
-          </span>`).join('')}</div>` : ''}
+    const dd = d.getDate();
+    const mon = d.toLocaleDateString('es-CL', { month: 'short' }).replace('.', '');
+    const hh = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+    const filesHtml = (ev.archivos && ev.archivos.length) ? `<div class="acad-ev-files">${ev.archivos.map((a, ai) => `
+        <span class="acad-ev-file">
+          <a href="${esc(a.url)}" target="_blank" rel="noopener" title="Abrir presentación">📊 ${esc(a.name)}</a>
+          <button class="acad-file-rm" data-id="${esc(ev.id)}" data-i="${ai}" title="Quitar archivo">×</button>
+        </span>`).join('')}</div>` : '';
+    return `<div class="acad-ev ${past ? 'past' : ''} ${ev.tipo === 'Clase' ? 'is-clase' : 'is-reunion'}">
+      <div class="acad-ev-date">
+        <span class="acad-ev-d">${dd}</span>
+        <span class="acad-ev-m">${esc(mon)}</span>
+        <span class="acad-ev-t">${esc(hh)}</span>
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0">
-        <button class="acad-edit" data-id="${esc(ev.id)}" style="background:var(--card-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer">Editar</button>
-        <button class="acad-del" data-id="${esc(ev.id)}" style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);color:#f87171;border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer">Eliminar</button>
+      <div class="acad-ev-body">
+        <div class="acad-ev-title"><span class="acad-ev-emoji">${emoji}</span> ${esc(ev.titulo || '(sin título)')}${cursoBadge}</div>
+        ${ev.descripcion ? `<div class="acad-ev-desc">${esc(ev.descripcion)}</div>` : ''}
+        <div class="acad-ev-meta">${audienciaLine}${confLine}</div>
+        ${confNames}
+        ${links ? `<div class="acad-ev-links">${links}</div>` : ''}
+        ${filesHtml}
+      </div>
+      <div class="acad-ev-actions">
+        <button class="acad-edit" data-id="${esc(ev.id)}" title="Editar">✏️</button>
+        <button class="acad-del" data-id="${esc(ev.id)}" title="Eliminar">🗑️</button>
       </div>
     </div>`;
   };
-  const sep = t => `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 8px">${t}</div>`;
+  const sep = t => `<div class="acad-sep-h">${t}</div>`;
   let html = '';
   if (groups.hoy.length)     html += sep('Hoy') + groups.hoy.map(card).join('');
   if (groups.prox.length)    html += sep('Próximos') + groups.prox.map(card).join('');
