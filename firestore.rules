@@ -81,7 +81,10 @@ service cloud.firestore {
     match /chatMensajes/{id} {
       allow read:   if isMember();
       allow create: if isMember() && request.resource.data.uid == request.auth.uid;
-      allow update: if isMember() && resource.data.uid == request.auth.uid;
+      allow update: if isMember() && (
+        resource.data.uid == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+      );
       allow delete: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
     }
 
@@ -89,7 +92,10 @@ service cloud.firestore {
     match /chatMensajesAdmin/{id} {
       allow read:   if isAdmin();
       allow create: if isAdmin() && request.resource.data.uid == request.auth.uid;
-      allow update: if isAdmin() && resource.data.uid == request.auth.uid;
+      allow update: if isAdmin() && (
+        resource.data.uid == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+      );
       allow delete: if isAdmin();
     }
 

@@ -2337,6 +2337,17 @@ let _chatEditId = null;    // id del mensaje que se está editando
 let unsubTyping = null;
 let _typingClearTimer = null, _typingLastWrite = 0;
 let _chatSearch = '';      // término de búsqueda dentro del chat
+const CHAT_REACTIONS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
+async function toggleReaction(msg, emoji) {
+  if (!currentUser || !msg) return;
+  const arr = (msg.reactions && msg.reactions[emoji]) || [];
+  const has = arr.includes(currentUser.uid);
+  try {
+    await setDoc(doc(dbf, CHAT_COLL[_chatChannel], msg.id), {
+      reactions: { [emoji]: has ? arrayRemove(currentUser.uid) : arrayUnion(currentUser.uid) },
+    }, { merge: true });
+  } catch (e) { showToast('No se pudo reaccionar'); }
+}
 
 function subscribeChat() {
   if (!unsubChat) {
@@ -2404,9 +2415,15 @@ function renderChat() {
     const img = m.imageUrl ? `<img class="chat-img" src="${escapeHtml(m.imageUrl)}" alt="imagen" loading="lazy" data-img="${escapeHtml(m.imageUrl)}" />` : '';
     const txt = m.text ? `<div class="chat-bubble-text">${escapeHtml(m.text)}</div>` : '';
     const edited = m.edited ? ' · editado' : '';
+    const rx = Object.entries(m.reactions || {})
+      .filter(([, arr]) => (arr || []).length)
+      .map(([emoji, arr]) => `<button class="chat-rx${arr.includes(currentUser?.uid) ? ' mine' : ''}" data-rx="${escapeHtml(emoji)}">${emoji} ${arr.length}</button>`)
+      .join('');
+    const rxHtml = rx ? `<div class="chat-rx-row">${rx}</div>` : '';
     html += `<div class="chat-msg ${mine ? 'mine' : ''}" data-mid="${escapeHtml(m.id)}">
       ${mine ? '' : `<span class="chat-msg-who">${escapeHtml(who)}</span>`}
       <div class="chat-bubble">${reply}${img}${txt}</div>
+      ${rxHtml}
       <span class="chat-time">${escapeHtml(time)}${edited}</span>
     </div>`;
   });
@@ -2431,6 +2448,7 @@ function openMsgMenu(msg, anchor) {
   menu.id = 'chatMsgMenu';
   menu.className = 'chat-msg-menu';
   menu.innerHTML = `
+    <div class="chat-rx-pick">${CHAT_REACTIONS.map(e => `<button data-rx="${e}">${e}</button>`).join('')}</div>
     <button data-act="reply">↩️ Responder</button>
     ${mine ? '<button data-act="edit">✏️ Editar</button><button data-act="del">🗑️ Eliminar</button>' : ''}`;
   document.body.appendChild(menu);
@@ -2441,6 +2459,7 @@ function openMsgMenu(msg, anchor) {
   const close = () => { menu.remove(); document.removeEventListener('click', onDoc, true); };
   const onDoc = (e) => { if (!menu.contains(e.target)) close(); };
   setTimeout(() => document.addEventListener('click', onDoc, true), 0);
+  menu.querySelectorAll('.chat-rx-pick button').forEach(b => b.addEventListener('click', () => { close(); toggleReaction(msg, b.dataset.rx); }));
   menu.querySelector('[data-act="reply"]').onclick = () => { close(); setChatReply(msg); };
   menu.querySelector('[data-act="edit"]')?.addEventListener('click', () => { close(); startChatEdit(msg); });
   menu.querySelector('[data-act="del"]')?.addEventListener('click', () => { close(); deleteChatMsg(msg); });
@@ -2581,6 +2600,8 @@ document.getElementById('chatForm')?.addEventListener('submit', async (e) => {
 
 // Click en mensaje → menú; click en imagen → ampliar
 document.getElementById('chatMessages')?.addEventListener('click', (e) => {
+  const rxBtn = e.target.closest('.chat-rx');
+  if (rxBtn) { const me = rxBtn.closest('.chat-msg'); const m = findChatMsg(me?.dataset.mid); if (m) toggleReaction(m, rxBtn.dataset.rx); return; }
   const img = e.target.closest('.chat-img');
   if (img) { window.open(img.dataset.img, '_blank', 'noopener'); return; }
   const msgEl = e.target.closest('.chat-msg');
