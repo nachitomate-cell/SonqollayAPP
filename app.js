@@ -2419,6 +2419,45 @@ document.getElementById('chatClose')?.addEventListener('click', closeChat);
 document.getElementById('chatTabs')?.addEventListener('click', e => {
   const t = e.target.closest('.chat-tab'); if (t) setChatChannel(t.dataset.ch);
 });
+
+// Ver miembros del canal activo
+async function openChatMembers() {
+  const sheet = document.getElementById('chatMembersSheet');
+  const list = document.getElementById('chatMembersList');
+  const title = document.getElementById('chatMembersTitle');
+  if (!sheet || !list) return;
+  const adminCh = _chatChannel === 'admin';
+  sheet.classList.remove('hidden');
+  title.textContent = adminCh ? 'Administradores' : 'Miembros del equipo';
+  list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 2px">Cargando…</div>';
+  try {
+    const snap = await getDocs(collection(dbf, 'users'));
+    const isOwner = u => u.email === DEV_EMAIL;
+    const isAdm = u => u.isAdmin === true || isOwner(u);
+    let users = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+      .filter(adminCh ? isAdm : (u => u.approved === true || isAdm(u)));
+    users.sort((a, b) => (isAdm(b) - isAdm(a)) || String(a.displayName || a.email || '').localeCompare(b.displayName || b.email || ''));
+    title.textContent = `${adminCh ? 'Administradores' : 'Miembros del equipo'} · ${users.length}`;
+    if (!users.length) { list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 2px">Sin miembros.</div>'; return; }
+    list.innerHTML = users.map(u => {
+      const name = u.displayName || u.email || '—';
+      const init = (name.trim()[0] || '?').toUpperCase();
+      const av = u.photoURL ? `<div class="up-user-av"><img src="${escapeHtml(u.photoURL)}" alt=""></div>` : `<div class="up-user-av">${escapeHtml(init)}</div>`;
+      const role = isOwner(u) ? '<span class="cm-role dev">🛠️ Desarrollador</span>'
+        : u.isAdmin ? '<span class="cm-role adm">Admin</span>'
+        : '<span class="cm-role">Miembro</span>';
+      const me = u.uid === currentUser?.uid ? ' <span class="cm-you">(tú)</span>' : '';
+      return `<div class="up-user">${av}
+        <div class="up-user-info"><div class="up-user-name">${escapeHtml(name)}${me}</div><div class="up-user-mail">${escapeHtml(u.email || '')}</div></div>
+        ${role}</div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:8px 2px">No se pudo cargar: ${escapeHtml(e.message || String(e))}</div>`;
+  }
+}
+document.getElementById('chatMembersBtn')?.addEventListener('click', openChatMembers);
+document.getElementById('chatMembersClose')?.addEventListener('click', () => document.getElementById('chatMembersSheet')?.classList.add('hidden'));
+document.getElementById('chatMembersSheet')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
 document.getElementById('chatForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const inp = document.getElementById('chatInput');
