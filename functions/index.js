@@ -327,9 +327,13 @@ exports.onChatMessage = onDocumentCreated(
     const m = event.data && event.data.data();
     if (!m || !m.text) return;
     const autor = (m.displayName || 'Equipo').split(' ')[0];
+    const body = m.text ? String(m.text).slice(0, 140)
+      : m.imageUrl ? '📷 Imagen'
+      : m.quoteRef ? `📄 Cotización ${m.quoteRef.numero || ''}`.trim()
+      : 'Nuevo mensaje';
     try {
       await sendToAll(
-        { title: `💬 ${autor}`, body: String(m.text).slice(0, 140) },
+        { title: `💬 ${autor}`, body },
         { kind: 'chat' },
         { excludeUid: m.uid } // no notificar a quien lo envió
       );
@@ -352,10 +356,14 @@ exports.onAdminChatMessage = onDocumentCreated(
     const m = event.data && event.data.data();
     if (!m || !m.text) return;
     const autor = (m.displayName || 'Admin').split(' ')[0];
+    const body = m.text ? String(m.text).slice(0, 140)
+      : m.imageUrl ? '📷 Imagen'
+      : m.quoteRef ? `📄 Cotización ${m.quoteRef.numero || ''}`.trim()
+      : 'Nuevo mensaje';
     try {
       const adminUids = await getAdminUids();
       await sendToAll(
-        { title: `🔒 Admins · ${autor}`, body: String(m.text).slice(0, 140) },
+        { title: `🔒 Admins · ${autor}`, body },
         { kind: 'chat_admin' },
         { onlyUids: adminUids, excludeUid: m.uid }
       );
