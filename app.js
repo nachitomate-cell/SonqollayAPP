@@ -240,7 +240,8 @@ async function checkAdminStatus() {
   document.getElementById('adminNavSection')?.classList.toggle('hidden', !isAdmin);
   // Para admins, el tile de Clientes se reemplaza por "Notificar usuarios" (push dirigida/masiva)
   document.getElementById('quickTilePush')?.classList.toggle('hidden', !isAdmin);
-  document.getElementById('quickTileClients')?.classList.toggle('hidden', isAdmin);
+  // El tile de Clientes queda visible para todos (es el acceso a Clientes desde Inicio)
+  document.getElementById('quickTileClients')?.classList.remove('hidden');
   if (isAdmin) {
     getDocs(collection(dbf, 'users')).then(s => {
       const c = document.getElementById('quickCountUsers'); if (c) c.textContent = s.size;
@@ -1060,7 +1061,7 @@ const TOUR_STEPS = [
   { nav: 'quotes', el: '#quotesViewToggle', title: 'Cotizaciones', text: 'Ve tus cotizaciones como Lista, Kanban (arrastra entre estados) o Proyectos. El Kanban muestra el pronóstico ponderado.' },
   { nav: 'quotes', el: '#quotesFilterToggle', title: 'Filtrar y ordenar', text: 'Filtra por estado, industria, tipo de servicio o seguimiento, y ordena como prefieras.' },
   { nav: 'quotes', el: '#quotes-list', title: 'Detalle de cada cotización', text: 'Toca una cotización para abrir su detalle: generar PDF con tu marca, compartir por WhatsApp, registrar un seguimiento (con tipo de contacto) y dictar avances por voz 🎤.' },
-  { nav: 'clients', el: '#clientFilterToggle', title: 'Clientes', text: 'Busca y filtra tu cartera: completitud de ficha, industria, con/sin cotizaciones, y más.' },
+  { nav: 'dashboard', el: '#quickTileClients', title: 'Clientes', text: 'Entra a tus clientes desde este acceso en Inicio: busca y filtra tu cartera (completitud, industria, con/sin cotizaciones).' },
   { nav: 'settings', el: '#enablePushBtn', title: 'Notificaciones', text: 'Activa las notificaciones para recibir los recordatorios de seguimiento (9:00 y 18:00) y las novedades del equipo.' },
   { nav: 'settings', el: '#startTourBtn', title: '¡Listo! 🚀', text: 'Eso es lo esencial. Puedes repetir este tutorial cuando quieras desde aquí o desde el menú ≡. ¡A vender!' },
 ];
@@ -1999,7 +2000,10 @@ function showView(name) {
   if (name === 'academia') subscribeAcademia();
   if (name === 'miday') { subscribeAcademia(); renderMiDay(); }
 }
-document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => showView(b.dataset.view)));
+document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.view === 'chat') { openChat(); return; } // el chat es un overlay, no una vista
+  showView(b.dataset.view);
+}));
 
 // ---------- Academia: agenda de reuniones y clases ----------
 let _acadEvents = [];
@@ -2329,7 +2333,7 @@ function subscribeChat() {
   );
 }
 function updateChatBadge() {
-  const badge = document.getElementById('chatBadge');
+  const badge = document.getElementById('chatBadgeNav');
   if (!badge) return;
   const unread = _chatMsgs.filter(m => (m.createdAt?.toMillis?.() || 0) > _chatLastSeen && m.uid !== currentUser?.uid).length;
   badge.textContent = unread > 9 ? '9+' : String(unread);

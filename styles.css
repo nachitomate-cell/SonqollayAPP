@@ -2043,3 +2043,18 @@ html { scroll-behavior: smooth; }
 .chat-send { flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform .12s ease; }
 .chat-send:active { transform: scale(.9); }
 .chat-send:disabled { opacity: .5; }
+
+/* Header reformulado: respiro entre acciones */
+.topbar { gap: 6px; }
+@media (max-width: 430px) {
+  .subtitle { display: none; }
+  .topbar h1 { font-size: 16px; }
+  .icon-btn { padding: 7px; }
+}
+/* Badge de no leídos en la pestaña Chat (barra inferior) */
+.nav-chat-badge {
+  position: absolute; top: 2px; left: calc(50% + 5px);
+  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+  background: var(--danger); color: #fff; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
