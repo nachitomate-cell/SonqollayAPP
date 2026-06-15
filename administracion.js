@@ -141,9 +141,13 @@ function buildUserMap() {
     const u = map[s.uid];
     u.sessions++;
     u.totalTime += s.duration || 0;
-    if (s.endTime === null) u.online = true;
-    const t = s.startTime?.toDate?.();
-    if (t && (!u.lastSeen || t > u.lastSeen)) u.lastSeen = t;
+    // Última actividad real ≈ inicio + duración (la duración se refresca cada ~30s).
+    const startMs = s.startTime?.toDate?.()?.getTime() || 0;
+    const lastActive = startMs ? startMs + (s.duration || 0) * 1000 : 0;
+    // En línea solo si la sesión está abierta Y hubo actividad en los últimos 3 minutos
+    // (evita el "En línea" pegado de sesiones que nunca se cerraron).
+    if (s.endTime === null && lastActive && (Date.now() - lastActive) < 3 * 60 * 1000) u.online = true;
+    if (lastActive && (!u.lastSeen || lastActive > u.lastSeen.getTime())) u.lastSeen = new Date(lastActive);
   });
   // Incluir usuarios registrados que aún no tienen sesión (perfil en `users`).
   // Se omiten documentos vacíos (sin nombre ni correo).

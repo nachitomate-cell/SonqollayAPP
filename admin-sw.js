@@ -1,4 +1,4 @@
-const CACHE = 'sonqollay-admin-v7';
+const CACHE = 'sonqollay-admin-v8';
 const PRECACHE = [
   '/administracion',
   '/administracion.js',
