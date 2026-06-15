@@ -726,8 +726,15 @@ document.getElementById('emailAuthForm').addEventListener('submit', async (e) =>
   try {
     if (_emailAuthMode === 'register') {
       const name = document.getElementById('loginName').value.trim();
+      if (name.length < 2) {
+        showLoginError('Ingresa tu nombre para crear la cuenta.');
+        btn.disabled = false; btn.textContent = 'Crear cuenta';
+        document.getElementById('loginName').focus();
+        return;
+      }
       const cred = await createUserWithEmailAndPassword(auth, email, password);
-      if (name) await updateProfile(cred.user, { displayName: name });
+      await updateProfile(cred.user, { displayName: name });
+      await setDoc(doc(dbf, 'users', cred.user.uid), { displayName: name }, { merge: true });
     } else {
       await signInWithEmailAndPassword(auth, email, password);
     }
@@ -803,12 +810,14 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function saveUserProfile(user) {
-  await setDoc(doc(dbf, 'users', user.uid), {
-    displayName: user.displayName || '',
+  const data = {
     email: user.email || '',
     photoURL: user.photoURL || '',
     lastLogin: serverTimestamp(),
-  }, { merge: true });
+  };
+  // No sobrescribir el nombre con vacío (preserva el que ya tenga el perfil)
+  if (user.displayName) data.displayName = user.displayName;
+  await setDoc(doc(dbf, 'users', user.uid), data, { merge: true });
 }
 
 function renderUserInfo(user) {
