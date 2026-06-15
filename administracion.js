@@ -34,6 +34,7 @@ let acadPendingFiles = []; // presentaciones (PowerPoint) seleccionadas en el fo
 let userRoles    = {}; // uid → boolean (isAdmin)
 let userApproved = {}; // uid → boolean (approved, acceso a datos)
 let userProfiles = {}; // uid → displayName || email (todos los usuarios registrados)
+let userDocs = {};     // uid → perfil completo (para listar registrados aunque no tengan sesión)
 const OWNER_EMAIL = 'ignaciiio.mate@gmail.com';
 let unsubSessions  = null;
 let unsubActivity  = null;
@@ -144,6 +145,16 @@ function buildUserMap() {
     const t = s.startTime?.toDate?.();
     if (t && (!u.lastSeen || t > u.lastSeen)) u.lastSeen = t;
   });
+  // Incluir usuarios registrados que aún no tienen sesión (perfil en `users`).
+  // Se omiten documentos vacíos (sin nombre ni correo).
+  Object.values(userDocs).forEach(u => {
+    if (!map[u.uid] && (u.email || u.displayName)) {
+      map[u.uid] = {
+        uid: u.uid, displayName: u.displayName || '', email: u.email || '', photoURL: u.photoURL || '',
+        sessions: 0, totalTime: 0, lastSeen: null, online: false,
+      };
+    }
+  });
   return Object.values(map).sort((a, b) => {
     if (a.online !== b.online) return a.online ? -1 : 1;
     return (b.lastSeen || 0) - (a.lastSeen || 0);
@@ -183,7 +194,7 @@ function userRowHtml(u) {
     <div class="u-cell u-email">${esc(u.email||'—')}</div>
     <div class="u-cell">${u.sessions}</div>
     <div class="u-cell">${fmtDuration(u.totalTime)}</div>
-    <div class="u-cell muted">${timeAgo(u.lastSeen)}</div>
+    <div class="u-cell muted">${u.lastSeen ? timeAgo(u.lastSeen) : 'Sin sesiones'}</div>
     <div class="u-cell">${badge}</div>
   </div>`;
 }
@@ -1791,7 +1802,13 @@ function subscribe() {
 
   // Perfiles de TODOS los usuarios registrados (resuelve nombres aunque no tengan sesión)
   getDocs(collection(db, 'users')).then(snap => {
-    snap.forEach(d => { const u = d.data() || {}; const n = u.displayName || u.email; if (n) userProfiles[d.id] = n; });
+    snap.forEach(d => {
+      const u = d.data() || {};
+      userDocs[d.id] = { uid: d.id, ...u };
+      const n = u.displayName || u.email; if (n) userProfiles[d.id] = n;
+      if (!(d.id in userRoles)) userRoles[d.id] = u.isAdmin === true;
+      if (!(d.id in userApproved)) userApproved[d.id] = u.approved === true;
+    });
     renderAll();
   }).catch(() => {});
 
