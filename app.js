@@ -872,6 +872,18 @@ function subscribe() {
   quotesLoaded = false;
   clientsLoaded = false;
   renderAll();
+  // Si la lectura falla (p.ej. cuenta sin aprobar → permission-denied), igual hay que
+  // ocultar el splash para que la app NO quede cargando para siempre, y avisar.
+  const onDataError = (err, which) => {
+    console.error('subscribe ' + which, err);
+    if (which === 'quotes') quotesLoaded = true; else clientsLoaded = true;
+    hideSplash();
+    if (err && err.code === 'permission-denied') {
+      showToast('Tu cuenta todavía no tiene acceso. Pídele a un administrador que la apruebe.', { duration: 9000 });
+    } else {
+      showToast('No se pudieron cargar los datos. Revisa tu conexión.', { duration: 6000 });
+    }
+  };
   unsubQuotes = onSnapshot(query(quotesCol(), orderBy('fecha', 'desc')), (snap) => {
     const all = snap.docs.map(d => d.data());
     quotes = all.filter(q => !q.deleted);
@@ -880,9 +892,7 @@ function subscribe() {
     if (clientsLoaded) hideSplash();
     renderAll();
     if (!document.getElementById('trashSheet')?.classList.contains('hidden')) renderTrash();
-  }, (err) => {
-    console.error(err); showToast('Error leyendo cotizaciones');
-  });
+  }, (err) => onDataError(err, 'quotes'));
   unsubClients = onSnapshot(query(clientsCol(), orderBy('empresa')), (snap) => {
     const all = snap.docs.map(d => d.data());
     clients = all.filter(c => !c.deleted);
@@ -891,7 +901,7 @@ function subscribe() {
     if (quotesLoaded) hideSplash();
     renderAll();
     if (!document.getElementById('trashSheet')?.classList.contains('hidden')) renderTrash();
-  });
+  }, (err) => onDataError(err, 'clients'));
   unsubTemplates = onSnapshot(query(templatesCol()), snap => {
     templates = snap.docs.map(d => d.data());
     templatesLoaded = true;
