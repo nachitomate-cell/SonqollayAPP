@@ -246,6 +246,8 @@ async function checkAdminStatus() {
     mySupervised = !isAdmin && snap.exists() && snap.data().supervised === true;
   } catch (_) { isAdmin = (currentUser?.email === DEV_EMAIL); mySupervised = false; }
   document.getElementById('adminNavSection')?.classList.toggle('hidden', !isAdmin);
+  // Usuario supervisado: ocultar el botón de restablecer datos (borra todo)
+  document.getElementById('resetBtn')?.classList.toggle('hidden', mySupervised);
   // Para admins, el tile de Clientes se reemplaza por "Notificar usuarios" (push dirigida/masiva)
   document.getElementById('quickTilePush')?.classList.toggle('hidden', !isAdmin);
   // El tile de Clientes queda visible para todos (es el acceso a Clientes desde Inicio)
@@ -808,7 +810,7 @@ onAuthStateChanged(auth, async (user) => {
   hideLoginScreen();
   renderUserInfo(user);
   saveUserProfile(user).catch(() => {});
-  await Promise.all([checkAdminStatus(), maybeSeed()]);
+  await Promise.all([checkAdminStatus(), maybeSeed().catch(() => {})]);
   renderAll();
   subscribe();
   subscribeChat();
@@ -927,7 +929,15 @@ function subscribe() {
       showToast('No se pudieron cargar los datos. Revisa tu conexión.', { duration: 6000 });
     }
   };
-  unsubQuotes = onSnapshot(query(quotesCol(), orderBy('fecha', 'desc')), (snap) => {
+  // Usuario supervisado: solo carga lo suyo (las reglas exigen filtrar por createdBy).
+  // Sin orderBy en este caso para no requerir un índice compuesto; el orden se aplica al render.
+  const quotesQ = mySupervised
+    ? query(quotesCol(), where('createdBy', '==', currentUser.uid))
+    : query(quotesCol(), orderBy('fecha', 'desc'));
+  const clientsQ = mySupervised
+    ? query(clientsCol(), where('createdBy', '==', currentUser.uid))
+    : query(clientsCol(), orderBy('empresa'));
+  unsubQuotes = onSnapshot(quotesQ, (snap) => {
     const all = snap.docs.map(d => d.data());
     quotes = all.filter(q => !q.deleted);
     quotesTrash = all.filter(q => q.deleted);
@@ -937,7 +947,7 @@ function subscribe() {
     renderAll();
     if (!document.getElementById('trashSheet')?.classList.contains('hidden')) renderTrash();
   }, (err) => onDataError(err, 'quotes'));
-  unsubClients = onSnapshot(query(clientsCol(), orderBy('empresa')), (snap) => {
+  unsubClients = onSnapshot(clientsQ, (snap) => {
     const all = snap.docs.map(d => d.data());
     clients = all.filter(c => !c.deleted);
     clientsTrash = all.filter(c => c.deleted);
@@ -3106,7 +3116,7 @@ function openQuoteForm(id, prefill = null) {
   _pendingVersionNum = prefill?._version || null;
   quoteForm.reset();
   document.getElementById('quoteTitle').textContent = id ? 'Editar cotización' : 'Nueva cotización';
-  document.getElementById('quoteDelete').hidden = !id;
+  document.getElementById('quoteDelete').hidden = !id || mySupervised; // los supervisados no eliminan
   if (id) {
     const q = quotes.find(x => x.id === id);
     if (q) {
@@ -3708,7 +3718,7 @@ function openClientForm(id) {
   clientExtraContactos = [];
   _editingIndustriaClient = '';
   document.getElementById('clientTitle').textContent = id ? 'Editar cliente' : 'Nuevo cliente';
-  document.getElementById('clientDelete').hidden = !id;
+  document.getElementById('clientDelete').hidden = !id || mySupervised; // los supervisados no eliminan
   if (id) {
     const c = clients.find(x => x.id === id);
     if (c) {

@@ -42,14 +42,27 @@ service cloud.firestore {
         request.resource.data.get('estado', 'Borrador') !=
           (resource != null ? resource.data.get('estado', 'Borrador') : 'Borrador');
     }
+    // Un supervisado no puede eliminar: ni borrado real ni soft-delete (deleted true).
+    function deleteBlocked() {
+      return isSupervised() &&
+        request.resource.data.get('deleted', false) == true &&
+        (resource == null || resource.data.get('deleted', false) != true);
+    }
+    // Un supervisado solo ve y gestiona lo suyo (createdBy == su uid).
+    function ownsDoc() {
+      return resource != null && resource.data.get('createdBy', '') == request.auth.uid;
+    }
     match /quotes/{id} {
-      allow read:   if isMember();
+      allow read:   if isMember() && (isAdmin() || !isSupervised() || ownsDoc());
       allow create: if isMember() && (isAdmin() || !estadoChangeBlocked());
-      allow update: if isMember() && (isAdmin() || !estadoChangeBlocked());
-      allow delete: if isMember();
+      allow update: if isMember() && (isAdmin() || (!estadoChangeBlocked() && !deleteBlocked()));
+      allow delete: if isMember() && (isAdmin() || !isSupervised());
     }
     match /clients/{id} {
-      allow read, write: if isMember();
+      allow read:   if isMember() && (isAdmin() || !isSupervised() || ownsDoc());
+      allow create: if isMember();
+      allow update: if isMember() && (isAdmin() || !deleteBlocked());
+      allow delete: if isMember() && (isAdmin() || !isSupervised());
     }
     match /templates/{id} {
       allow read, write: if isMember();
