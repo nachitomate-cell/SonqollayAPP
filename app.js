@@ -2475,6 +2475,13 @@ function renderChat() {
     el.innerHTML = `<div class="chat-empty">Aún no hay mensajes${_chatChannel === 'admin' ? ' entre administradores' : ''}.<br>¡Escribe el primero! 👋</div>`;
     return;
   }
+  // Firma del contenido: si no cambió, NO reconstruir (evita recrear/recargar imágenes).
+  const sig = _chatChannel + '|' + _chatSearch + '|' + msgs.map(m =>
+    `${m.id}:${m.edited ? 1 : 0}:${m.imageUrl ? 1 : 0}:${(m.text || '').length}:${m.quoteRef ? 1 : 0}:${Object.entries(m.reactions || {}).map(([k, v]) => k + (v ? v.length : 0)).join('')}`
+  ).join(',');
+  if (sig === _chatRenderSig && el.children.length) { updateReadLines(); return; }
+  _chatRenderSig = sig;
+
   let lastDay = '', html = '';
   msgs.forEach(m => {
     const d = m.createdAt?.toDate?.();
@@ -2484,7 +2491,7 @@ function renderChat() {
     const time = d ? d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '';
     const who = (m.displayName || 'Anónimo').split(' ')[0];
     const reply = m.replyTo ? `<div class="chat-quote"><span class="chat-quote-who">${escapeHtml(m.replyTo.who || '')}</span><span class="chat-quote-text">${escapeHtml(m.replyTo.text || '')}</span></div>` : '';
-    const img = m.imageUrl ? `<img class="chat-img" src="${escapeHtml(m.imageUrl)}" alt="imagen" loading="lazy" data-img="${escapeHtml(m.imageUrl)}" />` : '';
+    const img = m.imageUrl ? `<img class="chat-img" src="${escapeHtml(m.imageUrl)}" alt="imagen" loading="lazy" decoding="async" data-img="${escapeHtml(m.imageUrl)}" />` : '';
     const qr = m.quoteRef ? `<button class="chat-quoteref" data-qid="${escapeHtml(m.quoteRef.id)}">
         <span class="chat-qr-ico">📄</span>
         <span class="chat-qr-info"><span class="chat-qr-title">${escapeHtml(m.quoteRef.numero || 'Cotización')}${m.quoteRef.empresa ? ' · ' + escapeHtml(m.quoteRef.empresa) : ''}</span><span class="chat-qr-sub">${escapeHtml(m.quoteRef.estado || '')}${m.quoteRef.valor ? ' · ' + escapeHtml(formatCLPShort(m.quoteRef.valor)) : ''} · ver cotización →</span></span>
@@ -2496,26 +2503,36 @@ function renderChat() {
       .map(([emoji, arr]) => `<button class="chat-rx${arr.includes(currentUser?.uid) ? ' mine' : ''}" data-rx="${escapeHtml(emoji)}">${emoji} ${arr.length}</button>`)
       .join('');
     const rxHtml = rx ? `<div class="chat-rx-row">${rx}</div>` : '';
-    let readHtml = '';
-    if (mine) {
-      const ms = m.createdAt?.toMillis?.() || 0;
-      const readers = ms ? Object.values(_chatReads).filter(r => r.uid !== currentUser?.uid && r.at >= ms) : [];
-      if (readers.length) {
-        const txt = readers.slice(0, 3).map(r => `${escapeHtml((r.displayName || '?').split(' ')[0])} ${new Date(r.at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`).join(', ');
-        readHtml = `<div class="chat-read">✓✓ Leído · ${txt}</div>`;
-      }
-    }
     html += `<div class="chat-msg ${mine ? 'mine' : ''}" data-mid="${escapeHtml(m.id)}">
       ${mine ? '' : `<span class="chat-msg-who">${escapeHtml(who)}</span>`}
       <div class="chat-bubble">${reply}${qr}${img}${txt}</div>
       ${rxHtml}
       <span class="chat-time">${escapeHtml(time)}${edited}</span>
-      ${readHtml}
     </div>`;
   });
   el.innerHTML = html;
   if (stick || _chatSearch) el.scrollTop = el.scrollHeight;
   updateChatScrollBtn();
+  updateReadLines();
+}
+// Actualiza solo las líneas de "Leído" sin reconstruir mensajes (no recrea imágenes)
+function updateReadLines() {
+  const el = document.getElementById('chatMessages');
+  if (!el) return;
+  el.querySelectorAll('.chat-msg.mine').forEach(node => {
+    const m = findChatMsg(node.dataset.mid);
+    if (!m) return;
+    const ms = m.createdAt?.toMillis?.() || 0;
+    const readers = ms ? Object.values(_chatReads).filter(r => r.uid !== currentUser?.uid && r.at >= ms) : [];
+    let line = node.querySelector('.chat-read');
+    if (readers.length) {
+      const txt = readers.slice(0, 3).map(r => `${(r.displayName || '?').split(' ')[0]} ${new Date(r.at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`).join(', ');
+      if (!line) { line = document.createElement('div'); line.className = 'chat-read'; node.appendChild(line); }
+      line.textContent = `✓✓ Leído · ${txt}`;
+    } else if (line) {
+      line.remove();
+    }
+  });
 }
 function updateChatScrollBtn() {
   const el = document.getElementById('chatMessages');
@@ -2713,10 +2730,28 @@ document.getElementById('chatMessages')?.addEventListener('click', (e) => {
   const rxBtn = e.target.closest('.chat-rx');
   if (rxBtn) { const me = rxBtn.closest('.chat-msg'); const m = findChatMsg(me?.dataset.mid); if (m) toggleReaction(m, rxBtn.dataset.rx); return; }
   const img = e.target.closest('.chat-img');
-  if (img) { window.open(img.dataset.img, '_blank', 'noopener'); return; }
+  if (img) { openImgViewer(img.dataset.img); return; }
   const msgEl = e.target.closest('.chat-msg');
   if (msgEl) { const m = findChatMsg(msgEl.dataset.mid); if (m) openMsgMenu(m, msgEl); }
 });
+// Visor de imágenes dentro de la app (lightbox) — no abre Firebase en otra pestaña
+function openImgViewer(url) {
+  if (!url) return;
+  const v = document.getElementById('imgViewer');
+  const im = document.getElementById('imgViewerImg');
+  if (!v || !im) return;
+  im.src = url;
+  v.classList.remove('hidden');
+}
+function closeImgViewer() {
+  const v = document.getElementById('imgViewer');
+  const im = document.getElementById('imgViewerImg');
+  if (v) v.classList.add('hidden');
+  if (im) im.src = '';
+}
+document.getElementById('imgViewerClose')?.addEventListener('click', closeImgViewer);
+document.getElementById('imgViewer')?.addEventListener('click', (e) => { if (e.target.id !== 'imgViewerImg') closeImgViewer(); });
+
 document.getElementById('chatCtxCancel')?.addEventListener('click', () => {
   if (_chatEditId) { const inp = document.getElementById('chatInput'); if (inp) inp.value = ''; }
   clearComposeCtx();
