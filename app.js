@@ -2408,6 +2408,7 @@ let _chatSearch = '';      // término de búsqueda dentro del chat
 let _chatReads = {};       // uid → { displayName, at(ms) } última lectura por canal
 let unsubReads = null;
 let _readWriteLast = 0;
+let _chatRenderSig = '';    // firma del último render del chat (evita reconstruir sin cambios)
 const CHAT_REACTIONS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
 async function toggleReaction(msg, emoji) {
   if (!currentUser || !msg) return;
