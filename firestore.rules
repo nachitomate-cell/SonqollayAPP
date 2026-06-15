@@ -106,6 +106,12 @@ service cloud.firestore {
       allow delete:         if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
+    // Acuses de lectura del chat: cada uno escribe el suyo; los miembros los leen
+    match /chatReads/{id} {
+      allow read:           if isMember();
+      allow create, update: if isMember() && request.resource.data.uid == request.auth.uid;
+    }
+
     // Configuración global (versión de app, etc.)
     match /config/{id} {
       allow read: if request.auth != null;

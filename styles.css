@@ -2156,3 +2156,7 @@ html { scroll-behavior: smooth; }
 .profile-name-row input { flex: 1; min-width: 0; background: var(--card-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; color: var(--text); font-size: 14px; font-family: var(--font-body); }
 .profile-name-row input:focus { outline: none; border-color: var(--accent); }
 .profile-name-row .btn { flex-shrink: 0; }
+
+/* Acuse de lectura del chat */
+.chat-read { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.chat-msg.mine .chat-read { text-align: right; color: rgba(255,255,255,.75); }

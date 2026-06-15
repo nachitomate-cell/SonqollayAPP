@@ -783,6 +783,7 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubChat) { unsubChat(); unsubChat = null; }
     if (unsubChatAdmin) { unsubChatAdmin(); unsubChatAdmin = null; }
     if (unsubTyping) { unsubTyping(); unsubTyping = null; }
+    if (unsubReads) { unsubReads(); unsubReads = null; }
     _chatMsgs = [];
     _chatAdminMsgs = [];
     _actFeedLogs = [];
@@ -2404,6 +2405,9 @@ let _chatEditId = null;    // id del mensaje que se está editando
 let unsubTyping = null;
 let _typingClearTimer = null, _typingLastWrite = 0;
 let _chatSearch = '';      // término de búsqueda dentro del chat
+let _chatReads = {};       // uid → { displayName, at(ms) } última lectura por canal
+let unsubReads = null;
+let _readWriteLast = 0;
 const CHAT_REACTIONS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
 async function toggleReaction(msg, emoji) {
   if (!currentUser || !msg) return;
@@ -2455,6 +2459,7 @@ function markChatSeen(ch = _chatChannel) {
   const newest = arr.length ? (arr[arr.length - 1].createdAt?.toMillis?.() || Date.now()) : Date.now();
   _chatSeen[ch] = Math.max(_chatSeen[ch], newest);
   try { localStorage.setItem(ch === 'admin' ? 'chat_seen_admin_ts' : 'chat_seen_ts', String(_chatSeen[ch])); } catch (_) {}
+  markRead(ch);
   updateChatBadge();
 }
 function renderChat() {
@@ -2491,11 +2496,21 @@ function renderChat() {
       .map(([emoji, arr]) => `<button class="chat-rx${arr.includes(currentUser?.uid) ? ' mine' : ''}" data-rx="${escapeHtml(emoji)}">${emoji} ${arr.length}</button>`)
       .join('');
     const rxHtml = rx ? `<div class="chat-rx-row">${rx}</div>` : '';
+    let readHtml = '';
+    if (mine) {
+      const ms = m.createdAt?.toMillis?.() || 0;
+      const readers = ms ? Object.values(_chatReads).filter(r => r.uid !== currentUser?.uid && r.at >= ms) : [];
+      if (readers.length) {
+        const txt = readers.slice(0, 3).map(r => `${escapeHtml((r.displayName || '?').split(' ')[0])} ${new Date(r.at).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`).join(', ');
+        readHtml = `<div class="chat-read">✓✓ Leído · ${txt}</div>`;
+      }
+    }
     html += `<div class="chat-msg ${mine ? 'mine' : ''}" data-mid="${escapeHtml(m.id)}">
       ${mine ? '' : `<span class="chat-msg-who">${escapeHtml(who)}</span>`}
       <div class="chat-bubble">${reply}${qr}${img}${txt}</div>
       ${rxHtml}
       <span class="chat-time">${escapeHtml(time)}${edited}</span>
+      ${readHtml}
     </div>`;
   });
   el.innerHTML = html;
@@ -2581,6 +2596,7 @@ function setChatChannel(ch) {
   renderChat();
   markChatSeen(ch);
   subscribeTyping(ch);
+  subscribeReads(ch);
 }
 // Bloquea el scroll del fondo (evita que iOS empuje la página y se vea lo de atrás)
 let _lockScrollY = 0;
@@ -2615,6 +2631,7 @@ function closeChat() {
   lockBodyScroll(false);
   clearTyping();
   if (unsubTyping) { unsubTyping(); unsubTyping = null; }
+  if (unsubReads) { unsubReads(); unsubReads = null; }
 }
 
 document.getElementById('chatClose')?.addEventListener('click', closeChat);
@@ -2717,7 +2734,7 @@ document.getElementById('chatFile')?.addEventListener('change', async (e) => {
   try {
     const path = `chat/${_chatChannel}/${currentUser.uid}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '')}`;
     const sref = storageRef(storage, path);
-    await uploadBytes(sref, file, { contentType: file.type });
+    await uploadBytes(sref, file, { contentType: file.type, cacheControl: 'public, max-age=31536000, immutable' });
     const url = await getDownloadURL(sref);
     const payload = {
       text: '', imageUrl: url,
@@ -2756,6 +2773,34 @@ function clearTyping() {
   _typingLastWrite = 0;
   if (currentUser) deleteDoc(doc(dbf, 'chatTyping', typingDocId())).catch(() => {});
 }
+// Acuses de lectura: marca mi lectura del canal (throttle) y escucha la de los demás
+function markRead(ch) {
+  if (!currentUser) return;
+  const now = Date.now();
+  if (now - _readWriteLast < 4000) return;
+  _readWriteLast = now;
+  setDoc(doc(dbf, 'chatReads', `${ch}_${currentUser.uid}`), {
+    channel: ch, uid: currentUser.uid,
+    displayName: (currentUser.displayName || currentUser.email || 'Alguien').split(' ')[0],
+    at: serverTimestamp(),
+  }, { merge: true }).catch(() => {});
+}
+function subscribeReads(ch) {
+  if (unsubReads) { unsubReads(); unsubReads = null; }
+  _chatReads = {};
+  unsubReads = onSnapshot(
+    query(collection(dbf, 'chatReads'), where('channel', '==', ch)),
+    snap => {
+      const m = {};
+      snap.docs.forEach(d => { const r = d.data(); m[r.uid] = { uid: r.uid, displayName: r.displayName, at: r.at?.toMillis?.() || 0 }; });
+      _chatReads = m;
+      const open = !document.getElementById('chatOverlay')?.classList.contains('hidden');
+      if (open && _chatChannel === ch) renderChat();
+    },
+    () => {}
+  );
+}
+
 function subscribeTyping(ch) {
   if (unsubTyping) { unsubTyping(); unsubTyping = null; }
   unsubTyping = onSnapshot(
