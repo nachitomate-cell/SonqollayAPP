@@ -2474,9 +2474,10 @@ function renderChat() {
   if (_chatSearch) {
     const t = _chatSearch.toLowerCase();
     msgs = msgs.filter(m => (m.text || '').toLowerCase().includes(t));
-    if (!msgs.length) { el.innerHTML = `<div class="chat-empty">Sin resultados para «${escapeHtml(_chatSearch)}».</div>`; return; }
+    if (!msgs.length) { el.innerHTML = `<div class="chat-empty">Sin resultados para «${escapeHtml(_chatSearch)}».</div>`; _chatRenderSig = ''; return; }
   } else if (!msgs.length) {
     el.innerHTML = `<div class="chat-empty">Aún no hay mensajes${_chatChannel === 'admin' ? ' entre administradores' : ''}.<br>¡Escribe el primero! 👋</div>`;
+    _chatRenderSig = '';
     return;
   }
   // Firma del contenido: si no cambió, NO reconstruir (evita recrear/recargar imágenes).
@@ -2610,6 +2611,7 @@ function setChatChannel(ch) {
   if (ch === 'admin' && !isAdmin) return;
   clearTyping();
   _chatChannel = ch;
+  _chatRenderSig = ''; // forzar reconstrucción al cambiar de canal
   document.querySelectorAll('#chatTabs .chat-tab').forEach(t => t.classList.toggle('active', t.dataset.ch === ch));
   const inp = document.getElementById('chatInput');
   if (inp) inp.placeholder = ch === 'admin' ? 'Mensaje solo para administradores…' : 'Escribe un mensaje…';
