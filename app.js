@@ -819,8 +819,14 @@ function renderUserInfo(user) {
     photo.src = user.photoURL || '';
     photo.style.display = user.photoURL ? 'block' : 'none';
   }
-  if (name) name.textContent = user.displayName || '';
+  if (name) name.textContent = user.displayName || nameFromEmail(user.email) || '';
   if (email) email.textContent = user.email || '';
+}
+// Nombre "lindo" a partir del correo cuando no hay displayName (ej: evelin.contreras@ → Evelin)
+function nameFromEmail(email) {
+  if (!email) return '';
+  const first = String(email).split('@')[0].split(/[._-]+/)[0];
+  return first ? first.charAt(0).toUpperCase() + first.slice(1) : '';
 }
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
@@ -865,6 +871,7 @@ async function maybeSeed() {
   localStorage.setItem(seedKey, '1');
 }
 
+let _dataRetry = 0, _dataRetryTimer = null;
 function subscribe() {
   if (unsubQuotes) unsubQuotes();
   if (unsubClients) unsubClients();
@@ -879,7 +886,9 @@ function subscribe() {
     if (which === 'quotes') quotesLoaded = true; else clientsLoaded = true;
     hideSplash();
     if (err && err.code === 'permission-denied') {
-      showToast('Tu cuenta todavía no tiene acceso. Pídele a un administrador que la apruebe.', { duration: 9000 });
+      if (_dataRetry === 0) showToast('Tu cuenta todavía no tiene acceso. Pídele a un administrador que la apruebe.', { duration: 9000 });
+      // Auto-reconexión: si te aprueban estando dentro, recarga los datos sin tener que salir.
+      if (_dataRetry < 10) { _dataRetry++; clearTimeout(_dataRetryTimer); _dataRetryTimer = setTimeout(subscribe, 20000); }
     } else {
       showToast('No se pudieron cargar los datos. Revisa tu conexión.', { duration: 6000 });
     }
@@ -889,6 +898,7 @@ function subscribe() {
     quotes = all.filter(q => !q.deleted);
     quotesTrash = all.filter(q => q.deleted);
     quotesLoaded = true;
+    _dataRetry = 0;
     if (clientsLoaded) hideSplash();
     renderAll();
     if (!document.getElementById('trashSheet')?.classList.contains('hidden')) renderTrash();
@@ -1149,7 +1159,7 @@ function renderGreeting() {
   if (!grEl) return;
   const h = new Date().getHours();
   const saludo = h < 12 ? 'Buenos días' : h < 20 ? 'Buenas tardes' : 'Buenas noches';
-  const nombre = currentUser?.displayName?.split(' ')[0] || '';
+  const nombre = currentUser?.displayName?.split(' ')[0] || nameFromEmail(currentUser?.email);
   grEl.textContent = nombre ? `${saludo}, ${nombre}` : saludo;
   const now = new Date();
   const dias = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
