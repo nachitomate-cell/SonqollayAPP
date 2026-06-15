@@ -192,7 +192,7 @@ function userRowHtml(u) {
     : isAdm
       ? `<span class="rol-badge rol-admin">Admin</span>${roleMini('0', 'quitar admin')}`
       : `${approveBtnHtml(u.uid, userApproved[u.uid] === true)}${roleMini('1', 'hacer admin')}`;
-  return `<div class="user-row">
+  return `<div class="user-row" data-user-uid="${esc(u.uid)}" style="cursor:pointer">
     <div class="user-ident">${avatarHtml(u)}<div><div class="u-name">${esc(u.displayName||'—')}</div></div></div>
     <div class="u-cell">${rolCell}</div>
     <div class="u-cell u-email">${esc(u.email||'—')}</div>
@@ -417,6 +417,125 @@ document.addEventListener('click', (e) => {
   if (!btn) return;
   toggleApproved(btn.dataset.approveUid, btn.dataset.approveVal === '1');
 });
+
+// ── Ficha 360° del usuario (clic en una fila de Usuarios) ──
+document.addEventListener('click', (e) => {
+  if (e.target.closest('button') || e.target.closest('a')) return; // no abrir si tocaron un botón
+  const row = e.target.closest('.user-row[data-user-uid]');
+  if (row) openUserProfile(row.dataset.userUid);
+});
+
+async function toggleSuspended(uid, value) {
+  if (!confirm(value ? '¿Suspender el acceso de este usuario? No podrá ver datos hasta reactivarlo.' : '¿Reactivar el acceso de este usuario?')) return;
+  try {
+    await setDoc(doc(db, 'users', uid), { suspended: value }, { merge: true });
+    if (userDocs[uid]) userDocs[uid].suspended = value;
+    adminToast(value ? 'Acceso suspendido' : 'Acceso reactivado');
+    openUserProfile(uid); // refrescar ficha
+    renderAll();
+  } catch (e) { adminToast('No se pudo cambiar: ' + (e?.message || e), true); }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-suspend-uid]');
+  if (b) toggleSuspended(b.dataset.suspendUid, b.dataset.suspendVal === '1');
+});
+
+function openUserProfile(uid) {
+  const prof = userDocs[uid] || {};
+  const um = buildUserMap().find(u => u.uid === uid) || { sessions: 0, totalTime: 0, lastSeen: null, online: false };
+  const name = prof.displayName || prof.email || nameFromEmailAdmin(prof.email) || uid.slice(0, 6);
+  const isDev = (prof.email || '') === OWNER_EMAIL;
+  const isAdm = userRoles[uid] === true || isDev;
+  const suspended = prof.suspended === true;
+
+  const myQuotes = (quotes || []).filter(q => q.createdBy === uid && !q.deleted);
+  const myClients = (clients || []).filter(c => c.createdBy === uid && !c.deleted);
+  const today = todayISOAdmin();
+  const open = q => !['Adjudicada', 'Perdida'].includes(q.estado || 'Borrador');
+  const overdue = myQuotes.filter(q => q.seguimiento && open(q) && q.seguimiento <= today);
+  const adj = myQuotes.filter(q => q.estado === 'Adjudicada');
+  const montoAdj = adj.reduce((s, q) => s + (Number(q.valor) || 0), 0);
+
+  const estados = ['Borrador', 'Enviada', 'En revisión', 'Adjudicada', 'Perdida'];
+  const porEstado = estados.map(es => ({ es, n: myQuotes.filter(q => (q.estado || 'Borrador') === es).length })).filter(x => x.n);
+
+  const acts = (activity || []).filter(a => a.uid === uid && !['login', 'logout'].includes(a.action))
+    .sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0)).slice(0, 12);
+  const actLabel = { quote_new: 'creó cotización', quote_edit: 'editó cotización', quote_delete: 'eliminó cotización', quote_estado: 'cambió estado', quote_note: 'agregó nota', quote_contacto: 'registró seguimiento', quote_pdf: 'generó PDF', client_new: 'creó cliente', client_edit: 'editó cliente', client_delete: 'eliminó cliente', client_note: 'agregó nota' };
+
+  const stat = (label, val, color) => `<div style="flex:1;min-width:90px;background:var(--card-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+    <div style="font-size:18px;font-weight:800;color:${color || 'var(--text)'}">${val}</div>
+    <div style="font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">${label}</div></div>`;
+
+  const rolBadge = isDev ? '<span class="rol-badge" style="background:rgba(139,92,246,.18);color:#a78bfa">🛠️ Desarrollador</span>'
+    : isAdm ? '<span class="rol-badge rol-admin">Admin</span>' : '<span class="rol-badge" style="background:var(--card-2);color:var(--muted)">Miembro</span>';
+
+  el('synapModalTitle').textContent = name;
+  el('synapModalBody').innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+      ${avatarHtml({ displayName: prof.displayName, email: prof.email, photoURL: prof.photoURL }, 44)}
+      <div style="min-width:0">
+        <div style="font-weight:700;color:var(--text)">${esc(name)} ${rolBadge}</div>
+        <div style="font-size:12.5px;color:var(--muted)">${esc(prof.email || '—')}</div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        <div style="font-size:12px;color:${um.online ? 'var(--success)' : 'var(--muted)'}">${um.online ? '● En línea' : (um.lastSeen ? 'Visto ' + timeAgo(um.lastSeen) : 'Sin sesiones')}</div>
+        ${suspended ? '<div style="font-size:11px;color:var(--danger);font-weight:700;margin-top:2px">⛔ Suspendido</div>' : ''}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0">
+      ${stat('Cotizaciones', myQuotes.length)}
+      ${stat('Adjudicadas', adj.length, 'var(--success)')}
+      ${stat('Monto adj.', formatCLPShort(montoAdj), 'var(--accent)')}
+      ${stat('Clientes', myClients.length)}
+      ${stat('Seguim. vencidos', overdue.length, overdue.length ? 'var(--danger)' : 'var(--text)')}
+      ${stat('Sesiones', um.sessions)}
+      ${stat('Tiempo', fmtDuration(um.totalTime))}
+    </div>
+
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin:14px 0 8px">Cotizaciones por estado</div>
+    ${porEstado.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px">${porEstado.map(x => `<span style="background:var(--card-2);border:1px solid var(--border);border-radius:999px;padding:4px 11px;font-size:12px">${esc(x.es)}: <b>${x.n}</b></span>`).join('')}</div>` : '<div style="color:var(--muted);font-size:13px">Sin cotizaciones.</div>'}
+
+    ${overdue.length ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--danger);margin:16px 0 8px">Seguimientos vencidos (${overdue.length})</div>
+      ${overdue.slice(0, 6).map(q => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:13px"><span style="color:var(--text)">${esc(q.numero || '—')} · ${esc(q.empresa || '')}</span><span style="color:var(--danger);flex-shrink:0">${esc(fmtDateShort(q.seguimiento))}</span></div>`).join('')}` : ''}
+
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin:16px 0 8px">Bitácora reciente</div>
+    ${acts.length ? acts.map(a => {
+      const w = a.timestamp?.toDate ? timeAgo(a.timestamp.toDate()) : '';
+      return `<div style="display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--border);font-size:13px">
+        <span style="color:var(--text);flex:1;min-width:0">${esc(actLabel[a.action] || a.action)}${a.detail ? ` · <span style="color:var(--muted)">${esc(prettyAdminDetail(a.detail))}</span>` : ''}</span>
+        <span style="color:var(--muted);flex-shrink:0">${esc(w)}</span></div>`;
+    }).join('') : '<div style="color:var(--muted);font-size:13px">Sin actividad registrada.</div>'}
+
+    ${isDev ? '' : `<div style="display:flex;gap:10px;margin-top:18px">
+      <button class="new-btn" data-suspend-uid="${esc(uid)}" data-suspend-val="${suspended ? '0' : '1'}" style="${suspended ? 'background:var(--success)' : 'background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.4)'}">${suspended ? '✓ Reactivar acceso' : '⛔ Suspender acceso'}</button>
+    </div>`}
+  `;
+  el('synapModal').style.display = '';
+}
+
+// Helpers locales para la ficha
+function todayISOAdmin() {
+  const d = new Date(); const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function nameFromEmailAdmin(email) {
+  if (!email) return '';
+  const f = String(email).split('@')[0].split(/[._-]+/)[0];
+  return f ? f.charAt(0).toUpperCase() + f.slice(1) : '';
+}
+function prettyAdminDetail(detail) {
+  if (!detail) return '';
+  const idx = detail.indexOf(': ');
+  if (idx > 0) {
+    const pre = detail.slice(0, idx);
+    const q = (quotes || []).find(x => x.id === pre);
+    if (q) return `${q.numero || pre}${q.empresa ? ' · ' + q.empresa : ''}${detail.slice(idx)}`;
+    const c = (clients || []).find(x => x.id === pre);
+    if (c) return `${c.empresa || pre}${detail.slice(idx)}`;
+  }
+  return detail;
+}
 
 async function toggleAdmin(uid, value) {
   if (!confirm(value
