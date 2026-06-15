@@ -821,7 +821,24 @@ function renderUserInfo(user) {
   }
   if (name) name.textContent = user.displayName || nameFromEmail(user.email) || '';
   if (email) email.textContent = user.email || '';
+  const nameInput = document.getElementById('profileNameInput');
+  if (nameInput && document.activeElement !== nameInput) nameInput.value = user.displayName || '';
 }
+document.getElementById('profileNameSave')?.addEventListener('click', async () => {
+  const inp = document.getElementById('profileNameInput');
+  const name = (inp?.value || '').trim();
+  if (!name || !currentUser) { showToast('Escribe tu nombre'); return; }
+  const btn = document.getElementById('profileNameSave'); btn.disabled = true;
+  toastLoading('Guardando nombre…');
+  try {
+    await updateProfile(auth.currentUser, { displayName: name });
+    await setDoc(doc(dbf, 'users', currentUser.uid), { displayName: name }, { merge: true });
+    renderUserInfo(auth.currentUser);
+    renderGreeting();
+    toastDone('Nombre actualizado');
+  } catch (e) { toastDone('No se pudo guardar: ' + (e.message || e), false); }
+  finally { btn.disabled = false; }
+});
 // Nombre "lindo" a partir del correo cuando no hay displayName (ej: evelin.contreras@ → Evelin)
 function nameFromEmail(email) {
   if (!email) return '';

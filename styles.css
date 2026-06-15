@@ -2150,3 +2150,9 @@ html { scroll-behavior: smooth; }
 .detail-more-toggle:hover { color: var(--text); border-color: var(--accent); }
 .detail-more.hidden { display: none; }
 .detail-more { margin-top: 10px; }
+
+/* Campo "Tu nombre" en Ajustes */
+.profile-name-row { display: flex; gap: 8px; align-items: center; }
+.profile-name-row input { flex: 1; min-width: 0; background: var(--card-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; color: var(--text); font-size: 14px; font-family: var(--font-body); }
+.profile-name-row input:focus { outline: none; border-color: var(--accent); }
+.profile-name-row .btn { flex-shrink: 0; }
