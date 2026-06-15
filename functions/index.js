@@ -391,6 +391,33 @@ exports.onQuoteWritten = onDocumentWritten(
     const send = (notification, data) =>
       sendToAll(notification, { ...data, quoteId }, { excludeUid: actorUid });
 
+    // --- Aprobación de cotizaciones (usuarios supervisados) ---
+    const befA = before && before.approval && before.approval.status;
+    const aftA = after.approval && after.approval.status;
+    if (aftA === 'pending' && befA !== 'pending') {
+      // Nueva solicitud → avisar a los administradores
+      try {
+        const adminUids = await getAdminUids();
+        await sendToAll(
+          { title: `🔔 Aprobación pendiente · ${after.numero}`,
+            body: `${after.approval.byName || 'Un usuario'} solicita marcar "${after.approval.estado}" · ${after.empresa}` },
+          { kind: 'approval_request', quoteId },
+          { onlyUids: adminUids, excludeUid: after.approval.by }
+        );
+      } catch (e) { logger.error('approval_request', e); }
+      return;
+    }
+    if (befA === 'pending' && (aftA === 'approved' || aftA === 'rejected')) {
+      // Resuelta → avisar a quien la solicitó
+      const to = (before.approval && before.approval.by) || (after.approval && after.approval.by);
+      const msg = aftA === 'approved'
+        ? { title: `✅ Aprobado · ${after.numero}`, body: `Tu cambio a "${after.approval.estado}" fue aprobado · ${after.empresa}` }
+        : { title: `🚫 Rechazado · ${after.numero}`, body: `Tu solicitud fue rechazada${after.approval && after.approval.motivo ? ': ' + after.approval.motivo : ''} · ${after.empresa}` };
+      try { if (to) await sendToAll(msg, { kind: 'approval_result', quoteId }, { onlyUid: to }); }
+      catch (e) { logger.error('approval_result', e); }
+      return; // no duplicar con el push genérico de cambio de estado
+    }
+
     // --- Creación ---
     if (!before) {
       await send({

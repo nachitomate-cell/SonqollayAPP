@@ -22,8 +22,31 @@ service cloud.firestore {
       );
     }
 
+    // Usuario "supervisado": un admin puede marcar users/{uid}.supervised == true.
+    // Sus cotizaciones no pueden pasar directamente a un estado sensible (Enviada/Adjudicada):
+    // deben solicitar aprobación (escriben approval.status == 'pending' manteniendo el estado),
+    // y un admin aplica el cambio. Los admins no quedan afectados por esta restricción.
+    function isSupervised() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('supervised', false) == true;
+    }
+    function sensitiveEstado(v) {
+      return v == 'Enviada' || v == 'Adjudicada';
+    }
+    // El cambio queda bloqueado solo si un supervisado intenta llevar el estado a uno
+    // sensible distinto del actual (en creación, el estado previo se asume 'Borrador').
+    function estadoChangeBlocked() {
+      return isSupervised() &&
+        sensitiveEstado(request.resource.data.get('estado', 'Borrador')) &&
+        request.resource.data.get('estado', 'Borrador') !=
+          (resource != null ? resource.data.get('estado', 'Borrador') : 'Borrador');
+    }
     match /quotes/{id} {
-      allow read, write: if isMember();
+      allow read:   if isMember();
+      allow create: if isMember() && (isAdmin() || !estadoChangeBlocked());
+      allow update: if isMember() && (isAdmin() || !estadoChangeBlocked());
+      allow delete: if isMember();
     }
     match /clients/{id} {
       allow read, write: if isMember();

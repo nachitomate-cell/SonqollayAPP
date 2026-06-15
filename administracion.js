@@ -229,6 +229,7 @@ function renderAll() {
   updateUserFilterSelect(users);
   renderActivity();
   renderComercial();
+  renderApprovals();
   populateNotifTargets(users);
 }
 
@@ -440,6 +441,77 @@ document.addEventListener('click', (e) => {
   if (b) toggleSuspended(b.dataset.suspendUid, b.dataset.suspendVal === '1');
 });
 
+// ── Modo supervisado (sus cotizaciones requieren aprobación) ──
+async function toggleSupervised(uid, value) {
+  try {
+    await setDoc(doc(db, 'users', uid), { supervised: value }, { merge: true });
+    if (userDocs[uid]) userDocs[uid].supervised = value;
+    adminToast(value ? 'Usuario en modo supervisado' : 'Modo supervisado desactivado');
+    openUserProfile(uid);
+    renderAll();
+  } catch (e) { adminToast('No se pudo cambiar: ' + (e?.message || e), true); }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-supervise-uid]');
+  if (b) toggleSupervised(b.dataset.superviseUid, b.dataset.superviseVal === '1');
+});
+
+// ── Aprobación de cotizaciones de usuarios supervisados ──
+async function resolveApproval(quoteId, approve) {
+  const q = (quotes || []).find(x => x.id === quoteId);
+  if (!q || q.approval?.status !== 'pending') return;
+  let motivo = '';
+  if (!approve) {
+    motivo = prompt('Motivo del rechazo (opcional):', '') || '';
+  } else if (!confirm(`¿Aprobar el cambio a "${q.approval.estado}" de ${q.numero || ''}?`)) {
+    return;
+  }
+  try {
+    const me = OWNER_EMAIL; // identificador del admin que resuelve
+    if (approve) {
+      await setDoc(doc(db, 'quotes', quoteId), {
+        estado: q.approval.estado,
+        updatedAt: serverTimestamp(),
+        approval: { status: 'approved', estado: q.approval.estado, by: q.approval.by || '', at: serverTimestamp(), resueltoPor: me },
+      }, { merge: true });
+      adminToast('Cotización aprobada');
+    } else {
+      await setDoc(doc(db, 'quotes', quoteId), {
+        approval: { status: 'rejected', estado: q.approval.estado, by: q.approval.by || '', at: serverTimestamp(), resueltoPor: me, motivo },
+      }, { merge: true });
+      adminToast('Solicitud rechazada');
+    }
+  } catch (e) { adminToast('No se pudo resolver: ' + (e?.message || e), true); }
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-approve-quote]');
+  if (a) { resolveApproval(a.dataset.approveQuote, true); return; }
+  const r = e.target.closest('[data-reject-quote]');
+  if (r) resolveApproval(r.dataset.rejectQuote, false);
+});
+
+function renderApprovals() {
+  const box = el('approvalsBox');
+  if (!box) return;
+  const pend = (quotes || []).filter(q => q.approval?.status === 'pending' && !q.deleted);
+  if (!pend.length) { box.innerHTML = ''; return; }
+  const rows = pend.map(q => {
+    const who = q.approval.byName || (userDocs[q.approval.by]?.displayName) || nameFromEmailAdmin(userDocs[q.approval.by]?.email) || '—';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(167,139,250,.25)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--text);font-size:13.5px">${esc(q.numero || '—')} · ${esc(q.empresa || '')}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(who)} solicita marcar <b style="color:#a78bfa">${esc(q.approval.estado)}</b>${q.valor ? ' · ' + esc(formatCLPShort(q.valor)) : ''}</div>
+      </div>
+      <button class="new-btn" data-approve-quote="${esc(q.id)}" style="flex-shrink:0;padding:7px 14px;background:var(--success)">✓ Aprobar</button>
+      <button class="new-btn" data-reject-quote="${esc(q.id)}" style="flex-shrink:0;padding:7px 14px;background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.4)">Rechazar</button>
+    </div>`;
+  }).join('');
+  box.innerHTML = `<div style="background:linear-gradient(135deg,rgba(167,139,250,.12),rgba(99,102,241,.08));border:1px solid rgba(167,139,250,.35);border-radius:14px;margin-bottom:20px;overflow:hidden">
+    <div style="padding:12px 14px;font-weight:700;color:#a78bfa;display:flex;align-items:center;gap:8px">🔔 Aprobaciones pendientes <span style="background:#a78bfa;color:#fff;border-radius:999px;font-size:11px;padding:1px 8px">${pend.length}</span></div>
+    ${rows}
+  </div>`;
+}
+
 function openUserProfile(uid) {
   const prof = userDocs[uid] || {};
   const um = buildUserMap().find(u => u.uid === uid) || { sessions: 0, totalTime: 0, lastSeen: null, online: false };
@@ -475,7 +547,7 @@ function openUserProfile(uid) {
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
       ${avatarHtml({ displayName: prof.displayName, email: prof.email, photoURL: prof.photoURL }, 44)}
       <div style="min-width:0">
-        <div style="font-weight:700;color:var(--text)">${esc(name)} ${rolBadge}</div>
+        <div style="font-weight:700;color:var(--text)">${esc(name)} ${rolBadge}${prof.supervised ? ' <span class="rol-badge" style="background:rgba(167,139,250,.18);color:#a78bfa">👁️ Supervisado</span>' : ''}</div>
         <div style="font-size:12.5px;color:var(--muted)">${esc(prof.email || '—')}</div>
       </div>
       <div style="margin-left:auto;text-align:right">
@@ -507,7 +579,17 @@ function openUserProfile(uid) {
         <span style="color:var(--muted);flex-shrink:0">${esc(w)}</span></div>`;
     }).join('') : '<div style="color:var(--muted);font-size:13px">Sin actividad registrada.</div>'}
 
-    ${isDev ? '' : `<div style="display:flex;gap:10px;margin-top:18px">
+    ${isDev ? '' : `
+    <div style="margin-top:18px;padding:12px 14px;background:var(--card-2);border:1px solid var(--border);border-radius:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div style="min-width:0">
+          <div style="font-weight:600;color:var(--text);font-size:13.5px">Modo supervisado</div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Sus cotizaciones necesitan tu aprobación antes de pasar a <b>Enviada</b> o <b>Adjudicada</b>.</div>
+        </div>
+        <button class="new-btn" data-supervise-uid="${esc(uid)}" data-supervise-val="${prof.supervised ? '0' : '1'}" style="flex-shrink:0;${prof.supervised ? 'background:#a78bfa' : 'background:var(--card);color:var(--text);border:1px solid var(--border)'}">${prof.supervised ? '✓ Supervisado' : 'Activar'}</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:12px">
       <button class="new-btn" data-suspend-uid="${esc(uid)}" data-suspend-val="${suspended ? '0' : '1'}" style="${suspended ? 'background:var(--success)' : 'background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.4)'}">${suspended ? '✓ Reactivar acceso' : '⛔ Suspender acceso'}</button>
     </div>`}
   `;
@@ -1967,6 +2049,7 @@ function subscribe() {
   unsubQuotes = onSnapshot(quotesQ, snap => {
     quotes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderQuotes();
+    renderApprovals();
   }, snapErr('las cotizaciones'));
 
   const clientsQ = query(collection(db, 'clients'), orderBy('empresa'));

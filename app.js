@@ -243,7 +243,8 @@ async function checkAdminStatus() {
   try {
     const snap = await getDoc(doc(dbf, 'users', currentUser.uid));
     isAdmin = (currentUser.email === DEV_EMAIL) || (snap.exists() && snap.data().isAdmin === true);
-  } catch (_) { isAdmin = (currentUser?.email === DEV_EMAIL); }
+    mySupervised = !isAdmin && snap.exists() && snap.data().supervised === true;
+  } catch (_) { isAdmin = (currentUser?.email === DEV_EMAIL); mySupervised = false; }
   document.getElementById('adminNavSection')?.classList.toggle('hidden', !isAdmin);
   // Para admins, el tile de Clientes se reemplaza por "Notificar usuarios" (push dirigida/masiva)
   document.getElementById('quickTilePush')?.classList.toggle('hidden', !isAdmin);
@@ -654,6 +655,9 @@ let _screenTime = { dashboard: 0, quotes: 0, clients: 0, settings: 0 };
 let _sessionRef = null;
 let _flushTimer = null;
 let isAdmin = false;
+let mySupervised = false;
+// Estados que, para un usuario supervisado, requieren aprobación del administrador
+const SENSITIVE_ESTADOS = ['Enviada', 'Adjudicada'];
 let unsubAdminActivity = null;
 let unsubAdminSessions = null;
 let unsubAppVersion    = null;
@@ -3193,6 +3197,16 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     showToast('Empresa, N° y fecha son obligatorios');
     return;
   }
+  // Usuario supervisado: si intenta fijar un estado sensible, se mantiene el estado actual
+  // y se registra una solicitud de aprobación para el administrador.
+  let approvalRequest = null;
+  if (mySupervised && SENSITIVE_ESTADOS.includes(data.estado)) {
+    const prevEstado = editingQuoteId ? (quotes.find(x => x.id === editingQuoteId)?.estado || 'Borrador') : 'Borrador';
+    if (data.estado !== prevEstado) {
+      approvalRequest = { status: 'pending', estado: data.estado, by: currentUser.uid, byName: currentUser.displayName || currentUser.email || '', at: serverTimestamp() };
+      data.estado = prevEstado; // no aplicar el cambio hasta la aprobación
+    }
+  }
   toastLoading('Guardando cotización…');
   try {
     const id = editingQuoteId || uid();
@@ -3210,6 +3224,7 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     }
     await setDoc(doc(quotesCol(), id), {
       id, ...data,
+      ...(approvalRequest ? { approval: approvalRequest } : {}),
       updatedAt: serverTimestamp(),
       updatedBy: currentUser.uid,
       ...(editingQuoteId
@@ -3223,7 +3238,7 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     logActivity(editingQuoteId ? 'quote_edit' : 'quote_new', `${data.numero} · ${data.empresa}`).catch(() => {});
     await ensureClientForCompany(data.empresa, data.contactos);
     quoteModal.classList.add('hidden');
-    toastDone('Cotización guardada');
+    toastDone(approvalRequest ? `Guardada · cambio a "${approvalRequest.estado}" enviado a aprobación` : 'Cotización guardada');
   } catch (e) {
     console.error(e); toastDone('Error guardando: ' + e.message, false);
   }
@@ -3293,6 +3308,12 @@ function openQuoteDetail(id) {
     <div class="estado-chips" id="estadoChips">
       ${ESTADOS.map(e => `<button class="estado-chip${q.estado === e ? ' active' : ''}" data-estado="${escapeHtml(e)}">${escapeHtml(e)}</button>`).join('')}
     </div>
+    ${q.approval?.status === 'pending'
+      ? `<div style="margin:4px 0 10px;padding:9px 12px;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.35);border-radius:10px;font-size:12.5px;color:#a78bfa">⏳ Pendiente de aprobación: <b>${escapeHtml(q.approval.estado)}</b></div>`
+      : (q.approval?.status === 'rejected'
+        ? `<div style="margin:4px 0 10px;padding:9px 12px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.35);border-radius:10px;font-size:12.5px;color:#f87171">🚫 Rechazado: <b>${escapeHtml(q.approval.estado)}</b>${q.approval.motivo ? ' · ' + escapeHtml(q.approval.motivo) : ''}</div>`
+        : '')}
+    ${mySupervised ? `<div style="margin:-2px 0 10px;font-size:11.5px;color:var(--muted)">Los estados <b>Enviada</b> y <b>Adjudicada</b> requieren aprobación del administrador.</div>` : ''}
 
     <div class="detail-row"><span class="lbl">Fecha</span><span class="val">${formatDate(q.fecha)}</span></div>
     <div class="detail-row"><span class="lbl">Valor</span><span class="val"><strong>${formatCLP(q.valor)}</strong></span></div>
@@ -3408,6 +3429,18 @@ function openQuoteDetail(id) {
     chip.addEventListener('click', async () => {
       const newEstado = chip.dataset.estado;
       if (newEstado === q.estado) return;
+      // Usuario supervisado: los estados sensibles van a aprobación del admin
+      if (mySupervised && SENSITIVE_ESTADOS.includes(newEstado)) {
+        try {
+          await setDoc(doc(quotesCol(), id), {
+            approval: { status: 'pending', estado: newEstado, by: currentUser.uid, byName: currentUser.displayName || currentUser.email || '', at: serverTimestamp() },
+            updatedAt: serverTimestamp(), updatedBy: currentUser.uid,
+          }, { merge: true });
+          showToast(`Enviado a aprobación: ${newEstado}`);
+          detailModal.classList.add('hidden');
+        } catch (e) { showToast('Error: ' + e.message); }
+        return;
+      }
       try {
         await setDoc(doc(quotesCol(), id), { estado: newEstado, updatedAt: serverTimestamp(), updatedBy: currentUser.uid }, { merge: true });
         logActivity('quote_estado', `${q.numero}: ${newEstado}`).catch(() => {});
