@@ -34,7 +34,10 @@ import { startAppTour, tourSeen } from './lib/tour.js';
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const dbf = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  // Detecta redes/proxies que rompen el streaming WebChannel (errores 400/404 en /Listen)
+  // y conmuta a long-polling automáticamente.
+  experimentalAutoDetectLongPolling: true,
 });
 const googleProvider = new GoogleAuthProvider();
 const fbFunctions = getFunctions(app, 'us-central1');
