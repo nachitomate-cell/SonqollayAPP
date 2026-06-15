@@ -149,6 +149,18 @@ service cloud.firestore {
       allow create, update: if isMember() && request.resource.data.uid == request.auth.uid;
     }
 
+    // Tareas asignadas: el admin las crea/edita/borra; el asignado las lee y solo puede
+    // marcarlas como completada (cambiar estado/completedAt), nada más.
+    match /tareas/{id} {
+      allow read:           if isAdmin() || (request.auth != null && resource.data.asignadoA == request.auth.uid);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        request.auth != null &&
+        resource.data.asignadoA == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'completedAt'])
+      );
+    }
+
     // Configuración global (versión de app, etc.)
     match /config/{id} {
       allow read: if request.auth != null;

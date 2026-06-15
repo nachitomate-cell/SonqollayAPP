@@ -371,6 +371,44 @@ exports.onAdminChatMessage = onDocumentCreated(
   }
 );
 
+// ---------- Tareas asignadas: aviso al asignar y recordatorio de vencimiento ----------
+exports.onTaskCreated = onDocumentCreated(
+  { document: 'tareas/{id}', region: 'us-central1' },
+  async (event) => {
+    const t = event.data && event.data.data();
+    if (!t || !t.asignadoA) return;
+    const venceTxt = t.vence ? ` · vence ${t.vence}` : '';
+    try {
+      await sendToAll(
+        { title: '📋 Nueva tarea asignada', body: `${String(t.titulo || 'Tarea').slice(0, 120)}${venceTxt}` },
+        { kind: 'task_new' },
+        { onlyUid: t.asignadoA }
+      );
+    } catch (e) { logger.error('onTaskCreated', e); }
+  }
+);
+
+// Recordatorio diario (09:00 Chile): tareas pendientes que vencen hoy o ya vencidas
+exports.taskDueReminders = onSchedule(
+  { schedule: '0 9 * * *', timeZone: 'America/Santiago', region: 'us-central1' },
+  async () => {
+    const today = todayISO();
+    try {
+      const snap = await db.collection('tareas').where('estado', '==', 'pendiente').get();
+      for (const d of snap.docs) {
+        const t = d.data();
+        if (!t.asignadoA || !t.vence || t.vence > today) continue;
+        const overdue = t.vence < today;
+        await sendToAll(
+          { title: overdue ? '⏰ Tarea vencida' : '📋 Tarea para hoy', body: String(t.titulo || 'Tarea').slice(0, 140) },
+          { kind: 'task_due' },
+          { onlyUid: t.asignadoA }
+        );
+      }
+    } catch (e) { logger.error('taskDueReminders', e); }
+  }
+);
+
 // ---------- 2) Notificaciones sobre cotizaciones (trigger único consolidado) ----------
 // Un solo trigger por escritura: evita la tormenta de push duplicadas (antes 5 funciones
 // sobre el mismo path) y reduce las lecturas de tokens de 5-6 a 1 por guardado.

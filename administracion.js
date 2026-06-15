@@ -29,6 +29,8 @@ let clients    = [];
 let adminNotes = [];
 let notifTemplates = []; // pool de plantillas de notificación push guardadas
 let acadEvents     = []; // eventos de Academia (reuniones/clases)
+let tareas         = []; // tareas asignadas a usuarios (control)
+let _openProfileUid = null; // uid de la ficha 360° abierta (para refrescar tareas en vivo)
 let acadEditId     = null;
 let acadPendingFiles = []; // presentaciones (PowerPoint) seleccionadas en el formulario, aún sin subir
 let userRoles    = {}; // uid → boolean (isAdmin)
@@ -44,6 +46,7 @@ let unsubClients   = null;
 let unsubNotes     = null;
 let unsubNotifTpl  = null;
 let unsubAcad      = null;
+let unsubTareas    = null;
 let currentSection = 'overview';
 
 // Activity filter + pagination state
@@ -528,6 +531,19 @@ function openUserProfile(uid) {
   const adj = myQuotes.filter(q => q.estado === 'Adjudicada');
   const montoAdj = adj.reduce((s, q) => s + (Number(q.valor) || 0), 0);
 
+  // Metas y rendimiento del mes en curso (adjudicadas según fecha de la cotización)
+  const ym = today.slice(0, 7); // YYYY-MM
+  const adjMes = adj.filter(q => (q.fecha || '').slice(0, 7) === ym);
+  const adjMesN = adjMes.length;
+  const adjMesMonto = adjMes.reduce((s, q) => s + (Number(q.valor) || 0), 0);
+  const metaN = Number(prof.metaAdjudicadas) || 0;
+  const metaMonto = Number(prof.metaMonto) || 0;
+  const pbar = (val, goal, color) => {
+    const pct = goal > 0 ? Math.min(100, Math.round(val / goal * 100)) : 0;
+    return `<div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin-top:6px"><div style="height:100%;width:${pct}%;background:${color};border-radius:99px;transition:width .4s"></div></div>`;
+  };
+  const inputCss = 'min-width:0;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);font-size:13px';
+
   const estados = ['Borrador', 'Enviada', 'En revisión', 'Adjudicada', 'Perdida'];
   const porEstado = estados.map(es => ({ es, n: myQuotes.filter(q => (q.estado || 'Borrador') === es).length })).filter(x => x.n);
 
@@ -581,6 +597,25 @@ function openUserProfile(uid) {
 
     ${isDev ? '' : `
     <div style="margin-top:18px;padding:12px 14px;background:var(--card-2);border:1px solid var(--border);border-radius:12px">
+      <div style="font-weight:600;color:var(--text);font-size:13.5px;margin-bottom:8px">🎯 Metas del mes</div>
+      <div style="font-size:12.5px;color:var(--text)">Adjudicadas: <b>${adjMesN}</b>${metaN ? ` <span style="color:var(--muted)">/ ${metaN}</span>` : ''}${metaN ? pbar(adjMesN, metaN, '#34d399') : ''}</div>
+      <div style="font-size:12.5px;color:var(--text);margin-top:10px">Monto adjudicado: <b>${formatCLPShort(adjMesMonto)}</b>${metaMonto ? ` <span style="color:var(--muted)">/ ${formatCLPShort(metaMonto)}</span>` : ''}${metaMonto ? pbar(adjMesMonto, metaMonto, '#f97316') : ''}</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <input id="metaNInput" type="number" min="0" placeholder="Meta n° adj." value="${metaN || ''}" style="flex:1;${inputCss}">
+        <input id="metaMontoInput" type="number" min="0" placeholder="Meta monto $" value="${metaMonto || ''}" style="flex:1;${inputCss}">
+        <button class="new-btn" data-save-meta="${esc(uid)}" style="flex-shrink:0">Guardar</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:12px 14px;background:var(--card-2);border:1px solid var(--border);border-radius:12px">
+      <div style="font-weight:600;color:var(--text);font-size:13.5px;margin-bottom:8px">📋 Tareas asignadas</div>
+      <div id="fichaTasks"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="taskTituloInput" placeholder="Nueva tarea…" style="flex:2;${inputCss}">
+        <input id="taskVenceInput" type="date" style="flex:1;${inputCss}">
+        <button class="new-btn" data-add-task="${esc(uid)}" style="flex-shrink:0">Asignar</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:12px 14px;background:var(--card-2);border:1px solid var(--border);border-radius:12px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
         <div style="min-width:0">
           <div style="font-weight:600;color:var(--text);font-size:13.5px">Modo supervisado</div>
@@ -593,8 +628,62 @@ function openUserProfile(uid) {
       <button class="new-btn" data-suspend-uid="${esc(uid)}" data-suspend-val="${suspended ? '0' : '1'}" style="${suspended ? 'background:var(--success)' : 'background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.4)'}">${suspended ? '✓ Reactivar acceso' : '⛔ Suspender acceso'}</button>
     </div>`}
   `;
+  _openProfileUid = uid;
+  renderFichaTasks(uid);
   el('synapModal').style.display = '';
 }
+
+function renderFichaTasks(uid) {
+  const c = el('fichaTasks');
+  if (!c) return;
+  const list = (tareas || []).filter(t => t.asignadoA === uid)
+    .sort((a, b) => (a.estado === 'completada' ? 1 : 0) - (b.estado === 'completada' ? 1 : 0) || (a.vence || '9999').localeCompare(b.vence || '9999'));
+  if (!list.length) { c.innerHTML = '<div style="color:var(--muted);font-size:12.5px">Sin tareas asignadas.</div>'; return; }
+  const today = todayISOAdmin();
+  c.innerHTML = list.map(t => {
+    const done = t.estado === 'completada';
+    const late = !done && t.vence && t.vence < today;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--border);font-size:13px">
+      <span style="flex:1;min-width:0;${done ? 'text-decoration:line-through;color:var(--muted)' : 'color:var(--text)'}">${esc(t.titulo || '')}${t.vence ? ` <span style="color:${late ? 'var(--danger)' : 'var(--muted)'};font-size:11.5px">· ${esc(fmtDateShort(t.vence))}${late ? ' (vencida)' : ''}</span>` : ''}</span>
+      ${done ? '<span style="color:var(--success);font-size:11.5px;flex-shrink:0">✓ Hecha</span>' : ''}
+      <button data-del-task="${esc(t.id)}" title="Eliminar" style="flex-shrink:0;background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ── Guardar metas / asignar / eliminar tareas ──
+async function saveMeta(uid) {
+  const n = parseInt(el('metaNInput')?.value) || 0;
+  const m = parseInt(el('metaMontoInput')?.value) || 0;
+  try {
+    await setDoc(doc(db, 'users', uid), { metaAdjudicadas: n, metaMonto: m }, { merge: true });
+    if (userDocs[uid]) { userDocs[uid].metaAdjudicadas = n; userDocs[uid].metaMonto = m; }
+    adminToast('Metas guardadas');
+    openUserProfile(uid);
+  } catch (e) { adminToast('No se pudo guardar: ' + (e?.message || e), true); }
+}
+async function addTask(uid) {
+  const titulo = (el('taskTituloInput')?.value || '').trim();
+  const vence = el('taskVenceInput')?.value || '';
+  if (!titulo) { adminToast('Escribe un título para la tarea', true); return; }
+  try {
+    await addDoc(collection(db, 'tareas'), {
+      titulo, vence, asignadoA: uid, asignadoPor: OWNER_EMAIL,
+      estado: 'pendiente', createdAt: serverTimestamp(),
+    });
+    if (el('taskTituloInput')) el('taskTituloInput').value = '';
+    if (el('taskVenceInput')) el('taskVenceInput').value = '';
+    adminToast('Tarea asignada · se notificó al usuario');
+  } catch (e) { adminToast('No se pudo asignar: ' + (e?.message || e), true); }
+}
+document.addEventListener('click', (e) => {
+  const sm = e.target.closest('[data-save-meta]');
+  if (sm) { saveMeta(sm.dataset.saveMeta); return; }
+  const at = e.target.closest('[data-add-task]');
+  if (at) { addTask(at.dataset.addTask); return; }
+  const dt = e.target.closest('[data-del-task]');
+  if (dt && confirm('¿Eliminar esta tarea?')) deleteDoc(doc(db, 'tareas', dt.dataset.delTask)).catch(err => adminToast('No se pudo eliminar: ' + (err?.message || err), true));
+});
 
 // Helpers locales para la ficha
 function todayISOAdmin() {
@@ -2076,6 +2165,11 @@ function subscribe() {
     acadEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderAcademia();
   }, snapErr('la agenda de Academia'));
+
+  unsubTareas = onSnapshot(collection(db, 'tareas'), snap => {
+    tareas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (_openProfileUid && el('synapModal')?.style.display === '') renderFichaTasks(_openProfileUid);
+  }, snapErr('las tareas'));
 }
 
 function unsubscribe() {
@@ -2087,6 +2181,7 @@ function unsubscribe() {
   unsubNotes?.();     unsubNotes     = null;
   unsubNotifTpl?.();  unsubNotifTpl  = null;
   unsubAcad?.();      unsubAcad      = null;
+  unsubTareas?.();    unsubTareas    = null;
 }
 
 // ── Sections ──

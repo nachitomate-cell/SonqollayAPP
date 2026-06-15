@@ -658,6 +658,8 @@ let _sessionRef = null;
 let _flushTimer = null;
 let isAdmin = false;
 let mySupervised = false;
+let myTasks = [];        // tareas asignadas a este usuario
+let unsubTasks = null;
 // Estados que, para un usuario supervisado, requieren aprobación del administrador
 const SENSITIVE_ESTADOS = ['Enviada', 'Adjudicada'];
 let unsubAdminActivity = null;
@@ -791,6 +793,8 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubActivityFeed) { unsubActivityFeed(); unsubActivityFeed = null; }
     if (unsubChat) { unsubChat(); unsubChat = null; }
     if (unsubChatAdmin) { unsubChatAdmin(); unsubChatAdmin = null; }
+    if (unsubTasks) { unsubTasks(); unsubTasks = null; }
+    myTasks = [];
     if (unsubTyping) { unsubTyping(); unsubTyping = null; }
     if (unsubReads) { unsubReads(); unsubReads = null; }
     _chatMsgs = [];
@@ -814,6 +818,7 @@ onAuthStateChanged(auth, async (user) => {
   renderAll();
   subscribe();
   subscribeChat();
+  subscribeTasks();
   startActivitySession().catch(() => {});
   setupFcm().catch(e => console.warn('FCM setup', e));
   setupAppVersionListener();
@@ -960,6 +965,33 @@ function subscribe() {
     templates = snap.docs.map(d => d.data());
     templatesLoaded = true;
   });
+}
+
+// Tareas asignadas a este usuario (por un administrador)
+function subscribeTasks() {
+  if (unsubTasks) unsubTasks();
+  if (!currentUser) return;
+  unsubTasks = onSnapshot(
+    query(collection(dbf, 'tareas'), where('asignadoA', '==', currentUser.uid)),
+    snap => {
+      myTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      updateTasksBadge();
+      if (document.getElementById('view-miday')?.classList.contains('active')) renderMiDay();
+    },
+    err => console.warn('subscribeTasks', err)
+  );
+}
+function updateTasksBadge() {
+  const pend = myTasks.filter(t => t.estado !== 'completada').length;
+  document.querySelectorAll('[data-tasks-badge]').forEach(b => {
+    b.textContent = pend; b.classList.toggle('hidden', pend === 0);
+  });
+}
+async function completeTask(id) {
+  try {
+    await setDoc(doc(dbf, 'tareas', id), { estado: 'completada', completedAt: serverTimestamp() }, { merge: true });
+    showToast('Tarea completada ✓');
+  } catch (e) { showToast('Error: ' + e.message); }
 }
 
 // ---------- FCM ----------
@@ -2392,6 +2424,19 @@ function renderMiDay() {
   const sec = (title, dot, inner) => `<div class="hoy-section-header ${dot}"><span class="hoy-dot ${dot}"></span>${title}</div>${inner}`;
   const greet = (currentUser.displayName || currentUser.email || '').split(' ')[0];
   let html = `<p style="color:var(--muted);font-size:13px;margin:4px 0 14px">Tu resumen de hoy${greet ? ', ' + escapeHtml(greet) : ''}.</p>`;
+  const todayISOd = today.toISOString().slice(0, 10);
+  const pendTasks = myTasks.filter(t => t.estado !== 'completada')
+    .sort((a, b) => (a.vence || '9999').localeCompare(b.vence || '9999'));
+  if (pendTasks.length) html += sec('Tareas asignadas', 'urgent', '<div class="list">' + pendTasks.map(t => {
+    const late = t.vence && t.vence < todayISOd;
+    return `<div class="card" style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--text)">${escapeHtml(t.titulo || '')}</div>
+        ${t.vence ? `<div style="font-size:12px;color:${late ? 'var(--danger)' : 'var(--muted)'};margin-top:2px">Vence ${escapeHtml(formatDate(t.vence))}${late ? ' · vencida' : ''}</div>` : ''}
+      </div>
+      <button class="btn" data-task-done="${escapeHtml(t.id)}" style="flex-shrink:0;padding:7px 12px">✓ Hecha</button>
+    </div>`;
+  }).join('') + '</div>');
   if (overdue.length) html += sec('Requieren seguimiento', 'urgent', `<div class="list">${overdue.map(q => cardQuoteHtml(q, { registrar: true })).join('')}</div>`);
   if (expiringSoon.length) html += sec('Por vencer (≤ 3 días)', 'warn', `<div class="list">${expiringSoon.map(q => cardQuoteHtml(q)).join('')}</div>`);
   if (evHoy.length) html += sec('Academia hoy', '', '<div class="acad-list" style="padding:0">' + evHoy.map(ev => {
@@ -2399,11 +2444,12 @@ function renderMiDay() {
     const hh = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
     return `<div class="acad-card"><div class="acad-card-icon">${ev.tipo === 'Clase' ? '📚' : '🤝'}</div><div class="acad-card-body"><div class="acad-card-title">${escapeHtml(ev.titulo || '')}</div><div class="acad-card-when">${hh}</div></div></div>`;
   }).join('') + '</div>');
-  if (!overdue.length && !expiringSoon.length && !evHoy.length) {
+  if (!overdue.length && !expiringSoon.length && !evHoy.length && !pendTasks.length) {
     html += '<div class="empty" style="margin:32px 0"><span>¡Todo al día! No tienes pendientes urgentes.</span></div>';
   }
   el.innerHTML = html;
   bindQuoteCards(el);
+  el.querySelectorAll('[data-task-done]').forEach(b => b.addEventListener('click', () => completeTask(b.dataset.taskDone)));
 }
 document.getElementById('midayBack')?.addEventListener('click', () => showView('dashboard'));
 
