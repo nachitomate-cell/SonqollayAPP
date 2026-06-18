@@ -161,6 +161,18 @@ service cloud.firestore {
       );
     }
 
+    // Propuestas de mejora (tablero de marcha blanca): los miembros leen, crean y votan;
+    // el moderador (admin) cambia el estado. El autor o un admin pueden eliminar.
+    match /propuestas/{id} {
+      allow read:   if isMember();
+      allow create: if isMember() && request.resource.data.autorUid == request.auth.uid;
+      allow update: if isAdmin() || (
+        isMember() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votos'])
+      );
+      allow delete: if isAdmin() || (isMember() && resource.data.autorUid == request.auth.uid);
+    }
+
     // Configuración global (versión de app, etc.)
     match /config/{id} {
       allow read: if request.auth != null;

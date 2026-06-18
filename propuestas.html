@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a1628" />
+  <title>Propuestas de mejora · Sonqollay</title>
+  <link rel="icon" href="icon-192.png" />
+  <style>
+    :root {
+      --bg: #0a1628; --bg-2: #0f1e35; --card: #122035; --card-2: #1a2e48;
+      --border: #1e3554; --text: #eef4ff; --muted: #6b8cad; --accent: #f97316;
+      --success: #34d399; --danger: #f87171; --purple: #a78bfa; --blue: #38bdf8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+      padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 24px);
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+    header.top {
+      position: sticky; top: 0; z-index: 10; background: rgba(10,22,40,.92);
+      backdrop-filter: blur(10px); border-bottom: 1px solid var(--border);
+      padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+    }
+    .top-row { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+    .top-title { font-size: 16px; font-weight: 800; letter-spacing: .01em; }
+    .top-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+    .top-logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), #fb923c); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .mod-pill { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--purple); background: rgba(167,139,250,.15); border: 1px solid rgba(167,139,250,.35); border-radius: 999px; padding: 3px 10px; }
+    .intro { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 16px 0 6px; }
+    .marcha { background: linear-gradient(135deg, rgba(56,189,248,.1), rgba(167,139,250,.08)); border: 1px solid rgba(56,189,248,.3); border-radius: 12px; padding: 12px 14px; margin: 12px 0 18px; font-size: 12.5px; color: var(--text); }
+    .marcha b { color: var(--blue); }
+
+    .stats { display: flex; gap: 8px; margin: 0 0 16px; }
+    .stat { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
+    .stat .n { font-size: 22px; font-weight: 800; }
+    .stat .l { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
+
+    .new-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 18px; }
+    .new-box h3 { font-size: 13.5px; margin-bottom: 10px; }
+    input, textarea { width: 100%; background: var(--card-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit; margin-bottom: 8px; }
+    textarea { resize: vertical; min-height: 64px; }
+    input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    .btn { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 10px 16px; font-size: 13.5px; font-weight: 700; cursor: pointer; }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .btn-ghost { background: var(--card-2); color: var(--text); border: 1px solid var(--border); }
+
+    .filters { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; -webkit-overflow-scrolling: touch; }
+    .chip { flex-shrink: 0; background: var(--card); border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 6px 13px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+    .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+    .card.added { border-color: rgba(52,211,153,.4); }
+    .card-head { display: flex; align-items: flex-start; gap: 10px; }
+    .card-title { font-weight: 700; font-size: 14.5px; line-height: 1.35; flex: 1; }
+    .card-detail { color: var(--muted); font-size: 13px; line-height: 1.5; margin-top: 6px; white-space: pre-wrap; }
+    .card-meta { font-size: 11.5px; color: var(--muted); margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .badge { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 3px 9px; text-transform: uppercase; letter-spacing: .02em; }
+    .b-pendiente   { background: var(--card-2); color: var(--muted); border: 1px solid var(--border); }
+    .b-en_progreso { background: rgba(56,189,248,.15); color: var(--blue); }
+    .b-agregada    { background: rgba(52,211,153,.18); color: var(--success); }
+    .b-rechazada   { background: rgba(248,113,113,.15); color: var(--danger); }
+
+    .vote { display: flex; align-items: center; gap: 5px; background: var(--card-2); border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; cursor: pointer; color: var(--muted); flex-shrink: 0; }
+    .vote.on { color: var(--accent); border-color: var(--accent); background: rgba(249,115,22,.12); font-weight: 700; }
+
+    .mod-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+    .mod-btn { font-size: 11.5px; border-radius: 8px; padding: 6px 10px; border: 1px solid var(--border); background: var(--card-2); color: var(--muted); cursor: pointer; }
+    .mod-btn.sel { color: #fff; font-weight: 700; }
+    .mod-btn.sel.s-pendiente { background: #475569; border-color: #475569; }
+    .mod-btn.sel.s-en_progreso { background: var(--blue); border-color: var(--blue); color: #04263a; }
+    .mod-btn.sel.s-agregada { background: var(--success); border-color: var(--success); color: #053527; }
+    .mod-btn.sel.s-rechazada { background: var(--danger); border-color: var(--danger); }
+    .del-btn { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; }
+
+    .empty { text-align: center; color: var(--muted); font-size: 13.5px; padding: 40px 0; }
+    .gate { max-width: 380px; margin: 8vh auto 0; padding: 0 20px; text-align: center; }
+    .gate .top-logo { width: 56px; height: 56px; font-size: 30px; border-radius: 16px; margin: 0 auto 16px; }
+    .gate h1 { font-size: 19px; margin-bottom: 6px; }
+    .gate p { color: var(--muted); font-size: 13.5px; margin-bottom: 22px; line-height: 1.5; }
+    .gate .btn, .gate .btn-ghost { width: 100%; margin-bottom: 10px; padding: 12px; }
+    .gate .err { color: var(--danger); font-size: 12.5px; min-height: 16px; margin-bottom: 6px; }
+    .gate .sep { color: var(--muted); font-size: 11.5px; margin: 10px 0; }
+    .hidden { display: none !important; }
+    .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--card-2); border: 1px solid var(--border); color: var(--text); padding: 11px 18px; border-radius: 12px; font-size: 13.5px; z-index: 50; transition: opacity .3s; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  </style>
+</head>
+<body>
+  <!-- Gate de acceso -->
+  <div id="gate" class="gate hidden">
+    <div class="top-logo">💡</div>
+    <h1>Propuestas de mejora</h1>
+    <p>Inicia sesión con tu cuenta del equipo para ver y proponer mejoras de la app.</p>
+    <div id="gateErr" class="err"></div>
+    <button id="gGoogle" class="btn">Continuar con Google</button>
+    <div class="sep">— o con correo —</div>
+    <input id="gEmail" type="email" placeholder="correo@empresa.cl" autocomplete="email" />
+    <input id="gPass" type="password" placeholder="Contraseña" autocomplete="current-password" />
+    <button id="gEmailBtn" class="btn-ghost btn">Iniciar sesión</button>
+  </div>
+
+  <!-- Sin acceso (logueado pero no aprobado) -->
+  <div id="noAccess" class="gate hidden">
+    <div class="top-logo">🔒</div>
+    <h1>Aún sin acceso</h1>
+    <p>Tu cuenta todavía no fue aprobada por un administrador. Pídele que te habilite y vuelve a entrar.</p>
+    <button id="naLogout" class="btn-ghost btn">Cerrar sesión</button>
+  </div>
+
+  <!-- Tablero -->
+  <div id="board" class="hidden">
+    <header class="top">
+      <div class="top-row">
+        <div class="top-logo">💡</div>
+        <div>
+          <div class="top-title">Propuestas de mejora</div>
+          <div class="top-sub">Sonqollay · marcha blanca</div>
+        </div>
+        <span id="modPill" class="mod-pill hidden">★ Moderador</span>
+      </div>
+    </header>
+    <div class="wrap">
+      <div class="marcha">🚀 <b>Marcha blanca</b> hasta fin de mes. Anota cualquier mejora, error o idea que se te ocurra usando la app. El moderador irá marcando qué se agregó.</div>
+
+      <div class="stats">
+        <div class="stat"><div class="n" id="stTotal">0</div><div class="l">Propuestas</div></div>
+        <div class="stat"><div class="n" id="stAdded" style="color:var(--success)">0</div><div class="l">Agregadas</div></div>
+        <div class="stat"><div class="n" id="stPend" style="color:var(--accent)">0</div><div class="l">Pendientes</div></div>
+      </div>
+
+      <div class="new-box">
+        <h3>✍️ Proponer una mejora</h3>
+        <input id="npTitle" placeholder="Título corto (ej. Filtro por fecha en cotizaciones)" maxlength="120" />
+        <textarea id="npDetail" placeholder="Detalle: qué mejorarías y por qué (opcional)" maxlength="800"></textarea>
+        <button id="npSend" class="btn">Enviar propuesta</button>
+      </div>
+
+      <div class="filters" id="filters">
+        <button class="chip active" data-f="all">Todas</button>
+        <button class="chip" data-f="pendiente">Pendientes</button>
+        <button class="chip" data-f="en_progreso">En progreso</button>
+        <button class="chip" data-f="agregada">Agregadas</button>
+        <button class="chip" data-f="rechazada">Rechazadas</button>
+      </div>
+
+      <div id="list"></div>
+    </div>
+  </div>
+
+  <script type="module" src="propuestas.js"></script>
+</body>
+</html>

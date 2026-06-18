@@ -1211,6 +1211,7 @@ document.addEventListener('click', (e) => {
       <button data-act="chat">💬 Chat del equipo</button>
       <button data-act="miday">📌 Mi día</button>
       <button data-act="academia">📚 Academia</button>
+      <button data-act="propuestas">💡 Propuestas de mejora</button>
       <button data-act="trash">🗑️ Papelera</button>
       <button data-act="tour">🎓 Cómo usar la app</button>
       <button data-act="settings">⚙️ Ajustes</button>`;
@@ -1222,6 +1223,7 @@ document.addEventListener('click', (e) => {
     menu.querySelector('[data-act="miday"]').onclick = () => { close(); showView('miday'); };
     menu.querySelector('[data-act="trash"]').onclick = () => { close(); openTrash(); };
     menu.querySelector('[data-act="academia"]').onclick = () => { close(); showView('academia'); };
+    menu.querySelector('[data-act="propuestas"]').onclick = () => { close(); window.location.href = '/propuestas.html'; };
     menu.querySelector('[data-act="tour"]').onclick = () => { close(); launchTour(); };
     menu.querySelector('[data-act="settings"]').onclick = () => { close(); document.querySelector('.bottom-nav [data-view="settings"]')?.click(); };
     setTimeout(() => document.addEventListener('click', onDoc, true), 0);
