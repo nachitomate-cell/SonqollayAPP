@@ -52,10 +52,25 @@ async function getAllTokens() {
   const usersSnap = await db.collection('users').get();
   const perUser = await Promise.all(usersSnap.docs.map(async (userDoc) => {
     const tokensSnap = await userDoc.ref.collection('fcmTokens').get();
-    return tokensSnap.docs.map(d => ({ id: d.id, uid: userDoc.id, token: d.data().token || d.id }));
+    const prefs = userDoc.data().notifPrefs || {};
+    return tokensSnap.docs.map(d => ({ id: d.id, uid: userDoc.id, token: d.data().token || d.id, prefs }));
   }));
   return perUser.flat();
 }
+
+// Mapea cada tipo de notificación (data.kind) a la categoría que el usuario puede
+// activar/desactivar desde Ajustes → Notificaciones. Si la categoría está en false
+// para ese usuario, no se le envía. Sin preferencia guardada = recibe todo (default).
+const KIND_CATEGORY = {
+  chat: 'chat',
+  chat_admin: 'chatAdmin',
+  new_quote: 'cotizaciones', quote_estado: 'cotizaciones', quote_note: 'cotizaciones', new_client: 'cotizaciones',
+  follow_up_digest: 'seguimientos', follow_up_today: 'seguimientos', seguimiento_scheduled: 'seguimientos', quote_expiry: 'seguimientos',
+  academia: 'academia',
+  task_new: 'tareas', task_due: 'tareas',
+  approval_request: 'aprobaciones', approval_result: 'aprobaciones',
+  admin_broadcast: 'avisos',
+};
 
 // Divide un array en lotes del tamaño indicado
 function chunk(arr, size) {
@@ -74,6 +89,9 @@ async function sendToAll(notification, data = {}, opts = {}) {
     tokens = tokens.filter(t => set.has(t.uid));
   }
   if (opts.excludeUid) tokens = tokens.filter(t => t.uid !== opts.excludeUid);
+  // Respetar las preferencias de notificación del usuario según el tipo de aviso
+  const cat = KIND_CATEGORY[data.kind];
+  if (cat) tokens = tokens.filter(t => t.prefs?.[cat] !== false);
   if (!tokens.length) return { sent: 0, removed: 0 };
 
   // Mensaje SOLO de datos: el service worker (firebase-messaging-sw.js) arma y muestra

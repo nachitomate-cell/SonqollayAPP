@@ -244,7 +244,9 @@ async function checkAdminStatus() {
     const snap = await getDoc(doc(dbf, 'users', currentUser.uid));
     isAdmin = (currentUser.email === DEV_EMAIL) || (snap.exists() && snap.data().isAdmin === true);
     mySupervised = !isAdmin && snap.exists() && snap.data().supervised === true;
-  } catch (_) { isAdmin = (currentUser?.email === DEV_EMAIL); mySupervised = false; }
+    myNotifPrefs = (snap.exists() && snap.data().notifPrefs) || {};
+  } catch (_) { isAdmin = (currentUser?.email === DEV_EMAIL); mySupervised = false; myNotifPrefs = {}; }
+  renderNotifPrefs();
   document.getElementById('adminNavSection')?.classList.toggle('hidden', !isAdmin);
   // Usuario supervisado: ocultar el botón de restablecer datos (borra todo)
   document.getElementById('resetBtn')?.classList.toggle('hidden', mySupervised);
@@ -256,6 +258,54 @@ async function checkAdminStatus() {
     getDocs(collection(dbf, 'users')).then(s => {
       const c = document.getElementById('quickCountUsers'); if (c) c.textContent = s.size;
     }).catch(() => {});
+  }
+}
+
+// ─── Preferencias de notificación (Ajustes) ───
+const NOTIF_CATEGORIES = [
+  { key: 'chat',         ic: '💬', title: 'Chat del equipo',          sub: 'Mensajes nuevos del equipo' },
+  { key: 'chatAdmin',    ic: '🔒', title: 'Chat de administradores',  sub: 'Mensajes del canal de admins', adminOnly: true },
+  { key: 'cotizaciones', ic: '📄', title: 'Cotizaciones y clientes',  sub: 'Nuevas, cambios de estado y notas' },
+  { key: 'seguimientos', ic: '🔔', title: 'Seguimientos y vencimientos', sub: 'Recordatorios y cotizaciones por vencer' },
+  { key: 'tareas',       ic: '📋', title: 'Tareas asignadas',         sub: 'Cuando te asignan o vence una tarea' },
+  { key: 'aprobaciones', ic: '✅', title: 'Aprobaciones',             sub: 'Solicitudes y respuestas de aprobación' },
+  { key: 'academia',     ic: '📚', title: 'Academia',                 sub: 'Reuniones y clases programadas' },
+  { key: 'avisos',       ic: '📢', title: 'Avisos del administrador',  sub: 'Notificaciones manuales del equipo' },
+];
+
+function renderNotifPrefs() {
+  const cont = document.getElementById('notifPrefs');
+  if (!cont) return;
+  cont.innerHTML = NOTIF_CATEGORIES
+    .filter(c => !c.adminOnly || isAdmin)
+    .map(c => {
+      const on = myNotifPrefs[c.key] !== false; // default activo
+      return `<div class="notif-pref-row">
+        <span class="notif-pref-ic">${c.ic}</span>
+        <div class="notif-pref-txt">
+          <div class="notif-pref-title">${c.title}</div>
+          <div class="notif-pref-sub">${c.sub}</div>
+        </div>
+        <label class="notif-switch">
+          <input type="checkbox" data-notif-pref="${c.key}" ${on ? 'checked' : ''} />
+          <span class="track"></span><span class="thumb"></span>
+        </label>
+      </div>`;
+    }).join('');
+  cont.querySelectorAll('[data-notif-pref]').forEach(inp => {
+    inp.addEventListener('change', () => setNotifPref(inp.dataset.notifPref, inp.checked));
+  });
+}
+
+async function setNotifPref(key, value) {
+  myNotifPrefs[key] = value;
+  try {
+    await setDoc(doc(dbf, 'users', currentUser.uid), { notifPrefs: { [key]: value } }, { merge: true });
+    showToast(value ? 'Recibirás estos avisos' : 'Aviso desactivado');
+  } catch (e) {
+    myNotifPrefs[key] = !value; // revertir en memoria
+    renderNotifPrefs();
+    showToast('No se pudo guardar: ' + e.message);
   }
 }
 
@@ -658,6 +708,7 @@ let _sessionRef = null;
 let _flushTimer = null;
 let isAdmin = false;
 let mySupervised = false;
+let myNotifPrefs = {};   // preferencias de notificación por categoría (default: todo activo)
 let myTasks = [];        // tareas asignadas a este usuario
 let unsubTasks = null;
 // Estados que, para un usuario supervisado, requieren aprobación del administrador
