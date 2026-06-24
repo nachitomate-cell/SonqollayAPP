@@ -6,7 +6,7 @@ const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onDocumentWritten, onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore, Timestamp } = require('firebase-admin/firestore');
+const { getFirestore, Timestamp, FieldValue } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
 const logger = require('firebase-functions/logger');
 
@@ -159,6 +159,31 @@ async function sendToAll(notification, data = {}, opts = {}) {
   return { sent, removed: toDelete.length };
 }
 
+// Persiste la notificación en una colección global `notifications` para que
+// cualquier dispositivo del equipo la vea en el historial (no solo donde
+// llegó la push). El estado leído/limpiado vive por usuario en users/{uid}.
+async function recordNotification(notification, data = {}) {
+  await db.collection('notifications').add({
+    title: notification.title || '',
+    body:  notification.body  || '',
+    kind:     data.kind     || '',
+    quoteId:  data.quoteId  || null,
+    clientId: data.clientId || null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+}
+
+// Envía push + persiste en historial Firestore en paralelo. Pasa también opts
+// (excludeUid / onlyUid / onlyUids) a sendToAll para segmentar la push, pero
+// el registro del historial es global (todos los dispositivos lo ven).
+async function notifyAll(notification, data = {}, opts = {}) {
+  const [send] = await Promise.all([
+    sendToAll(notification, data, opts),
+    recordNotification(notification, data).catch(e => logger.error('recordNotification failed', e)),
+  ]);
+  return send;
+}
+
 // ---------- 1) Recordatorio diario de pendientes (vencidos + hoy + próximos + sin respuesta) ----------
 // Espeja las urgencias del dashboard (app.js → renderHoyUrgente):
 //   • Vencidos: seguimiento ya pasó (CUALQUIER antigüedad, sin tope de 14 días).
@@ -219,7 +244,7 @@ async function runFollowUpDigest() {
           ? `${sinRespuesta.length} sin respuesta +14 días`
           : `Próximos seguimientos (${buckets.proximos.length})`;
 
-    const result = await sendToAll(
+    const result = await notifyAll(
       { title, body: lines.join('\n') },
       { kind: 'follow_up_digest', total, vencidos: buckets.vencidos.length, sinRespuesta: sinRespuesta.length }
     );
@@ -283,7 +308,7 @@ exports.academiaReminders = onSchedule(
       try {
         // Aviso "el mismo día" (a partir de las 08:00 de Chile, una sola vez)
         if (!ev.notifiedDay && when > now && sameDayCL(when, now) && hourCL(now) >= 8) {
-          await sendToAll(
+          await notifyAll(
             { title: `📅 Hoy ${tipo.toLowerCase()}: ${titulo}`, body: `A las ${fmtHoraCL(when)}${desc}` },
             { kind: 'academia', eventoId: docSnap.id },
             targetOpts
@@ -292,7 +317,7 @@ exports.academiaReminders = onSchedule(
         }
         // Aviso 15 minutos antes
         if (!ev.notified15 && when > now && when <= in15) {
-          await sendToAll(
+          await notifyAll(
             { title: `⏰ ${tipo} en 15 min: ${titulo}`, body: `Comienza a las ${fmtHoraCL(when)}${desc}` },
             { kind: 'academia', eventoId: docSnap.id },
             targetOpts
@@ -322,7 +347,7 @@ exports.quoteExpiryReminders = onSchedule(
       if (dleft < 0 || dleft > 3) continue;
       const cuando = dleft === 0 ? 'vence hoy' : (dleft === 1 ? 'vence mañana' : `vence en ${dleft} días`);
       try {
-        await sendToAll(
+        await notifyAll(
           { title: `⏳ Cotización ${q.numero || ''} ${cuando}`, body: `${q.empresa || ''} · revisa antes de que caduque su validez.` },
           { kind: 'quote_expiry', quoteId: docSnap.id },
           { onlyUid: q.createdBy }
@@ -365,7 +390,7 @@ exports.onChatMessage = onDocumentCreated(
       : m.quoteRef ? `📄 Cotización ${m.quoteRef.numero || ''}`.trim()
       : 'Nuevo mensaje';
     try {
-      await sendToAll(
+      await notifyAll(
         { title: `💬 ${autor}`, body },
         { kind: 'chat' },
         { excludeUid: m.uid } // no notificar a quien lo envió
@@ -395,7 +420,7 @@ exports.onAdminChatMessage = onDocumentCreated(
       : 'Nuevo mensaje';
     try {
       const adminUids = await getAdminUids();
-      await sendToAll(
+      await notifyAll(
         { title: `🔒 Admins · ${autor}`, body },
         { kind: 'chat_admin' },
         { onlyUids: adminUids, excludeUid: m.uid }
@@ -412,7 +437,7 @@ exports.onTaskCreated = onDocumentCreated(
     if (!t || !t.asignadoA) return;
     const venceTxt = t.vence ? ` · vence ${t.vence}` : '';
     try {
-      await sendToAll(
+      await notifyAll(
         { title: '📋 Nueva tarea asignada', body: `${String(t.titulo || 'Tarea').slice(0, 120)}${venceTxt}` },
         { kind: 'task_new' },
         { onlyUid: t.asignadoA }
@@ -432,7 +457,7 @@ exports.taskDueReminders = onSchedule(
         const t = d.data();
         if (!t.asignadoA || !t.vence || t.vence > today) continue;
         const overdue = t.vence < today;
-        await sendToAll(
+        await notifyAll(
           { title: overdue ? '⏰ Tarea vencida' : '📋 Tarea para hoy', body: String(t.titulo || 'Tarea').slice(0, 140) },
           { kind: 'task_due' },
           { onlyUid: t.asignadoA }
@@ -460,7 +485,7 @@ exports.onQuoteWritten = onDocumentWritten(
     // No notificar a quien originó el cambio
     const actorUid = after.updatedBy || after.createdBy || null;
     const send = (notification, data) =>
-      sendToAll(notification, { ...data, quoteId }, { excludeUid: actorUid });
+      notifyAll(notification, { ...data, quoteId }, { excludeUid: actorUid });
 
     // --- Aprobación de cotizaciones (usuarios supervisados) ---
     const befA = before && before.approval && before.approval.status;
@@ -469,7 +494,7 @@ exports.onQuoteWritten = onDocumentWritten(
       // Nueva solicitud → avisar a los administradores
       try {
         const adminUids = await getAdminUids();
-        await sendToAll(
+        await notifyAll(
           { title: `🔔 Aprobación pendiente · ${after.numero}`,
             body: `${after.approval.byName || 'Un usuario'} solicita marcar "${after.approval.estado}" · ${after.empresa}` },
           { kind: 'approval_request', quoteId },
@@ -484,7 +509,7 @@ exports.onQuoteWritten = onDocumentWritten(
       const msg = aftA === 'approved'
         ? { title: `✅ Aprobado · ${after.numero}`, body: `Tu cambio a "${after.approval.estado}" fue aprobado · ${after.empresa}` }
         : { title: `🚫 Rechazado · ${after.numero}`, body: `Tu solicitud fue rechazada${after.approval && after.approval.motivo ? ': ' + after.approval.motivo : ''} · ${after.empresa}` };
-      try { if (to) await sendToAll(msg, { kind: 'approval_result', quoteId }, { onlyUid: to }); }
+      try { if (to) await notifyAll(msg, { kind: 'approval_result', quoteId }, { onlyUid: to }); }
       catch (e) { logger.error('approval_result', e); }
       return; // no duplicar con el push genérico de cambio de estado
     }
@@ -554,7 +579,7 @@ exports.onQuoteWritten = onDocumentWritten(
 async function deliverBroadcast(ref, data) {
   const onlyUids = Array.isArray(data.targets) && data.targets.length ? data.targets : null;
   const onlyUid = (!onlyUids && data.target && data.target !== 'all') ? data.target : null;
-  const result = await sendToAll(
+  const result = await notifyAll(
     { title: data.title, body: data.body || '' },
     { kind: 'admin_broadcast' },
     { onlyUid, onlyUids }
@@ -603,6 +628,7 @@ exports.sendScheduledBroadcasts = onSchedule(
   }
 );
 
+
 // ---------- 4) Aviso al crear cliente ----------
 exports.onClientCreated = onDocumentWritten(
   { document: 'clients/{clientId}', region: 'us-central1' },
@@ -610,7 +636,7 @@ exports.onClientCreated = onDocumentWritten(
     const before = event.data && event.data.before && event.data.before.data();
     const after  = event.data && event.data.after  && event.data.after.data();
     if (before || !after || !after.empresa) return;
-    await sendToAll(
+    await notifyAll(
       {
         title: `Nuevo cliente · ${after.empresa}`,
         body: [after.nombre, after.industria].filter(Boolean).join(' · ') || 'Cliente registrado',

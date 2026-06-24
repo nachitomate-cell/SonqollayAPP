@@ -695,6 +695,15 @@ let templatesLoaded = false;
 let unsubTemplates = null;
 const templatesCol = () => collection(dbf, 'templates');
 
+// ---------- Notificaciones (historial sincronizado en Firestore) ----------
+// Source of truth: colección global `notifications` escrita por Cloud Functions.
+// Estado "leído / limpiado" por usuario en users/{uid}.lastNotifReadAt / lastNotifClearAt.
+let _notifList = [];
+let _notifLastRead  = 0;
+let _notifLastClear = 0;
+let unsubNotifs    = null;
+let unsubNotifMeta = null;
+
 // ---------- Extra Contactos por cliente ----------
 let clientExtraContactos = [];
 
@@ -850,6 +859,7 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubReads) { unsubReads(); unsubReads = null; }
     _chatMsgs = [];
     _chatAdminMsgs = [];
+    stopNotifSubscription();
     _actFeedLogs = [];
     _appVersionKnown = null;
     currentUser = null;
@@ -870,6 +880,7 @@ onAuthStateChanged(auth, async (user) => {
   subscribe();
   subscribeChat();
   subscribeTasks();
+  startNotifSubscription();
   startActivitySession().catch(() => {});
   setupFcm().catch(e => console.warn('FCM setup', e));
   setupAppVersionListener();
@@ -1085,7 +1096,7 @@ async function setupFcm() {
     const d = payload?.data || payload?.notification || {};
     const title = d.title || 'SonqollayAPP';
     const body = d.body || '';
-    pushNotif({ title, body }); // historial in-app
+    // (El historial se actualiza vía Firestore — ver startNotifSubscription)
     // Mostrar SIEMPRE el banner del sistema, incluso con la app en primer plano.
     // (En primer plano FCM no dispara onBackgroundMessage, así que lo hacemos aquí.)
     try {
@@ -1701,33 +1712,68 @@ document.getElementById('dashboardTabs').addEventListener('click', (e) => {
   if (tab === 'notifs') { renderNotifList(); markNotifsRead(); }
 });
 
-// ---------- Notification history ----------
-const NOTIF_KEY = 'sonqollay_notif_history';
-const NOTIF_MAX = 50;
+// ---------- Notification history (Firestore-backed) ----------
+// Limpieza one-shot del store legacy local (pre-Sprint 2).
+try { localStorage.removeItem('sonqollay_notif_history'); } catch {}
 
-function loadNotifHistory() {
-  try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]'); } catch { return []; }
-}
-function saveNotifHistory(list) {
-  localStorage.setItem(NOTIF_KEY, JSON.stringify(list.slice(0, NOTIF_MAX)));
+function startNotifSubscription() {
+  if (!currentUser) return;
+  if (unsubNotifs) return;
+  unsubNotifs = onSnapshot(
+    query(collection(dbf, 'notifications'), orderBy('createdAt', 'desc'), limit(50)),
+    (snap) => {
+      _notifList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderNotifList();
+      updateNotifBadge();
+    },
+    (err) => console.warn('notifs snapshot error', err)
+  );
+  unsubNotifMeta = onSnapshot(doc(dbf, 'users', currentUser.uid), (snap) => {
+    const d = snap.data() || {};
+    _notifLastRead  = d.lastNotifReadAt?.toMillis?.()  || 0;
+    _notifLastClear = d.lastNotifClearAt?.toMillis?.() || 0;
+    renderNotifList();
+    updateNotifBadge();
+  });
 }
 
-function pushNotif({ title, body = '', timestamp = Date.now() }) {
-  const list = loadNotifHistory();
-  list.unshift({ id: String(timestamp) + Math.random().toString(36).slice(2), title, body, timestamp, read: false });
-  saveNotifHistory(list);
-  renderNotifList();
-  updateNotifBadge();
+function stopNotifSubscription() {
+  if (unsubNotifs)    { unsubNotifs();    unsubNotifs = null; }
+  if (unsubNotifMeta) { unsubNotifMeta(); unsubNotifMeta = null; }
+  _notifList = [];
+  _notifLastRead = 0;
+  _notifLastClear = 0;
 }
 
-function markNotifsRead() {
-  const list = loadNotifHistory().map(n => ({ ...n, read: true }));
-  saveNotifHistory(list);
-  updateNotifBadge();
+// Notificaciones visibles para este usuario (después de su última "limpiar todo").
+function visibleNotifs() {
+  return _notifList.filter(n => {
+    const t = n.createdAt?.toMillis?.() || 0;
+    return t > _notifLastClear;
+  });
+}
+
+async function markNotifsRead() {
+  if (!currentUser) return;
+  try {
+    await setDoc(doc(dbf, 'users', currentUser.uid),
+      { lastNotifReadAt: serverTimestamp() }, { merge: true });
+  } catch (e) { console.warn('markNotifsRead failed', e); }
+}
+
+async function clearAllNotifs() {
+  if (!currentUser) return;
+  try {
+    await setDoc(doc(dbf, 'users', currentUser.uid),
+      { lastNotifClearAt: serverTimestamp() }, { merge: true });
+  } catch (e) { console.warn('clearAllNotifs failed', e); }
 }
 
 function updateNotifBadge() {
-  const unread = loadNotifHistory().filter(n => !n.read).length;
+  const unread = visibleNotifs().filter(n => {
+    const t = n.createdAt?.toMillis?.() || 0;
+    return t > _notifLastRead;
+  }).length;
   const badge = document.getElementById('notifBadge');
   if (!badge) return;
   badge.textContent = unread;
@@ -1749,21 +1795,25 @@ function timeAgoShort(ts) {
 function renderNotifList() {
   const el = document.getElementById('notifList');
   if (!el) return;
-  const list = loadNotifHistory();
+  const list = visibleNotifs();
   if (!list.length) {
     el.innerHTML = '<div class="empty"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg><span>Sin notificaciones aún</span></div>';
     return;
   }
-  el.innerHTML = list.map(n => `
-    <div class="notif-item${n.read ? '' : ' unread'}" data-id="${escapeHtml(n.id)}">
+  el.innerHTML = list.map(n => {
+    const ts = n.createdAt?.toMillis?.() || 0;
+    const unread = ts > _notifLastRead;
+    return `
+    <div class="notif-item${unread ? ' unread' : ''}" data-id="${escapeHtml(n.id)}">
       <div class="notif-dot"></div>
       <div class="notif-content">
-        <div class="notif-title">${escapeHtml(n.title)}</div>
+        <div class="notif-title">${escapeHtml(n.title || '')}</div>
         ${n.body ? `<div class="notif-preview">${escapeHtml(n.body)}</div>` : ''}
-        <div class="notif-time">${timeAgoShort(n.timestamp)}</div>
+        <div class="notif-time">${timeAgoShort(ts)}</div>
       </div>
       <svg class="notif-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   el.querySelectorAll('.notif-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -1775,9 +1825,17 @@ function renderNotifList() {
 }
 
 function openNotifSheet(n) {
-  document.getElementById('notifSheetTitle').textContent = n.title;
+  // Si la notificación apunta a un recurso, llevamos al detalle directamente
+  // en vez de mostrar la sheet (es lo que el usuario quiere ver).
+  if (n.quoteId || n.clientId) {
+    _pendingNav = { q: n.quoteId || null, c: n.clientId || null, tab: null };
+    tryConsumeNav();
+    return;
+  }
+  const ts = n.createdAt?.toMillis?.() || Date.now();
+  document.getElementById('notifSheetTitle').textContent = n.title || '';
   document.getElementById('notifSheetBody').textContent  = n.body || '';
-  document.getElementById('notifSheetTime').textContent  = new Date(n.timestamp).toLocaleString('es-CL', {
+  document.getElementById('notifSheetTime').textContent  = new Date(ts).toLocaleString('es-CL', {
     weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'
   });
   document.getElementById('notifSheet').classList.remove('hidden');
@@ -1791,16 +1849,13 @@ document.getElementById('notifSheet')?.addEventListener('click', (e) => {
 });
 
 document.getElementById('notifClearAll')?.addEventListener('click', () => {
-  saveNotifHistory([]);
-  renderNotifList();
-  updateNotifBadge();
+  clearAllNotifs();
 });
 
-// Escuchar mensajes del service worker (notificaciones en background)
+// Mensajes del service worker — solo NAV (deep-link).
+// El historial ya no se alimenta vía postMessage: la subscripción Firestore
+// es la fuente de verdad y se actualiza automáticamente.
 navigator.serviceWorker?.addEventListener('message', (event) => {
-  if (event.data?.type === 'PUSH_RECEIVED') {
-    pushNotif({ title: event.data.title, body: event.data.body, timestamp: event.data.timestamp });
-  }
   if (event.data?.type === 'NAV') {
     _pendingNav = {
       q:   event.data.quoteId  || null,

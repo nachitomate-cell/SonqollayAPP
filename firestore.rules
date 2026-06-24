@@ -178,5 +178,14 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
+
+    // Historial global de notificaciones (escrito por Cloud Functions con
+    // Admin SDK). Cualquier usuario autenticado puede leer su feed; el estado
+    // "leído / limpiado" se guarda por usuario en /users/{uid} como
+    // lastNotifReadAt y lastNotifClearAt, así no se necesitan writes per-user.
+    match /notifications/{id} {
+      allow read: if request.auth != null;
+      // create/update/delete bloqueado al cliente: solo Admin SDK.
+    }
   }
 }
