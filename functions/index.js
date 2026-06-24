@@ -107,6 +107,21 @@ async function sendToAll(notification, data = {}, opts = {}) {
     webpush: {
       headers: { Urgency: 'high', TTL: '86400' },
       fcmOptions: { link: '/' },
+      notification: { icon: '/logo.png', badge: '/logo.png', requireInteraction: false },
+    },
+    apns: {
+      headers: { 'apns-priority': '10' },
+      payload: {
+        aps: {
+          alert: { title: notification.title, body: notification.body || '' },
+          sound: 'default',
+          badge: 1,
+        },
+      },
+    },
+    android: {
+      priority: 'high',
+      notification: { sound: 'default', channelId: 'default' },
     },
   };
 

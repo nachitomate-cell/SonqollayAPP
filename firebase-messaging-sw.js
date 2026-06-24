@@ -12,6 +12,26 @@
 // rompía la evaluación con "window is not defined". Apuntamos window → self.
 self.window = self;
 
+// tag determinístico → reemplaza notificación previa del mismo recurso (quote/cliente)
+// para que no se acumulen varias entradas por la misma cotización editada en ráfaga.
+function tagFor(data) {
+  if (!data) return 'sonqollay';
+  if (data.quoteId)  return `quote-${data.quoteId}`;
+  if (data.clientId) return `client-${data.clientId}`;
+  return data.kind || 'sonqollay';
+}
+
+// data → deep link a usar al hacer click en la notificación
+function linkFor(data) {
+  if (!data) return './';
+  if (data.quoteId)  return `./?q=${encodeURIComponent(data.quoteId)}`;
+  if (data.clientId) return `./?c=${encodeURIComponent(data.clientId)}`;
+  if (data.kind === 'admin_broadcast' || data.kind === 'follow_up_digest') {
+    return './?tab=notifs';
+  }
+  return './';
+}
+
 // SDK alojado en el MISMO origen (vendor/) en vez de gstatic.com.
 // importScripts() va directo a la red (no pasa por la caché de sw.js); si la red a
 // gstatic falla/está bloqueada, el SW no se evaluaba y las push no se registraban.
@@ -46,23 +66,36 @@ messaging.onBackgroundMessage((payload) => {
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     data: d,
+    tag: tagFor(d),
+    renotify: true,
   });
 
   // Avisar a las pestañas abiertas para guardar la notificación en el historial local.
   self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then((cs) => {
-    cs.forEach((c) => c.postMessage({ type: 'PUSH_RECEIVED', title, body, timestamp: Date.now() }));
+    cs.forEach((c) => c.postMessage({ type: 'PUSH_RECEIVED', title, body, data: d, timestamp: Date.now() }));
   });
 });
 
 // Al tocar la notificación: enfocar una pestaña abierta o abrir la app.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
-      for (const c of cs) {
-        if ('focus' in c) return c.focus();
-      }
-      if (self.clients.openWindow) return self.clients.openWindow('./');
-    })
-  );
+  const data = event.notification.data || {};
+  const target = linkFor(data);
+
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Si ya hay una pestaña abierta de la app, foco + NAV por postMessage (sin recargar)
+    if (wins.length) {
+      const win = wins[0];
+      await win.focus().catch(() => {});
+      win.postMessage({
+        type: 'NAV',
+        quoteId:  data.quoteId  || null,
+        clientId: data.clientId || null,
+        tab: (data.kind === 'admin_broadcast' || data.kind === 'follow_up_digest') ? 'notifs' : null,
+      });
+      return;
+    }
+    await self.clients.openWindow(target);
+  })());
 });

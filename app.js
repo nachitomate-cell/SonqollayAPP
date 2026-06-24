@@ -1002,6 +1002,7 @@ function subscribe() {
     if (clientsLoaded) hideSplash();
     renderAll();
     if (!document.getElementById('trashSheet')?.classList.contains('hidden')) renderTrash();
+    tryConsumeNav();
   }, (err) => onDataError(err, 'quotes'));
   unsubClients = onSnapshot(clientsQ, (snap) => {
     const all = snap.docs.map(d => d.data());
@@ -1011,6 +1012,7 @@ function subscribe() {
     if (quotesLoaded) hideSplash();
     renderAll();
     if (!document.getElementById('trashSheet')?.classList.contains('hidden')) renderTrash();
+    tryConsumeNav();
   }, (err) => onDataError(err, 'clients'));
   unsubTemplates = onSnapshot(query(templatesCol()), snap => {
     templates = snap.docs.map(d => d.data());
@@ -1799,7 +1801,48 @@ navigator.serviceWorker?.addEventListener('message', (event) => {
   if (event.data?.type === 'PUSH_RECEIVED') {
     pushNotif({ title: event.data.title, body: event.data.body, timestamp: event.data.timestamp });
   }
+  if (event.data?.type === 'NAV') {
+    _pendingNav = {
+      q:   event.data.quoteId  || null,
+      c:   event.data.clientId || null,
+      tab: event.data.tab      || null,
+    };
+    tryConsumeNav();
+  }
 });
+
+// ---------- Deep-link desde notificación push ----------
+// La URL puede traer ?q=<quoteId>, ?c=<clientId> o ?tab=notifs cuando se hace
+// click en una notificación (firebase-messaging-sw.js construye estos params).
+// Guardamos el destino y lo consumimos cuando los datos están cargados.
+let _pendingNav = (() => {
+  const params = new URLSearchParams(location.search);
+  const q   = params.get('q');
+  const c   = params.get('c');
+  const tab = params.get('tab');
+  if (!q && !c && !tab) return null;
+  // Limpiar la URL para que recargas/compartidos no reabran el mismo detalle
+  history.replaceState({}, '', location.pathname);
+  return { q, c, tab };
+})();
+
+function tryConsumeNav() {
+  if (!_pendingNav) return;
+  if (_pendingNav.q && !quotesLoaded) return;   // espera a que carguen quotes
+  if (_pendingNav.c && !clientsLoaded) return;  // espera a que carguen clients
+  const nav = _pendingNav;
+  _pendingNav = null;
+  if (nav.q) {
+    showView('quotes');
+    if (quotes.find(x => x.id === nav.q)) openQuoteDetail(nav.q);
+  } else if (nav.c) {
+    showView('clients');
+    if (clients.find(x => x.id === nav.c)) openClientForm(nav.c);
+  } else if (nav.tab === 'notifs') {
+    showView('home');
+    document.querySelector('.dtab[data-dtab="notifs"]')?.click();
+  }
+}
 
 // Inicializar badge al cargar
 updateNotifBadge();
