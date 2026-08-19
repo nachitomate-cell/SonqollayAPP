@@ -55,7 +55,7 @@ const uid = () => (self.crypto && crypto.randomUUID)
 
 function getVersionFamily(q) {
   const rootId = q.parentId || q.id;
-  return quotes.filter(x => x.id === rootId || x.parentId === rootId)
+  return allQuotes().filter(x => x.id === rootId || x.parentId === rootId)
     .sort((a, b) => (a.version || 1) - (b.version || 1));
 }
 
@@ -406,7 +406,7 @@ function prettyActivityDetail(detail) {
   const idx = detail.indexOf(': ');
   if (idx > 0) {
     const pre = detail.slice(0, idx);
-    const q = quotes.find(x => x.id === pre) || quotesTrash.find(x => x.id === pre);
+    const q = allQuotes().find(x => x.id === pre) || quotesTrash.find(x => x.id === pre);
     if (q) return `${q.numero || pre}${q.empresa ? ' · ' + q.empresa : ''}${detail.slice(idx)}`;
     const c = clients.find(x => x.id === pre) || clientsTrash.find(x => x.id === pre);
     if (c) return `${c.empresa || pre}${detail.slice(idx)}`;
@@ -675,6 +675,10 @@ document.getElementById('afFilters')?.addEventListener('click', e => {
 // ---------- Estado en memoria ----------
 let currentUser = null;
 let quotes = [];
+// Cotizaciones en estado Backlog: viven fuera de `quotes` para que NADA del Dashboard,
+// métricas, pipeline ni planificador las incluya. Solo se ven al filtrar por "Backlog"
+// en la vista Cotizaciones (o al abrir su detalle directo).
+let quotesBacklog = [];
 let clients = [];
 let quotesTrash = [];
 let clientsTrash = [];
@@ -722,6 +726,56 @@ let myTasks = [];        // tareas asignadas a este usuario
 let unsubTasks = null;
 // Estados que, para un usuario supervisado, requieren aprobación del administrador
 const SENSITIVE_ESTADOS = ['Enviada', 'Adjudicada'];
+
+// ---------- Backlog ----------
+// Una cotización pasa a Backlog manualmente (chips de estado) o automáticamente tras
+// ~3 meses sin actualización (solo desde estados no finales). En Backlog queda oculta
+// de Dashboard, métricas, pipeline y planificador.
+const BACKLOG_ESTADO = 'Backlog';
+const BACKLOG_DIAS = 92; // ~3 meses
+const BACKLOG_AUTO_DESDE = ['Borrador', 'Enviada', 'En revisión'];
+
+// Todas las cotizaciones vivas (activas + backlog), para búsquedas por id,
+// versiones, exportaciones y deep-links.
+function allQuotes() { return quotes.concat(quotesBacklog); }
+
+// Campos extra al mover manualmente una cotización a Backlog.
+function backlogExtras(prevEstado, newEstado) {
+  if (newEstado !== BACKLOG_ESTADO || prevEstado === BACKLOG_ESTADO) return {};
+  return { backlogAt: serverTimestamp(), backlogMotivo: 'manual', estadoPrevio: prevEstado || 'Borrador' };
+}
+
+// Barrido automático: al cargar los datos, mueve a Backlog lo que lleve 3+ meses sin
+// actualizar. Corre una sola vez por sesión; la Cloud Function autoBacklogStaleQuotes
+// hace lo mismo a diario en el servidor.
+let _backlogSweepDone = false;
+async function sweepAutoBacklog() {
+  if (_backlogSweepDone || !currentUser || !quotes.length) return;
+  _backlogSweepDone = true;
+  const cutoff = Date.now() - BACKLOG_DIAS * 86400000;
+  const lastTouch = (q) => q.updatedAt?.toDate?.()?.getTime()
+    ?? q.createdAt?.toDate?.()?.getTime()
+    ?? (q.fecha ? new Date(q.fecha + 'T12:00:00').getTime() : null);
+  const stale = quotes.filter(q =>
+    BACKLOG_AUTO_DESDE.includes(q.estado || 'Borrador') &&
+    lastTouch(q) != null && lastTouch(q) < cutoff
+  );
+  if (!stale.length) return;
+  try {
+    const batch = writeBatch(dbf);
+    stale.forEach(q => {
+      batch.set(doc(quotesCol(), q.id), {
+        estado: BACKLOG_ESTADO,
+        estadoPrevio: q.estado || 'Borrador',
+        backlogAt: serverTimestamp(), backlogMotivo: 'auto',
+        _log: arrayUnion({ t: new Date().toISOString(), u: 'Sistema', d: `Movida a Backlog: 3 meses sin actualización (estaba en ${q.estado || 'Borrador'})` }),
+        updatedAt: serverTimestamp(), updatedBy: currentUser.uid,
+      }, { merge: true });
+    });
+    await batch.commit();
+    showToast(`📦 ${stale.length} cotización${stale.length !== 1 ? 'es' : ''} sin actividad por 3 meses pas${stale.length !== 1 ? 'aron' : 'ó'} a Backlog`, { duration: 7000 });
+  } catch (e) { console.warn('sweepAutoBacklog', e); }
+}
 let unsubAdminActivity = null;
 let unsubAdminSessions = null;
 let unsubAppVersion    = null;
@@ -1006,10 +1060,13 @@ function subscribe() {
     : query(clientsCol(), orderBy('empresa'));
   unsubQuotes = onSnapshot(quotesQ, (snap) => {
     const all = snap.docs.map(d => d.data());
-    quotes = all.filter(q => !q.deleted);
+    const alive = all.filter(q => !q.deleted);
+    quotes = alive.filter(q => (q.estado || '') !== BACKLOG_ESTADO);
+    quotesBacklog = alive.filter(q => (q.estado || '') === BACKLOG_ESTADO);
     quotesTrash = all.filter(q => q.deleted);
     quotesLoaded = true;
     _dataRetry = 0;
+    sweepAutoBacklog();
     if (clientsLoaded) hideSplash();
     renderAll();
     if (!document.getElementById('trashSheet')?.classList.contains('hidden')) renderTrash();
@@ -1889,7 +1946,7 @@ function tryConsumeNav() {
   _pendingNav = null;
   if (nav.q) {
     showView('quotes');
-    if (quotes.find(x => x.id === nav.q)) openQuoteDetail(nav.q);
+    if (allQuotes().find(x => x.id === nav.q)) openQuoteDetail(nav.q);
   } else if (nav.c) {
     showView('clients');
     if (clients.find(x => x.id === nav.c)) openClientForm(nav.c);
@@ -2004,7 +2061,9 @@ function renderQuotes() {
   if (_quotesView === 'proyectos') { renderProyectos(); return; }
   if (!quotesLoaded) { document.getElementById('quotes-list').innerHTML = skeletonCards(5); return; }
   const q = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
-  let list = [...quotes];
+  // El Backlog queda oculto salvo que su chip de filtro esté activo (revisión explícita).
+  const showBacklog = quotesFilters.estados.includes(BACKLOG_ESTADO);
+  let list = showBacklog ? [...quotes, ...quotesBacklog] : [...quotes];
   if (q) {
     list = list.filter(x =>
       (x.empresa||'').toLowerCase().includes(q) ||
@@ -2021,10 +2080,20 @@ function renderQuotes() {
   else if (s === 'empresa')     list.sort((a, b) => (a.empresa || '').localeCompare(b.empresa || ''));
   else                          list.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
   const el = document.getElementById('quotes-list');
-  el.innerHTML = list.length
+  const backlogHint = (!showBacklog && quotesBacklog.length)
+    ? `<button class="backlog-hint" id="backlogRevealBtn">📦 ${quotesBacklog.length} cotización${quotesBacklog.length !== 1 ? 'es' : ''} en Backlog · Ver</button>`
+    : '';
+  el.innerHTML = (list.length
     ? list.map(x => cardQuoteHtml(x)).join('')
-    : '<div class="empty">Sin resultados</div>';
+    : '<div class="empty">Sin resultados</div>') + backlogHint;
   bindQuoteCards(el);
+  document.getElementById('backlogRevealBtn')?.addEventListener('click', () => {
+    quotesFilters.estados = [BACKLOG_ESTADO];
+    document.querySelectorAll('#filterEstadoChips .sfchip').forEach(c =>
+      c.classList.toggle('active', c.dataset.estado === BACKLOG_ESTADO));
+    updateFilterBadge();
+    renderQuotes();
+  });
 }
 
 const CLIENTS_PER_PAGE = 10;
@@ -3315,7 +3384,7 @@ function openQuoteForm(id, prefill = null) {
   document.getElementById('quoteTitle').textContent = id ? 'Editar cotización' : 'Nueva cotización';
   document.getElementById('quoteDelete').hidden = !id || mySupervised; // los supervisados no eliminan
   if (id) {
-    const q = quotes.find(x => x.id === id);
+    const q = allQuotes().find(x => x.id === id);
     if (q) {
       quoteForm.empresa.value = q.empresa || '';
       quoteForm.numero.value = q.numero || '';
@@ -3408,7 +3477,7 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
   // y se registra una solicitud de aprobación para el administrador.
   let approvalRequest = null;
   if (mySupervised && SENSITIVE_ESTADOS.includes(data.estado)) {
-    const prevEstado = editingQuoteId ? (quotes.find(x => x.id === editingQuoteId)?.estado || 'Borrador') : 'Borrador';
+    const prevEstado = editingQuoteId ? (allQuotes().find(x => x.id === editingQuoteId)?.estado || 'Borrador') : 'Borrador';
     if (data.estado !== prevEstado) {
       approvalRequest = { status: 'pending', estado: data.estado, by: currentUser.uid, byName: currentUser.displayName || currentUser.email || '', at: serverTimestamp() };
       data.estado = prevEstado; // no aplicar el cambio hasta la aprobación
@@ -3420,7 +3489,7 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     // Compute change log if editing
     const logEntries = [];
     if (editingQuoteId) {
-      const prev = quotes.find(x => x.id === editingQuoteId);
+      const prev = allQuotes().find(x => x.id === editingQuoteId);
       if (prev) {
         const fields = { empresa:'Empresa', numero:'N°', fecha:'Fecha', descripcion:'Descripción', valor:'Valor', estado:'Estado', seguimiento:'Seguimiento' };
         const changes = Object.entries(fields)
@@ -3429,8 +3498,10 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
         if (changes.length) logEntries.push({ t: new Date().toISOString(), u: currentUser.displayName || currentUser.email, d: changes.join(' · ') });
       }
     }
+    const prevQuote = editingQuoteId ? allQuotes().find(x => x.id === editingQuoteId) : null;
     await setDoc(doc(quotesCol(), id), {
       id, ...data,
+      ...backlogExtras(prevQuote?.estado || 'Borrador', data.estado),
       ...(approvalRequest ? { approval: approvalRequest } : {}),
       updatedAt: serverTimestamp(),
       updatedBy: currentUser.uid,
@@ -3456,7 +3527,7 @@ document.getElementById('quoteDelete').addEventListener('click', async () => {
   if (!confirm('¿Eliminar esta cotización?')) return;
   toastLoading('Moviendo a la papelera…');
   try {
-    const qDel = quotes.find(x => x.id === editingQuoteId);
+    const qDel = allQuotes().find(x => x.id === editingQuoteId);
     await setDoc(doc(quotesCol(), editingQuoteId), { deleted: true, deletedAt: serverTimestamp(), deletedBy: currentUser.uid }, { merge: true });
     if (qDel) logActivity('quote_delete', `${qDel.numero} · ${qDel.empresa}`).catch(() => {});
     quoteModal.classList.add('hidden');
@@ -3484,7 +3555,7 @@ const detailModal = document.getElementById('quoteDetail');
 let detailQuoteId = null;
 
 function openQuoteDetail(id) {
-  const q = quotes.find(x => x.id === id);
+  const q = allQuotes().find(x => x.id === id);
   if (!q) return;
   detailQuoteId = id;
   const family = getVersionFamily(q);
@@ -3492,7 +3563,7 @@ function openQuoteDetail(id) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
   const sm = getSeguimientoStatus(q);
 
-  const ESTADOS = ['Borrador','Enviada','En revisión','Adjudicada','Perdida'];
+  const ESTADOS = ['Borrador','Enviada','En revisión','Adjudicada','Perdida', BACKLOG_ESTADO];
   const client = clients.find(c => c.empresa.toLowerCase() === q.empresa.toLowerCase());
   const clientPhone = client?.telefono?.replace(/\D/g,'') || '';
   const waText = encodeURIComponent(
@@ -3515,6 +3586,7 @@ function openQuoteDetail(id) {
     <div class="estado-chips" id="estadoChips">
       ${ESTADOS.map(e => `<button class="estado-chip${q.estado === e ? ' active' : ''}" data-estado="${escapeHtml(e)}">${escapeHtml(e)}</button>`).join('')}
     </div>
+    ${q.estado === BACKLOG_ESTADO ? `<div class="backlog-banner">📦 En Backlog${q.backlogAt?.toDate ? ' desde el ' + q.backlogAt.toDate().toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }) : ''} · ${q.backlogMotivo === 'auto' ? '3 meses sin actualización' : 'movida manualmente'}${q.estadoPrevio ? ' · estaba en ' + escapeHtml(q.estadoPrevio) : ''}.<br>Oculta del Dashboard y las métricas; elige otro estado para reactivarla.</div>` : ''}
     ${q.approval?.status === 'pending'
       ? `<div style="margin:4px 0 10px;padding:9px 12px;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.35);border-radius:10px;font-size:12.5px;color:#a78bfa">⏳ Pendiente de aprobación: <b>${escapeHtml(q.approval.estado)}</b></div>`
       : (q.approval?.status === 'rejected'
@@ -3649,9 +3721,9 @@ function openQuoteDetail(id) {
         return;
       }
       try {
-        await setDoc(doc(quotesCol(), id), { estado: newEstado, updatedAt: serverTimestamp(), updatedBy: currentUser.uid }, { merge: true });
+        await setDoc(doc(quotesCol(), id), { estado: newEstado, ...backlogExtras(q.estado, newEstado), updatedAt: serverTimestamp(), updatedBy: currentUser.uid }, { merge: true });
         logActivity('quote_estado', `${q.numero}: ${newEstado}`).catch(() => {});
-        showToast(`Estado: ${newEstado}`);
+        showToast(newEstado === BACKLOG_ESTADO ? `📦 ${q.numero} movida a Backlog · quedará oculta del Dashboard` : `Estado: ${newEstado}`);
       } catch (e) { showToast('Error: ' + e.message); }
     });
   });
@@ -4141,7 +4213,7 @@ document.getElementById('templateSheetClose')?.addEventListener('click', () => {
 
 // ---------- Settings ----------
 document.getElementById('exportBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify({ quotes, clients }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ quotes: allQuotes(), clients }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = `sonqollay_backup_${new Date().toISOString().slice(0,10)}.json`;
@@ -4150,7 +4222,7 @@ document.getElementById('exportBtn').addEventListener('click', () => {
 
 document.getElementById('exportCsvBtn').addEventListener('click', () => {
   const headers = ['Empresa','N° Cotización','Fecha','Descripción','Valor','Contacto','Estado','Seguimiento','Notas'];
-  const rows = quotes.map(q => [q.empresa, q.numero, q.fecha, q.descripcion, q.valor ?? '', q.contactos, q.estado, q.seguimiento ?? '', q.notas ?? '']);
+  const rows = allQuotes().map(q => [q.empresa, q.numero, q.fecha, q.descripcion, q.valor ?? '', q.contactos, q.estado, q.seguimiento ?? '', q.notas ?? '']);
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -4223,7 +4295,7 @@ function _syncSegChips(dateVal) {
 }
 
 function openSeguimientoSheet(id) {
-  const q = quotes.find(x => x.id === id);
+  const q = allQuotes().find(x => x.id === id);
   if (!q) return;
   _segQuoteId = id;
 
@@ -4239,7 +4311,7 @@ function openSeguimientoSheet(id) {
        </div>`
     : '';
 
-  const ESTADOS = ['Borrador','Enviada','En revisión','Adjudicada','Perdida'];
+  const ESTADOS = ['Borrador','Enviada','En revisión','Adjudicada','Perdida', BACKLOG_ESTADO];
   const estadoEl = document.getElementById('segEstadoChips');
   estadoEl.innerHTML = ESTADOS.map(e =>
     `<button class="seg-estado-chip${q.estado === e ? ' active' : ''}" data-estado="${escapeHtml(e)}">${escapeHtml(e)}</button>`
@@ -4281,7 +4353,7 @@ document.getElementById('segCancelBtn').addEventListener('click', () => {
 
 document.getElementById('segSheetCalBtn')?.addEventListener('click', () => {
   const dateVal = document.getElementById('segDateInput').value;
-  const q = quotes.find(x => x.id === _segQuoteId);
+  const q = allQuotes().find(x => x.id === _segQuoteId);
   if (!q || !dateVal) { showToast('Selecciona una fecha de seguimiento'); return; }
   downloadICS({ ...q, seguimiento: dateVal });
 });
@@ -4298,7 +4370,7 @@ document.getElementById('segSaveBtn').addEventListener('click', async () => {
   const newEstado = document.getElementById('segEstadoChips')?.querySelector('.seg-estado-chip.active')?.dataset.estado;
   const categoria = document.getElementById('segCatChips')?.querySelector('.seg-cat-chip.active')?.dataset.cat || 'Seguimiento';
   if (!_segQuoteId) return;
-  const q = quotes.find(x => x.id === _segQuoteId);
+  const q = allQuotes().find(x => x.id === _segQuoteId);
   if (!q) return;
 
   const estadoCambio = newEstado && newEstado !== q.estado;
@@ -4307,7 +4379,7 @@ document.getElementById('segSaveBtn').addEventListener('click', async () => {
   const updates = { updatedAt: serverTimestamp(), updatedBy: currentUser.uid };
   if (newDate) updates.seguimiento = newDate;
   if (newDate === '') updates.seguimiento = '';
-  if (estadoCambio) updates.estado = newEstado;
+  if (estadoCambio) Object.assign(updates, { estado: newEstado }, backlogExtras(q.estado, newEstado));
   if (note) {
     const existing = q.notas || '';
     const entry = `${noteStamp({ tag: categoria })} ${note}`;
@@ -4901,7 +4973,7 @@ document.getElementById('proyectoSheetSave')?.addEventListener('click', async ()
 
 // ---------- Pipeline view ----------
 // Probabilidad de cierre por estado (para el pronóstico ponderado)
-const ESTADO_PROB = { 'Borrador': 0.10, 'Enviada': 0.40, 'En revisión': 0.60, 'Adjudicada': 1.0, 'Perdida': 0 };
+const ESTADO_PROB = { 'Borrador': 0.10, 'Enviada': 0.40, 'En revisión': 0.60, 'Adjudicada': 1.0, 'Perdida': 0, 'Backlog': 0 };
 
 function kanbanCardHtml(q) {
   const sm = getSeguimientoStatus(q);

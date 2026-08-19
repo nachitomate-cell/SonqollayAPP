@@ -288,7 +288,7 @@ function renderComercial() {
   const sum = (arr) => arr.reduce((s, q) => s + (Number(q.valor) || 0), 0);
   const adjudicadas = qs.filter(q => q.estado === 'Adjudicada');
   const perdidas    = qs.filter(q => q.estado === 'Perdida');
-  const abiertas    = qs.filter(q => !['Adjudicada', 'Perdida'].includes(q.estado || 'Borrador'));
+  const abiertas    = qs.filter(q => !['Adjudicada', 'Perdida', 'Backlog'].includes(q.estado || 'Borrador'));
   const cerradas    = adjudicadas.length + perdidas.length;
   const winRate     = cerradas ? Math.round(adjudicadas.length / cerradas * 100) : 0;
   const montoAdj = sum(adjudicadas), montoPerd = sum(perdidas), montoAbierto = sum(abiertas);
@@ -526,7 +526,7 @@ function openUserProfile(uid) {
   const myQuotes = (quotes || []).filter(q => q.createdBy === uid && !q.deleted);
   const myClients = (clients || []).filter(c => c.createdBy === uid && !c.deleted);
   const today = todayISOAdmin();
-  const open = q => !['Adjudicada', 'Perdida'].includes(q.estado || 'Borrador');
+  const open = q => !['Adjudicada', 'Perdida', 'Backlog'].includes(q.estado || 'Borrador');
   const overdue = myQuotes.filter(q => q.seguimiento && open(q) && q.seguimiento <= today);
   const adj = myQuotes.filter(q => q.estado === 'Adjudicada');
   const montoAdj = adj.reduce((s, q) => s + (Number(q.valor) || 0), 0);
@@ -544,7 +544,7 @@ function openUserProfile(uid) {
   };
   const inputCss = 'min-width:0;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);font-size:13px';
 
-  const estados = ['Borrador', 'Enviada', 'En revisión', 'Adjudicada', 'Perdida'];
+  const estados = ['Borrador', 'Enviada', 'En revisión', 'Adjudicada', 'Perdida', 'Backlog'];
   const porEstado = estados.map(es => ({ es, n: myQuotes.filter(q => (q.estado || 'Borrador') === es).length })).filter(x => x.n);
 
   const acts = (activity || []).filter(a => a.uid === uid && !['login', 'logout'].includes(a.action))
@@ -1362,6 +1362,7 @@ function estadoBadgeClass(estado) {
     'En revisión': 'estado-revision',
     'Adjudicada':  'estado-adjudicada',
     'Perdida':     'estado-perdida',
+    'Backlog':     'estado-backlog',
   };
   return map[estado] || 'estado-borrador';
 }
@@ -1610,10 +1611,15 @@ el('quoteModalSave')?.addEventListener('click', async () => {
   btn.disabled = true;
 
   try {
+    const prevEstado = quoteEditId ? ((quotes || []).find(q => q.id === quoteEditId)?.estado || 'Borrador') : 'Borrador';
     const data = {
       empresa, numero, fecha, descripcion,
       valor: valor !== null ? valor : null,
       contactos, estado,
+      // Pase manual a Backlog: registra cuándo, por qué y desde qué estado.
+      ...(estado === 'Backlog' && prevEstado !== 'Backlog'
+        ? { backlogAt: serverTimestamp(), backlogMotivo: 'manual', estadoPrevio: prevEstado }
+        : {}),
       seguimiento: seguimiento || null,
       notas, rut, formaPago, validezDias,
       updatedAt: serverTimestamp(),

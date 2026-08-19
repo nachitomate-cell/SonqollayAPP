@@ -194,7 +194,7 @@ async function runFollowUpDigest() {
     const threeDaysFromNow = addDaysISO(today, 3);
     const isOpen = (q) => {
       const e = (q.estado || '').toLowerCase();
-      return e !== 'adjudicada' && e !== 'perdida';
+      return e !== 'adjudicada' && e !== 'perdida' && e !== 'backlog';
     };
 
     // 1) Seguimientos con fecha hasta +3 días → incluye TODOS los vencidos (sin piso de -14 días)
@@ -340,7 +340,7 @@ exports.quoteExpiryReminders = onSchedule(
       const q = docSnap.data();
       if (q.deleted || q.notifiedVencimiento || !q.fecha || !q.createdBy) continue;
       const estado = (q.estado || '').toLowerCase();
-      if (estado === 'adjudicada' || estado === 'perdida') continue;
+      if (estado === 'adjudicada' || estado === 'perdida' || estado === 'backlog') continue;
       const validez = Number(q.validezDias) || 30;
       let dleft;
       try { dleft = daysBetween(today, addDaysISO(q.fecha, validez)); } catch { continue; }
@@ -355,6 +355,46 @@ exports.quoteExpiryReminders = onSchedule(
         await docSnap.ref.update({ notifiedVencimiento: true });
       } catch (e) { logger.error('quoteExpiry send', docSnap.id, e); }
     }
+  }
+);
+
+// ---------- Backlog automático: 3 meses sin actualización ----------
+// Mueve a Backlog las cotizaciones no finales (Borrador/Enviada/En revisión) que llevan
+// 92+ días sin updatedAt. En Backlog quedan fuera del Dashboard, métricas y recordatorios;
+// solo se ven filtrando por "Backlog" en Cotizaciones. La app hace el mismo barrido al
+// cargar (sweepAutoBacklog en app.js); este cron cubre los días en que nadie la abre.
+const BACKLOG_DIAS = 92;
+exports.autoBacklogStaleQuotes = onSchedule(
+  { schedule: '0 8 * * *', timeZone: 'America/Santiago', region: 'us-central1' },
+  async () => {
+    const cutoff = Date.now() - BACKLOG_DIAS * 86400000;
+    let snap;
+    try {
+      snap = await db.collection('quotes').where('estado', 'in', ['Borrador', 'Enviada', 'En revisión']).get();
+    } catch (e) { logger.error('autoBacklog query', e); return; }
+    let moved = 0;
+    for (const d of snap.docs) {
+      const q = d.data();
+      if (q.deleted) continue;
+      const ms = q.updatedAt?.toDate ? q.updatedAt.toDate().getTime()
+        : q.createdAt?.toDate ? q.createdAt.toDate().getTime()
+        : q.fecha ? new Date(q.fecha + 'T12:00:00Z').getTime()
+        : null;
+      if (ms == null || ms >= cutoff) continue;
+      try {
+        await d.ref.update({
+          estado: 'Backlog',
+          estadoPrevio: q.estado || 'Borrador',
+          backlogAt: FieldValue.serverTimestamp(),
+          backlogMotivo: 'auto',
+          _log: FieldValue.arrayUnion({ t: new Date().toISOString(), u: 'Sistema', d: `Movida a Backlog: 3 meses sin actualización (estaba en ${q.estado || 'Borrador'})` }),
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: 'system:auto-backlog',
+        });
+        moved++;
+      } catch (e) { logger.error('autoBacklog update', d.id, e); }
+    }
+    logger.info(`autoBacklog · ${moved} cotización(es) → Backlog`);
   }
 );
 
@@ -472,7 +512,7 @@ exports.taskDueReminders = onSchedule(
 // sobre el mismo path) y reduce las lecturas de tokens de 5-6 a 1 por guardado.
 // Se envía como máximo UNA notificación por escritura, según prioridad:
 //   creación > cambio de estado > seguimiento (hoy/programado) > nota nueva.
-const ESTADO_ICONS = { Adjudicada: '🎉', Perdida: '❌', Enviada: '📤', 'En revisión': '🔍', Borrador: '📝' };
+const ESTADO_ICONS = { Adjudicada: '🎉', Perdida: '❌', Enviada: '📤', 'En revisión': '🔍', Borrador: '📝', Backlog: '📦' };
 
 exports.onQuoteWritten = onDocumentWritten(
   { document: 'quotes/{quoteId}', region: 'us-central1' },
@@ -526,6 +566,9 @@ exports.onQuoteWritten = onDocumentWritten(
     const today = todayISO();
 
     // --- Cambio de estado (máxima prioridad) ---
+    // Pases automáticos a Backlog (3 meses sin actualizar): sin push, para no
+    // generar una ráfaga de avisos cuando el barrido mueve varias a la vez.
+    if ((after.estado || '') === 'Backlog' && after.backlogMotivo === 'auto' && (before.estado || '') !== 'Backlog') return;
     if ((before.estado || '') !== (after.estado || '')) {
       const icon = ESTADO_ICONS[after.estado] || '📋';
       await send({

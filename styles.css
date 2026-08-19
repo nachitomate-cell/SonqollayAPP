@@ -188,6 +188,7 @@ main { padding: 14px 14px 20px; }
 .tag.estado-Perdida    { background: linear-gradient(135deg, rgba(248,113,113,.15) 0%, rgba(248,113,113,.03) 100%); color: #fca5a5; border-color: rgba(248,113,113,.3); }
 .tag.estado-Borrador   { background: linear-gradient(135deg, rgba(107,140,173,.1) 0%, rgba(107,140,173,.02) 100%);  color: #94a3b8; border-color: rgba(107,140,173,.22); }
 .tag.estado-En         { background: linear-gradient(135deg, rgba(251,191,36,.15) 0%, rgba(251,191,36,.03) 100%);  color: #fcd34d; border-color: rgba(251,191,36,.3); }
+.tag.estado-Backlog    { background: linear-gradient(135deg, rgba(148,163,184,.12) 0%, rgba(148,163,184,.02) 100%); color: #8fa3b8; border-color: rgba(148,163,184,.32); border-style: dashed; }
 
 /* Empty state */
 .empty {
@@ -806,6 +807,35 @@ main { padding: 14px 14px 20px; }
 .estado-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(249,115,22,.1); }
 .estado-chip[data-estado="Adjudicada"].active { border-color: var(--success); color: var(--success); background: rgba(52,211,153,.1); }
 .estado-chip[data-estado="Perdida"].active    { border-color: var(--danger);  color: var(--danger);  background: rgba(248,113,113,.1); }
+.estado-chip[data-estado="Backlog"].active    { border-color: #94a3b8; color: #cbd5e1; background: rgba(148,163,184,.12); }
+
+/* Aviso de cotización en Backlog (detalle) */
+.backlog-banner {
+  margin: 4px 0 10px;
+  padding: 9px 12px;
+  background: rgba(148,163,184,.1);
+  border: 1px dashed rgba(148,163,184,.4);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: #a8b8c8;
+  line-height: 1.5;
+}
+
+/* Acceso discreto al Backlog al final de la lista de cotizaciones */
+.backlog-hint {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.backlog-hint:hover { border-color: #94a3b8; color: #cbd5e1; }
 
 /* ── Seguimiento detail box ── */
 .seg-detail-box {
@@ -933,6 +963,7 @@ main { padding: 14px 14px 20px; }
 .seg-estado-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(249,115,22,.1); }
 .seg-estado-chip[data-estado="Adjudicada"].active { border-color: var(--success); color: var(--success); background: rgba(52,211,153,.1); }
 .seg-estado-chip[data-estado="Perdida"].active    { border-color: var(--danger);  color: var(--danger);  background: rgba(248,113,113,.1); }
+.seg-estado-chip[data-estado="Backlog"].active    { border-color: #94a3b8; color: #cbd5e1; background: rgba(148,163,184,.12); }
 .seg-chip[data-days="none"] { color: var(--muted); font-size: 12px; }
 .seg-chip[data-days="none"].active { border-color: var(--muted); background: rgba(107,140,173,.1); color: var(--text); }
 

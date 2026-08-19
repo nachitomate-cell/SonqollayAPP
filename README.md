@@ -52,7 +52,7 @@ Cada teléfono recibe un UID anónimo persistente. Si reinstalás la app, gener�
 
 ## 3) Funcionalidades
 
-- **Cotizaciones**: ABM, estado (Borrador/Enviada/En revisión/Adjudicada/Perdida), valor CLP, contactos, próximo seguimiento, notas.
+- **Cotizaciones**: ABM, estado (Borrador/Enviada/En revisión/Adjudicada/Perdida/Backlog), valor CLP, contactos, próximo seguimiento, notas. El estado **Backlog** archiva la cotización: pasa manualmente o automático tras 3 meses (92 días) sin actualización, queda fuera del Dashboard, métricas, pipeline y recordatorios, y solo se ve activando el filtro "Backlog" en Cotizaciones (campos: `backlogAt`, `backlogMotivo` auto/manual, `estadoPrevio`).
 - **Clientes**: ficha por empresa con persona, email, teléfono, cargo.
 - **Dashboard**: KPIs, próximos seguimientos, últimas cotizaciones.
 - **Sync real-time**: cambios desde cualquier dispositivo aparecen al instante.
@@ -98,7 +98,8 @@ firebase deploy --only functions:dailyFollowUpReminders
 
 Ubicadas en `functions/index.js`:
 
-- **`dailyFollowUpReminders`** — Schedule: todos los días 09:00 (America/Santiago). Espeja las urgencias del dashboard y envía un push consolidado: cotizaciones **atrasadas** (seguimiento vencido, sin tope de antigüedad), de **hoy**, **próximas** (1-3 días) y **sin respuesta +14 días** (Enviada/En revisión sin actividad reciente, aunque no tengan seguimiento). Excluye Adjudicadas/Perdidas. Mientras una cotización siga atrasada, se recuerda cada día.
+- **`dailyFollowUpReminders`** — Schedule: todos los días 09:00 (America/Santiago). Espeja las urgencias del dashboard y envía un push consolidado: cotizaciones **atrasadas** (seguimiento vencido, sin tope de antigüedad), de **hoy**, **próximas** (1-3 días) y **sin respuesta +14 días** (Enviada/En revisión sin actividad reciente, aunque no tengan seguimiento). Excluye Adjudicadas/Perdidas/Backlog. Mientras una cotización siga atrasada, se recuerda cada día.
+- **`autoBacklogStaleQuotes`** — Schedule: todos los días 08:00 (America/Santiago). Mueve a **Backlog** las cotizaciones Borrador/Enviada/En revisión con 92+ días sin `updatedAt`. Registra `backlogAt`, `backlogMotivo: 'auto'`, `estadoPrevio` y una entrada en `_log`. El pase automático no genera push (para evitar ráfagas); la app hace el mismo barrido al cargar (`sweepAutoBacklog`).
 - **`onQuoteWritten`** — Trigger Firestore único (onWrite) sobre `quotes/{quoteId}`. Envía **como máximo una** notificación por escritura, según prioridad: creación → cambio de estado → seguimiento (hoy/programado) → nota nueva. Excluye al autor del cambio (`updatedBy`/`createdBy`).
 - **`onClientCreated`** — Trigger Firestore (onCreate) sobre `clients/{clientId}`. Notifica cada cliente nuevo (excluye al autor).
 - **`onAdminBroadcast`** — Trigger Firestore (onCreate) sobre `adminBroadcasts/{id}`. Reenvía el push manual del panel admin/superadmin a todos los tokens.

@@ -725,6 +725,7 @@
     .estado-revision  { background: rgba(251,191,36,.15);  color: var(--warn); }
     .estado-adjudicada{ background: rgba(52,211,153,.15);  color: var(--success); }
     .estado-perdida   { background: rgba(248,113,113,.15); color: var(--danger); }
+    .estado-backlog   { background: rgba(148,163,184,.14); color: #8fa3b8; border: 1px dashed rgba(148,163,184,.4); }
 
     /* ── Admin modal ── */
     .admin-modal {
@@ -1060,6 +1061,7 @@
   .qm-chip.active[data-estado="En revisión"] { background: #f59e0b; }
   .qm-chip.active[data-estado="Adjudicada"]  { background: var(--success); }
   .qm-chip.active[data-estado="Perdida"]     { background: var(--danger); }
+  .qm-chip.active[data-estado="Backlog"]     { background: #475569; }
 
   .qm-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
   .qm-tags:empty { display: none; }
@@ -1811,6 +1813,7 @@
               <button type="button" class="qm-chip" data-estado="En revisión">En revisión</button>
               <button type="button" class="qm-chip" data-estado="Adjudicada">Adjudicada</button>
               <button type="button" class="qm-chip" data-estado="Perdida">Perdida</button>
+              <button type="button" class="qm-chip" data-estado="Backlog">📦 Backlog</button>
             </div>
             <input type="hidden" id="qEstado" value="Borrador" />
           </div>
