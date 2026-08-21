@@ -881,6 +881,31 @@ function showLoginError(msg) {
 
 function hideLoginError() {
   document.getElementById('loginError').classList.add('hidden');
+  hideLoginNotice();
+}
+
+// Aviso de éxito dentro del formulario de login. El toast vive fuera de la pantalla de
+// login, así que sin esto una acción exitosa no mostraba ninguna señal.
+function showLoginNotice(html) {
+  const el = document.getElementById('loginNotice');
+  if (!el) return;
+  el.innerHTML = html;
+  el.classList.remove('hidden');
+}
+
+function hideLoginNotice() {
+  document.getElementById('loginNotice')?.classList.add('hidden');
+}
+
+function resetPasswordError(code) {
+  const map = {
+    'auth/user-not-found': 'No existe una cuenta con ese correo. Revisa que esté bien escrito.',
+    'auth/invalid-email': 'Ese correo no tiene un formato válido.',
+    'auth/missing-email': 'Escribe tu correo arriba y vuelve a tocar el botón.',
+    'auth/too-many-requests': 'Demasiados intentos seguidos. Espera unos minutos y vuelve a intentarlo.',
+    'auth/network-request-failed': 'Sin conexión. Revisa tu internet e intenta de nuevo.',
+  };
+  return map[code] || 'No se pudo enviar el correo. Intenta de nuevo en unos minutos.';
 }
 
 function emailAuthError(code) {
@@ -941,14 +966,31 @@ document.getElementById('switchModeBtn').addEventListener('click', () => {
 });
 
 document.getElementById('forgotPasswordBtn').addEventListener('click', async () => {
-  const email = document.getElementById('loginEmail').value.trim();
-  if (!email) { showLoginError('Ingresa tu correo para restablecer la contraseña.'); return; }
+  const btn = document.getElementById('forgotPasswordBtn');
+  const emailInput = document.getElementById('loginEmail');
+  const email = emailInput.value.trim();
   hideLoginError();
+  if (!email) {
+    showLoginError('Escribe tu correo en el campo de arriba y vuelve a tocar el botón.');
+    emailInput.focus();
+    return;
+  }
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Enviando correo…';
   try {
     await sendPasswordResetEmail(auth, email);
-    showToast('Correo de restablecimiento enviado');
+    showLoginNotice(
+      `✅ <b>Correo enviado a ${escapeHtml(email)}</b><br>` +
+      `Ábrelo y sigue el enlace para crear una contraseña nueva.<br><br>` +
+      `Si no llega en un par de minutos, <b>revisa la carpeta de spam o correo no deseado</b> ` +
+      `(llega desde <b>noreply@sonqollayapp.firebaseapp.com</b>). El enlace vence en 1 hora.`
+    );
   } catch (err) {
-    showLoginError(emailAuthError(err.code));
+    showLoginError(resetPasswordError(err.code));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
   }
 });
 
