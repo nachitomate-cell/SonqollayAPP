@@ -766,6 +766,42 @@ function backlogExtras(prevEstado, newEstado) {
   return { backlogAt: serverTimestamp(), backlogMotivo: 'manual', estadoPrevio: prevEstado || 'Borrador' };
 }
 
+// ¿Este cambio devuelve la cotización desde Backlog al estado que tenía antes?
+// Mandar algo a Backlog nunca pide aprobación, así que exigirla para deshacerlo dejaba
+// atrapadas las cotizaciones mal clasificadas (Adjudicada → Backlog no tenía vuelta para
+// un usuario supervisado). Deshacer no es un ascenso de estado: se permite siempre.
+function esRestauracionBacklog(q, newEstado) {
+  return q?.estado === BACKLOG_ESTADO && !!q.estadoPrevio && newEstado === q.estadoPrevio;
+}
+
+async function restoreFromBacklog(q, estadoDestino) {
+  const destino = estadoDestino || q.estadoPrevio || 'Borrador';
+  try {
+    await setDoc(doc(quotesCol(), q.id), {
+      estado: destino,
+      backlogMotivo: '', backlogAt: null, estadoPrevio: '',
+      // Si quedó una solicitud de aprobación pendiente por intentar sacarla del Backlog,
+      // deja de tener sentido: el cambio ya se aplicó.
+      ...(q.approval?.status === 'pending' && q.approval?.estado === destino ? { approval: null } : {}),
+      _log: arrayUnion({ t: new Date().toISOString(), u: currentUserName(), d: `Restaurada desde Backlog a ${destino}` }),
+      updatedAt: serverTimestamp(), updatedBy: currentUser.uid,
+    }, { merge: true });
+    logActivity('quote_estado', `${q.numero}: ${destino} (restaurada de Backlog)`).catch(() => {});
+    // Si el filtro estaba en Backlog, la tarjeta desaparecería de la vista y parecería
+    // que no pasó nada: se limpia para que quede visible donde corresponde.
+    if (quotesFilters.estados.includes(BACKLOG_ESTADO)) {
+      quotesFilters.estados = [];
+      document.querySelectorAll('#filterEstadoChips .sfchip').forEach(c => c.classList.remove('active'));
+      updateFilterBadge();
+      renderQuotes();
+    }
+    document.getElementById('quoteDetail')?.classList.add('hidden');
+    showToast(`↩ ${q.numero} restaurada a ${destino}`);
+  } catch (e) {
+    showToast('No se pudo restaurar: ' + (e.message || e), { duration: 6000 });
+  }
+}
+
 // Barrido automático: al cargar los datos, mueve a Backlog lo que lleve 3+ meses sin
 // actualizar. Corre una sola vez por sesión; la Cloud Function autoBacklogStaleQuotes
 // hace lo mismo a diario en el servidor.
@@ -3551,8 +3587,9 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
   // Usuario supervisado: si intenta fijar un estado sensible, se mantiene el estado actual
   // y se registra una solicitud de aprobación para el administrador.
   let approvalRequest = null;
-  if (mySupervised && SENSITIVE_ESTADOS.includes(data.estado)) {
-    const prevEstado = editingQuoteId ? (allQuotes().find(x => x.id === editingQuoteId)?.estado || 'Borrador') : 'Borrador';
+  const quoteEnEdicion = editingQuoteId ? allQuotes().find(x => x.id === editingQuoteId) : null;
+  if (mySupervised && SENSITIVE_ESTADOS.includes(data.estado) && !esRestauracionBacklog(quoteEnEdicion, data.estado)) {
+    const prevEstado = quoteEnEdicion?.estado || 'Borrador';
     if (data.estado !== prevEstado) {
       approvalRequest = { status: 'pending', estado: data.estado, by: currentUser.uid, byName: currentUser.displayName || currentUser.email || '', at: serverTimestamp() };
       data.estado = prevEstado; // no aplicar el cambio hasta la aprobación
@@ -3663,7 +3700,11 @@ function openQuoteDetail(id) {
     <div class="estado-chips" id="estadoChips">
       ${ESTADOS.map(e => `<button class="estado-chip${q.estado === e ? ' active' : ''}" data-estado="${escapeHtml(e)}">${escapeHtml(e)}</button>`).join('')}
     </div>
-    ${q.estado === BACKLOG_ESTADO ? `<div class="backlog-banner">📦 En Backlog${q.backlogAt?.toDate ? ' desde el ' + q.backlogAt.toDate().toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }) : ''} · ${q.backlogMotivo === 'auto' ? '3 meses sin actualización' : 'movida manualmente'}${q.estadoPrevio ? ' · estaba en ' + escapeHtml(q.estadoPrevio) : ''}.<br>Oculta del Dashboard y las métricas; elige otro estado para reactivarla.</div>` : ''}
+    ${q.estado === BACKLOG_ESTADO ? `<div class="backlog-banner">📦 En Backlog${q.backlogAt?.toDate ? ' desde el ' + q.backlogAt.toDate().toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }) : ''} · ${q.backlogMotivo === 'auto' ? '3 meses sin actualización' : 'movida manualmente'}.<br>Oculta del Dashboard y las métricas.
+      ${q.estadoPrevio
+        ? `<button class="backlog-restore" id="backlogRestoreBtn" data-restore="${escapeHtml(q.estadoPrevio)}">↩ Restaurar a ${escapeHtml(q.estadoPrevio)}</button>`
+        : 'Elige otro estado para reactivarla.'}
+    </div>` : ''}
     ${q.approval?.status === 'pending'
       ? `<div style="margin:4px 0 10px;padding:9px 12px;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.35);border-radius:10px;font-size:12.5px;color:#a78bfa">⏳ Pendiente de aprobación: <b>${escapeHtml(q.approval.estado)}</b></div>`
       : (q.approval?.status === 'rejected'
@@ -3784,11 +3825,19 @@ function openQuoteDetail(id) {
   `;
   detailModal.classList.remove('hidden');
 
+  // Restaurar desde Backlog al estado que tenía antes (un solo toque).
+  document.getElementById('backlogRestoreBtn')?.addEventListener('click', async () => {
+    await restoreFromBacklog(q, document.getElementById('backlogRestoreBtn').dataset.restore);
+  });
+
   // Estado chips — instant save
   document.getElementById('estadoChips')?.querySelectorAll('.estado-chip').forEach(chip => {
     chip.addEventListener('click', async () => {
       const newEstado = chip.dataset.estado;
       if (newEstado === q.estado) return;
+      // Volver desde Backlog al estado anterior no es un ascenso: se aplica directo aunque
+      // el destino sea un estado que normalmente requiere aprobación.
+      if (esRestauracionBacklog(q, newEstado)) { await restoreFromBacklog(q, newEstado); return; }
       // Usuario supervisado: los estados sensibles van a aprobación del admin
       if (mySupervised && SENSITIVE_ESTADOS.includes(newEstado)) {
         try {

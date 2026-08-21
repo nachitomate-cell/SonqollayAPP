@@ -34,10 +34,19 @@ service cloud.firestore {
     function sensitiveEstado(v) {
       return v == 'Enviada' || v == 'Adjudicada';
     }
+    // Devolver una cotización desde Backlog al estado que tenía antes no es un ascenso:
+    // deshace una clasificación errónea. Mandar algo a Backlog nunca pide aprobación, así
+    // que exigirla para revertirlo dejaba atrapadas las cotizaciones mal clasificadas.
+    function backlogRestore() {
+      return resource != null &&
+        resource.data.get('estado', '') == 'Backlog' &&
+        resource.data.get('estadoPrevio', '') != '' &&
+        request.resource.data.get('estado', '') == resource.data.get('estadoPrevio', '');
+    }
     // El cambio queda bloqueado solo si un supervisado intenta llevar el estado a uno
     // sensible distinto del actual (en creación, el estado previo se asume 'Borrador').
     function estadoChangeBlocked() {
-      return isSupervised() &&
+      return isSupervised() && !backlogRestore() &&
         sensitiveEstado(request.resource.data.get('estado', 'Borrador')) &&
         request.resource.data.get('estado', 'Borrador') !=
           (resource != null ? resource.data.get('estado', 'Borrador') : 'Borrador');
