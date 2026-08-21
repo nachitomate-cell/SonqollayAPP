@@ -158,6 +158,7 @@ main { padding: 14px 14px 20px; }
 .card[data-estado="Perdida"]:hover {
   box-shadow: 0 12px 30px -10px rgba(0,0,0,0.5), 0 0 22px -5px rgba(248, 113, 113, 0.12);
 }
+.card[data-estado="En seguimiento"]:hover,
 .card[data-estado="En revisión"]:hover {
   box-shadow: 0 12px 30px -10px rgba(0,0,0,0.5), 0 0 22px -5px rgba(251, 191, 36, 0.12);
 }
@@ -165,6 +166,7 @@ main { padding: 14px 14px 20px; }
 .card[data-estado="Enviada"]    { border-left-color: var(--accent); }
 .card[data-estado="Adjudicada"] { border-left-color: var(--success); }
 .card[data-estado="Perdida"]    { border-left-color: var(--danger); }
+.card[data-estado="En seguimiento"],
 .card[data-estado="En revisión"] { border-left-color: var(--warn); }
 .card[data-estado="Borrador"]   { border-left-color: var(--muted); }
 
@@ -1800,6 +1802,7 @@ main { padding: 14px 14px 20px; }
 .kanban-card:active { cursor: grabbing; transform: scale(.98); }
 .kanban-card.dragging { opacity: .45; }
 .kanban-card[data-estado="Enviada"] { border-left-color: var(--accent); }
+.kanban-card[data-estado="En seguimiento"],
 .kanban-card[data-estado="En revisión"] { border-left-color: var(--warn); }
 .kanban-card[data-estado="Adjudicada"] { border-left-color: var(--success); }
 .kanban-card[data-estado="Perdida"] { border-left-color: var(--danger); }

@@ -25,6 +25,7 @@ import { firebaseConfig, VAPID_KEY } from './firebase-config.js';
 import {
   formatCLP, formatCLPShort, parseValor, formatDate, daysUntil, daysSinceUpdated,
   nextVersionNumero, escapeHtml, getSeguimientoStatus, generateICS, fmtDuration, timeAgo,
+  ESTADO_LEGACY, ESTADO_SEGUIMIENTO, normalizeEstado,
 } from './lib/format.js';
 import { seedQuotes } from './lib/seed-data.js';
 import { getRates, cachedUf } from './lib/indicadores.js';
@@ -733,7 +734,27 @@ const SENSITIVE_ESTADOS = ['Enviada', 'Adjudicada'];
 // de Dashboard, métricas, pipeline y planificador.
 const BACKLOG_ESTADO = 'Backlog';
 const BACKLOG_DIAS = 92; // ~3 meses
-const BACKLOG_AUTO_DESDE = ['Borrador', 'Enviada', 'En revisión'];
+const BACKLOG_AUTO_DESDE = ['Borrador', 'Enviada', ESTADO_SEGUIMIENTO];
+
+// Lista canónica de estados, en el orden del embudo comercial.
+const ESTADOS_COTIZACION = ['Borrador', 'Enviada', ESTADO_SEGUIMIENTO, 'Adjudicada', 'Perdida', BACKLOG_ESTADO];
+
+// Migración one-shot del rename "En revisión" → "En seguimiento". Es idempotente: una vez
+// migrados los documentos, ningún registro coincide y queda en no-op para siempre.
+// No toca updatedAt a propósito: es un cambio de etiqueta, no actividad comercial, y
+// alterarlo reiniciaría el conteo de "sin respuesta" y del paso automático a Backlog.
+let _estadoMigrationDone = false;
+async function migrateEstadoLegacy(rawQuotes) {
+  if (_estadoMigrationDone || !currentUser) return;
+  const pendientes = rawQuotes.filter(q => q.estado === ESTADO_LEGACY);
+  if (!pendientes.length) return;
+  _estadoMigrationDone = true;
+  try {
+    const batch = writeBatch(dbf);
+    pendientes.forEach(q => batch.set(doc(quotesCol(), q.id), { estado: ESTADO_SEGUIMIENTO }, { merge: true }));
+    await batch.commit();
+  } catch (e) { console.warn('migrateEstadoLegacy', e); _estadoMigrationDone = false; }
+}
 
 // Todas las cotizaciones vivas (activas + backlog), para búsquedas por id,
 // versiones, exportaciones y deep-links.
@@ -1059,7 +1080,11 @@ function subscribe() {
     ? query(clientsCol(), where('createdBy', '==', currentUser.uid))
     : query(clientsCol(), orderBy('empresa'));
   unsubQuotes = onSnapshot(quotesQ, (snap) => {
-    const all = snap.docs.map(d => d.data());
+    const raw = snap.docs.map(d => d.data());
+    migrateEstadoLegacy(raw);
+    // El estado se normaliza al leer, así el resto de la app solo conoce el nombre nuevo
+    // aunque la migración todavía no haya alcanzado a un documento.
+    const all = raw.map(q => (q.estado === ESTADO_LEGACY ? { ...q, estado: normalizeEstado(q.estado) } : q));
     const alive = all.filter(q => !q.deleted);
     quotes = alive.filter(q => (q.estado || '') !== BACKLOG_ESTADO);
     quotesBacklog = alive.filter(q => (q.estado || '') === BACKLOG_ESTADO);
@@ -1086,6 +1111,9 @@ function subscribe() {
     templates = snap.docs.map(d => d.data());
     templatesLoaded = true;
   });
+  // Roster del equipo: alimenta el selector de responsable y resuelve nombres en tarjetas
+  // de cotizaciones anteriores al campo responsableNombre.
+  loadTeamRoster().then(() => { if (_teamRoster.length) renderAll(); });
 }
 
 // Tareas asignadas a este usuario (por un administrador)
@@ -1392,7 +1420,7 @@ function renderHoyUrgente() {
   // "Sin respuesta +14 días" — acordeón
   const sinRespuesta = quotes.filter(q => {
     const e = (q.estado || '').toLowerCase();
-    if (e !== 'enviada' && e !== 'en revisión') return false;
+    if (e !== 'enviada' && e !== 'en seguimiento') return false;
     return daysSinceUpdated(q) >= 14;
   }).sort((a, b) => daysSinceUpdated(b) - daysSinceUpdated(a));
 
@@ -1962,7 +1990,7 @@ updateNotifBadge();
 function cardQuoteHtml(q, opts = {}) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
   const sm = getSeguimientoStatus(q);
-  const academiaCupos = q.tipoServicio === 'Academia' && q.cursoCupos ? `${q.cursoInscritos||0}/${q.cursoCupos} cupos` : '';
+  const responsable = q.responsableUid ? (q.responsableNombre || nombreDeUid(q.responsableUid, '')) : '';
   return `
     <div class="card" data-quote-id="${q.id}" data-estado="${escapeHtml(q.estado || 'Borrador')}">
       <div class="card-row">
@@ -1979,7 +2007,7 @@ function cardQuoteHtml(q, opts = {}) {
         <span class="card-meta">${formatDate(q.fecha)}</span>
         <span class="card-meta">
           <strong style="color:var(--text)">${formatCLP(q.valor)}</strong>
-          ${academiaCupos ? ` · <span style="color:var(--muted)">${academiaCupos}</span>` : ''}
+          ${responsable ? ` · <span style="color:var(--muted)">👤 ${escapeHtml(responsable)}</span>` : ''}
         </span>
       </div>
       ${sm ? `<div class="sm-row tappable" data-seg-id="${q.id}">
@@ -3368,6 +3396,61 @@ sheet.querySelectorAll('[data-new]').forEach(btn => {
 
 // ---------- Modal Cotización ----------
 const quoteModal = document.getElementById('quoteModal');
+// ---------- Responsables de la cotización ----------
+// "Generada por" sale de createdBy (ya se guardaba); "Responsable del seguimiento" es
+// editable y se guarda con uid + nombre, para poder mostrarlo sin releer /users.
+let _teamRoster = [];      // [{ uid, nombre, email }]
+let _rosterLoaded = false;
+
+async function loadTeamRoster() {
+  if (_rosterLoaded || !currentUser) return _teamRoster;
+  try {
+    const snap = await getDocs(collection(dbf, 'users'));
+    _teamRoster = snap.docs
+      .map(d => ({ uid: d.id, ...d.data() }))
+      .filter(u => u.email !== DEV_EMAIL && (u.approved === true || u.isAdmin === true))
+      .map(u => ({ uid: u.uid, nombre: u.displayName || nameFromEmail(u.email) || u.email || '—', email: u.email || '' }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+    _rosterLoaded = true;
+  } catch (e) { console.warn('loadTeamRoster', e); }
+  return _teamRoster;
+}
+
+// Nombre a mostrar para un uid: primero lo denormalizado en la cotización, luego el roster.
+function nombreDeUid(uid, fallback = '') {
+  if (!uid) return fallback;
+  if (uid === currentUser?.uid) return currentUser.displayName || nameFromEmail(currentUser.email) || fallback;
+  return _teamRoster.find(u => u.uid === uid)?.nombre || fallback;
+}
+
+// Nombre del responsable elegido: se toma de la opción seleccionada (así funciona también
+// para alguien que ya no está en el roster) y se guarda junto al uid.
+function responsableSeleccionadoNombre() {
+  const sel = document.getElementById('quoteResponsable');
+  if (!sel || !sel.value) return '';
+  const txt = (sel.selectedOptions?.[0]?.textContent || '').replace(' (tú)', '').trim();
+  return txt || nombreDeUid(sel.value, '');
+}
+
+async function setQuoteResponsables(q) {
+  const sel = document.getElementById('quoteResponsable');
+  const gen = quoteForm.generadaPor;
+  // Cotización nueva: la genera quien la está creando.
+  if (gen) gen.value = q
+    ? (q.createdByName || nombreDeUid(q.createdBy, '—'))
+    : (currentUser?.displayName || nameFromEmail(currentUser?.email) || '—');
+  if (!sel) return;
+  const elegido = q?.responsableUid || (q ? '' : currentUser?.uid || '');
+  const roster = await loadTeamRoster();
+  sel.innerHTML = '<option value="">Sin asignar</option>'
+    + roster.map(u => `<option value="${escapeHtml(u.uid)}">${escapeHtml(u.nombre)}${u.uid === currentUser?.uid ? ' (tú)' : ''}</option>`).join('');
+  // Si el responsable guardado ya no está en el roster, se conserva igual para no perderlo.
+  if (elegido && !roster.some(u => u.uid === elegido)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(elegido)}">${escapeHtml(q?.responsableNombre || 'Responsable anterior')}</option>`);
+  }
+  sel.value = elegido;
+}
+
 const quoteForm = document.getElementById('quoteForm');
 let editingQuoteId = null;
 let _editingTipo = '';
@@ -3401,14 +3484,8 @@ function openQuoteForm(id, prefill = null) {
       _editingTipo = q.tipoServicio || '';
       _editingIndustriaQuote = q.industria || '';
       _quoteItems = q.items ? q.items.map(i => ({...i})) : [];
-      // Academia fields
-      if (q.tipoServicio === 'Academia') {
-        if (quoteForm.cursoNombre) quoteForm.cursoNombre.value = q.cursoNombre || '';
-        if (quoteForm.cursoFecha) quoteForm.cursoFecha.value = q.cursoFecha || '';
-        if (quoteForm.cursoModalidad) quoteForm.cursoModalidad.value = q.cursoModalidad || '';
-        if (quoteForm.cursoCupos) quoteForm.cursoCupos.value = q.cursoCupos != null ? q.cursoCupos : '';
-        if (quoteForm.cursoInscritos) quoteForm.cursoInscritos.value = q.cursoInscritos != null ? q.cursoInscritos : '';
-      }
+      if (q.tipoServicio === 'Academia' && quoteForm.cursoFecha) quoteForm.cursoFecha.value = q.cursoFecha || '';
+      setQuoteResponsables(q);
     }
   } else if (prefill) {
     quoteForm.empresa.value = prefill.empresa || '';
@@ -3426,12 +3503,14 @@ function openQuoteForm(id, prefill = null) {
     _editingTipo = prefill.tipoServicio || '';
     _editingIndustriaQuote = prefill.industria || '';
     _quoteItems = prefill.items ? prefill.items.map(i => ({...i})) : [];
+    setQuoteResponsables(null);
   } else {
     quoteForm.fecha.value = new Date().toISOString().slice(0,10);
     quoteForm.estado.value = 'Borrador';
     _editingTipo = '';
     _editingIndustriaQuote = '';
     _quoteItems = [];
+    setQuoteResponsables(null);
   }
   updateTipoChips();
   updateIndustriaChips('quote');
@@ -3461,13 +3540,9 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     tipoServicio: _editingTipo,
     industria: _editingIndustriaQuote,
     items: _quoteItems,
-    ...((_editingTipo === 'Academia') ? {
-      cursoNombre: (quoteForm.cursoNombre?.value || '').trim(),
-      cursoFecha: quoteForm.cursoFecha?.value || '',
-      cursoModalidad: quoteForm.cursoModalidad?.value || '',
-      cursoCupos: parseInt(quoteForm.cursoCupos?.value) || null,
-      cursoInscritos: parseInt(quoteForm.cursoInscritos?.value) || null,
-    } : {}),
+    responsableUid: quoteForm.responsableUid?.value || '',
+    responsableNombre: responsableSeleccionadoNombre(),
+    ...((_editingTipo === 'Academia') ? { cursoFecha: quoteForm.cursoFecha?.value || '' } : {}),
   };
   if (!data.empresa || !data.numero || !data.fecha) {
     showToast('Empresa, N° y fecha son obligatorios');
@@ -3491,7 +3566,7 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     if (editingQuoteId) {
       const prev = allQuotes().find(x => x.id === editingQuoteId);
       if (prev) {
-        const fields = { empresa:'Empresa', numero:'N°', fecha:'Fecha', descripcion:'Descripción', valor:'Valor', estado:'Estado', seguimiento:'Seguimiento' };
+        const fields = { empresa:'Empresa', numero:'N°', fecha:'Fecha', descripcion:'Descripción', valor:'Valor', estado:'Estado', seguimiento:'Seguimiento', responsableNombre:'Responsable' };
         const changes = Object.entries(fields)
           .filter(([k]) => String(prev[k]||'') !== String(data[k]||''))
           .map(([k, label]) => `${label}: ${prev[k]||'—'} → ${data[k]||'—'}`);
@@ -3508,7 +3583,9 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
       ...(editingQuoteId
         ? (logEntries.length ? { _log: arrayUnion(...logEntries) } : {})
         : {
-            createdAt: serverTimestamp(), createdBy: currentUser.uid, _log: [],
+            createdAt: serverTimestamp(), createdBy: currentUser.uid,
+            createdByName: currentUser.displayName || nameFromEmail(currentUser.email) || currentUser.email || '',
+            _log: [],
             ...(_pendingVersionParentId ? { parentId: _pendingVersionParentId, version: _pendingVersionNum } : {}),
           })
     }, { merge: true });
@@ -3563,7 +3640,7 @@ function openQuoteDetail(id) {
   const estadoClass = (q.estado || 'Borrador').split(' ')[0];
   const sm = getSeguimientoStatus(q);
 
-  const ESTADOS = ['Borrador','Enviada','En revisión','Adjudicada','Perdida', BACKLOG_ESTADO];
+  const ESTADOS = ESTADOS_COTIZACION;
   const client = clients.find(c => c.empresa.toLowerCase() === q.empresa.toLowerCase());
   const clientPhone = client?.telefono?.replace(/\D/g,'') || '';
   const waText = encodeURIComponent(
@@ -3610,12 +3687,16 @@ function openQuoteDetail(id) {
       </div>
     </div>` : ''}
 
-    ${q.tipoServicio === 'Academia' && (q.cursoNombre || q.cursoFecha || q.cursoModalidad) ? `
-    <div class="detail-row"><span class="lbl">Curso</span><span class="val">${escapeHtml(q.cursoNombre||'—')}</span></div>
-    ${q.cursoFecha ? `<div class="detail-row"><span class="lbl">Fecha curso</span><span class="val">${formatDate(q.cursoFecha)}</span></div>` : ''}
-    ${q.cursoModalidad ? `<div class="detail-row"><span class="lbl">Modalidad</span><span class="val">${escapeHtml(q.cursoModalidad)}</span></div>` : ''}
-    ${q.cursoCupos ? `<div class="detail-row"><span class="lbl">Cupos</span><span class="val">${q.cursoInscritos||0} / ${q.cursoCupos} inscritos</span></div>` : ''}
-    ` : ''}
+    ${q.tipoServicio === 'Academia' && q.cursoFecha
+      ? `<div class="detail-row"><span class="lbl">Posible inicio del curso</span><span class="val">${formatDate(q.cursoFecha)}</span></div>`
+      : ''}
+
+    <div class="detail-row"><span class="lbl">Generada por</span><span class="val">${escapeHtml(q.createdByName || nombreDeUid(q.createdBy, '—'))}</span></div>
+    <div class="detail-row"><span class="lbl">Responsable seguimiento</span><span class="val">${
+      q.responsableUid
+        ? escapeHtml(q.responsableNombre || nombreDeUid(q.responsableUid, '—'))
+        : '<span style="color:var(--muted)">Sin asignar</span>'
+    }</span></div>
 
     <div class="seg-detail-box">
       <div class="seg-detail-header">
@@ -4311,7 +4392,7 @@ function openSeguimientoSheet(id) {
        </div>`
     : '';
 
-  const ESTADOS = ['Borrador','Enviada','En revisión','Adjudicada','Perdida', BACKLOG_ESTADO];
+  const ESTADOS = ESTADOS_COTIZACION;
   const estadoEl = document.getElementById('segEstadoChips');
   estadoEl.innerHTML = ESTADOS.map(e =>
     `<button class="seg-estado-chip${q.estado === e ? ' active' : ''}" data-estado="${escapeHtml(e)}">${escapeHtml(e)}</button>`
@@ -4973,7 +5054,7 @@ document.getElementById('proyectoSheetSave')?.addEventListener('click', async ()
 
 // ---------- Pipeline view ----------
 // Probabilidad de cierre por estado (para el pronóstico ponderado)
-const ESTADO_PROB = { 'Borrador': 0.10, 'Enviada': 0.40, 'En revisión': 0.60, 'Adjudicada': 1.0, 'Perdida': 0, 'Backlog': 0 };
+const ESTADO_PROB = { 'Borrador': 0.10, 'Enviada': 0.40, [ESTADO_SEGUIMIENTO]: 0.60, 'Adjudicada': 1.0, 'Perdida': 0, 'Backlog': 0 };
 
 function kanbanCardHtml(q) {
   const sm = getSeguimientoStatus(q);
@@ -5002,7 +5083,7 @@ function renderPipeline() {
   const COLS = [
     { estado: 'Borrador',    cls: 'muted'   },
     { estado: 'Enviada',     cls: 'accent'  },
-    { estado: 'En revisión', cls: 'warn'    },
+    { estado: ESTADO_SEGUIMIENTO, cls: 'warn' },
     { estado: 'Adjudicada',  cls: 'success' },
     { estado: 'Perdida',     cls: 'danger'  },
   ];
@@ -5031,7 +5112,7 @@ function renderPipeline() {
     <div class="kf-item"><span class="kf-label">Pipeline abierto</span><span class="kf-val">${formatCLP(openTotal)}</span></div>
     <div class="kf-item"><span class="kf-label">Adjudicado</span><span class="kf-val success">${formatCLP(won)}</span></div>
   </div>
-  <div class="kanban-hint">Arrastra las tarjetas entre columnas para cambiar el estado · ponderación: Borrador 10% · Enviada 40% · En revisión 60%.</div>`;
+  <div class="kanban-hint">Arrastra las tarjetas entre columnas para cambiar el estado · ponderación: Borrador 10% · Enviada 40% · En seguimiento 60%.</div>`;
 
   const boardHtml = `<div class="kanban-board">${COLS.map(col => {
     const group = visible.filter(q => (q.estado || 'Borrador') === col.estado);
@@ -5147,12 +5228,8 @@ function fillQuoteFromDictation(data) {
     _editingIndustriaQuote = data.industria;
     updateIndustriaChips('quote');
   }
-  if (data.tipo === 'Academia') {
-    if (data.cursoNombre    && quoteForm.cursoNombre)    quoteForm.cursoNombre.value    = data.cursoNombre;
-    if (data.cursoFecha     && quoteForm.cursoFecha)     quoteForm.cursoFecha.value     = data.cursoFecha;
-    if (data.cursoModalidad && quoteForm.cursoModalidad) quoteForm.cursoModalidad.value = data.cursoModalidad;
-    if (data.cursoCupos    != null && quoteForm.cursoCupos)    quoteForm.cursoCupos.value    = data.cursoCupos;
-    if (data.cursoInscritos != null && quoteForm.cursoInscritos) quoteForm.cursoInscritos.value = data.cursoInscritos;
+  if (data.tipo === 'Academia' && data.cursoFecha && quoteForm.cursoFecha) {
+    quoteForm.cursoFecha.value = data.cursoFecha;
   }
 }
 

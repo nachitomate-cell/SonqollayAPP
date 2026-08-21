@@ -52,7 +52,10 @@ Cada teléfono recibe un UID anónimo persistente. Si reinstalás la app, gener�
 
 ## 3) Funcionalidades
 
-- **Cotizaciones**: ABM, estado (Borrador/Enviada/En revisión/Adjudicada/Perdida/Backlog), valor CLP, contactos, próximo seguimiento, notas. El estado **Backlog** archiva la cotización: pasa manualmente o automático tras 3 meses (92 días) sin actualización, queda fuera del Dashboard, métricas, pipeline y recordatorios, y solo se ve activando el filtro "Backlog" en Cotizaciones (campos: `backlogAt`, `backlogMotivo` auto/manual, `estadoPrevio`).
+- **Cotizaciones**: ABM, estado (Borrador/Enviada/En seguimiento/Adjudicada/Perdida/Backlog), valor CLP, contactos, próximo seguimiento, notas, **generada por** (`createdByName`) y **responsable del seguimiento** (`responsableUid` + `responsableNombre`). El estado **Backlog** archiva la cotización: pasa manualmente o automático tras 3 meses (92 días) sin actualización, queda fuera del Dashboard, métricas, pipeline y recordatorios, y solo se ve activando el filtro "Backlog" en Cotizaciones (campos: `backlogAt`, `backlogMotivo` auto/manual, `estadoPrevio`).
+  - *Rename ago-2026*: **"En revisión" → "En seguimiento"**. `normalizeEstado()` en `lib/format.js` traduce el valor antiguo al leer y `migrateEstadoLegacy()` (app.js) migra los documentos una sola vez; las queries de Cloud Functions consultan ambos textos y `normEstado()` evita que la migración dispare notificaciones.
+  - Los montos se leen con `parseValor()`, que interpreta el formato chileno (punto = miles, coma = decimales). Sin eso, `"6.292.532"` se guardaba como `null` y `"6.292"` como 6,292 pesos.
+  - Cotizaciones tipo **Academia**: solo se registra la *posible fecha de inicio del curso* (`cursoFecha`). Los campos de nombre, modalidad y cupos se retiraron del formulario en ago-2026 por pedido del área comercial.
 - **Clientes**: ficha por empresa con persona, email, teléfono, cargo.
 - **Dashboard**: KPIs, próximos seguimientos, últimas cotizaciones.
 - **Sync real-time**: cambios desde cualquier dispositivo aparecen al instante.
@@ -98,8 +101,8 @@ firebase deploy --only functions:dailyFollowUpReminders
 
 Ubicadas en `functions/index.js`:
 
-- **`dailyFollowUpReminders`** — Schedule: todos los días 09:00 (America/Santiago). Espeja las urgencias del dashboard y envía un push consolidado: cotizaciones **atrasadas** (seguimiento vencido, sin tope de antigüedad), de **hoy**, **próximas** (1-3 días) y **sin respuesta +14 días** (Enviada/En revisión sin actividad reciente, aunque no tengan seguimiento). Excluye Adjudicadas/Perdidas/Backlog. Mientras una cotización siga atrasada, se recuerda cada día.
-- **`autoBacklogStaleQuotes`** — Schedule: todos los días 08:00 (America/Santiago). Mueve a **Backlog** las cotizaciones Borrador/Enviada/En revisión con 92+ días sin `updatedAt`. Registra `backlogAt`, `backlogMotivo: 'auto'`, `estadoPrevio` y una entrada en `_log`. El pase automático no genera push (para evitar ráfagas); la app hace el mismo barrido al cargar (`sweepAutoBacklog`).
+- **`dailyFollowUpReminders`** — Schedule: todos los días 09:00 (America/Santiago). Espeja las urgencias del dashboard y envía un push consolidado: cotizaciones **atrasadas** (seguimiento vencido, sin tope de antigüedad), de **hoy**, **próximas** (1-3 días) y **sin respuesta +14 días** (Enviada/En seguimiento sin actividad reciente, aunque no tengan seguimiento). Excluye Adjudicadas/Perdidas/Backlog. Mientras una cotización siga atrasada, se recuerda cada día.
+- **`autoBacklogStaleQuotes`** — Schedule: todos los días 08:00 (America/Santiago). Mueve a **Backlog** las cotizaciones Borrador/Enviada/En seguimiento con 92+ días sin `updatedAt`. Registra `backlogAt`, `backlogMotivo: 'auto'`, `estadoPrevio` y una entrada en `_log`. El pase automático no genera push (para evitar ráfagas); la app hace el mismo barrido al cargar (`sweepAutoBacklog`).
 - **`onQuoteWritten`** — Trigger Firestore único (onWrite) sobre `quotes/{quoteId}`. Envía **como máximo una** notificación por escritura, según prioridad: creación → cambio de estado → seguimiento (hoy/programado) → nota nueva. Excluye al autor del cambio (`updatedBy`/`createdBy`).
 - **`onClientCreated`** — Trigger Firestore (onCreate) sobre `clients/{clientId}`. Notifica cada cliente nuevo (excluye al autor).
 - **`onAdminBroadcast`** — Trigger Firestore (onCreate) sobre `adminBroadcasts/{id}`. Reenvía el push manual del panel admin/superadmin a todos los tokens.

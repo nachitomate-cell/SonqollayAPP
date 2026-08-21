@@ -188,7 +188,7 @@ async function notifyAll(notification, data = {}, opts = {}) {
 // Espeja las urgencias del dashboard (app.js → renderHoyUrgente):
 //   • Vencidos: seguimiento ya pasó (CUALQUIER antigüedad, sin tope de 14 días).
 //   • Hoy / Próximos (1-3 días).
-//   • Sin respuesta +14 días: Enviada/En revisión sin actividad reciente (aunque no tengan seguimiento).
+//   • Sin respuesta +14 días: Enviada/En seguimiento sin actividad reciente (aunque no tengan seguimiento).
 async function runFollowUpDigest() {
     const today = todayISO();
     const threeDaysFromNow = addDaysISO(today, 3);
@@ -196,6 +196,9 @@ async function runFollowUpDigest() {
       const e = (q.estado || '').toLowerCase();
       return e !== 'adjudicada' && e !== 'perdida' && e !== 'backlog';
     };
+    // "En revisión" se renombró a "En seguimiento"; se consultan ambos por si queda
+    // algún documento sin migrar.
+    const ESTADOS_ABIERTOS = ['Enviada', 'En seguimiento', 'En revisión'];
 
     // 1) Seguimientos con fecha hasta +3 días → incluye TODOS los vencidos (sin piso de -14 días)
     const segSnap = await db.collection('quotes')
@@ -214,9 +217,9 @@ async function runFollowUpDigest() {
       seen.add(d.id);
     });
 
-    // 2) Sin respuesta +14 días (Enviada / En revisión sin actividad), evitando duplicar las ya listadas
+    // 2) Sin respuesta +14 días (Enviada / En seguimiento sin actividad), evitando duplicar las ya listadas
     const staleSnap = await db.collection('quotes')
-      .where('estado', 'in', ['Enviada', 'En revisión'])
+      .where('estado', 'in', ESTADOS_ABIERTOS)
       .get();
     const sinRespuesta = [];
     staleSnap.forEach(d => {
@@ -359,7 +362,7 @@ exports.quoteExpiryReminders = onSchedule(
 );
 
 // ---------- Backlog automático: 3 meses sin actualización ----------
-// Mueve a Backlog las cotizaciones no finales (Borrador/Enviada/En revisión) que llevan
+// Mueve a Backlog las cotizaciones no finales (Borrador/Enviada/En seguimiento) que llevan
 // 92+ días sin updatedAt. En Backlog quedan fuera del Dashboard, métricas y recordatorios;
 // solo se ven filtrando por "Backlog" en Cotizaciones. La app hace el mismo barrido al
 // cargar (sweepAutoBacklog en app.js); este cron cubre los días en que nadie la abre.
@@ -370,7 +373,7 @@ exports.autoBacklogStaleQuotes = onSchedule(
     const cutoff = Date.now() - BACKLOG_DIAS * 86400000;
     let snap;
     try {
-      snap = await db.collection('quotes').where('estado', 'in', ['Borrador', 'Enviada', 'En revisión']).get();
+      snap = await db.collection('quotes').where('estado', 'in', ['Borrador', 'Enviada', 'En seguimiento', 'En revisión']).get();
     } catch (e) { logger.error('autoBacklog query', e); return; }
     let moved = 0;
     for (const d of snap.docs) {
@@ -512,7 +515,11 @@ exports.taskDueReminders = onSchedule(
 // sobre el mismo path) y reduce las lecturas de tokens de 5-6 a 1 por guardado.
 // Se envía como máximo UNA notificación por escritura, según prioridad:
 //   creación > cambio de estado > seguimiento (hoy/programado) > nota nueva.
-const ESTADO_ICONS = { Adjudicada: '🎉', Perdida: '❌', Enviada: '📤', 'En revisión': '🔍', Borrador: '📝', Backlog: '📦' };
+const ESTADO_ICONS = { Adjudicada: '🎉', Perdida: '❌', Enviada: '📤', 'En seguimiento': '🔍', 'En revisión': '🔍', Borrador: '📝', Backlog: '📦' };
+
+// "En revisión" → "En seguimiento" es solo un cambio de etiqueta: se normaliza antes de
+// comparar para que la migración de los documentos antiguos no dispare una ráfaga de push.
+const normEstado = (e) => (e === 'En revisión' ? 'En seguimiento' : (e || ''));
 
 exports.onQuoteWritten = onDocumentWritten(
   { document: 'quotes/{quoteId}', region: 'us-central1' },
@@ -569,7 +576,7 @@ exports.onQuoteWritten = onDocumentWritten(
     // Pases automáticos a Backlog (3 meses sin actualizar): sin push, para no
     // generar una ráfaga de avisos cuando el barrido mueve varias a la vez.
     if ((after.estado || '') === 'Backlog' && after.backlogMotivo === 'auto' && (before.estado || '') !== 'Backlog') return;
-    if ((before.estado || '') !== (after.estado || '')) {
+    if (normEstado(before.estado) !== normEstado(after.estado)) {
       const icon = ESTADO_ICONS[after.estado] || '📋';
       await send({
         title: `${icon} ${after.numero} → ${after.estado}`,
@@ -705,14 +712,10 @@ Estructura exacta del JSON:
   "numero": string | null,
   "fecha": "YYYY-MM-DD" | null,
   "seguimiento": "YYYY-MM-DD" | null,
-  "estado": "Borrador"|"Enviada"|"En revisión"|"Adjudicada"|"Perdida"|null,
+  "estado": "Borrador"|"Enviada"|"En seguimiento"|"Adjudicada"|"Perdida"|null,
   "contactos": string | null,
   "notas": string | null,
-  "cursoNombre": string | null,
-  "cursoFecha": "YYYY-MM-DD" | null,
-  "cursoModalidad": "Online"|"Presencial"|"Híbrido"|null,
-  "cursoCupos": number | null,
-  "cursoInscritos": number | null
+  "cursoFecha": "YYYY-MM-DD" | null
 }
 
 Reglas estrictas:
@@ -721,6 +724,7 @@ Reglas estrictas:
 3. Fechas relativas: usa la fecha actual del mensaje como referencia ("la próxima semana", "en 3 días", etc.).
 4. Si no se menciona un campo: null.
 5. Infiere "tipo": "curso"/"capacitación"/"alumnos"/"cupos" → "Academia"; "consultoría"/"asesoría" → "Consultoría"; "AURA" → "AURA".
+5b. "cursoFecha" es la posible fecha de inicio del curso (solo para tipo Academia).
 6. "lucas" = miles de pesos chilenos (CLP).
 7. Preserva nombres de empresas tal como se dictan (sin corregir mayúsculas ni abreviar).`;
 

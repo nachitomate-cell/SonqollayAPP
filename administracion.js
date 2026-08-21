@@ -237,7 +237,7 @@ function renderAll() {
 }
 
 // ── Tablero comercial (BI) ──
-const COM_PROB = { 'Borrador': 0.10, 'Enviada': 0.40, 'En revisión': 0.60 };
+const COM_PROB = { 'Borrador': 0.10, 'Enviada': 0.40, 'En seguimiento': 0.60, 'En revisión': 0.60 };
 
 function _uidNameMap() {
   const m = {};
@@ -544,7 +544,7 @@ function openUserProfile(uid) {
   };
   const inputCss = 'min-width:0;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);font-size:13px';
 
-  const estados = ['Borrador', 'Enviada', 'En revisión', 'Adjudicada', 'Perdida', 'Backlog'];
+  const estados = ['Borrador', 'Enviada', 'En seguimiento', 'Adjudicada', 'Perdida', 'Backlog'];
   const porEstado = estados.map(es => ({ es, n: myQuotes.filter(q => (q.estado || 'Borrador') === es).length })).filter(x => x.n);
 
   const acts = (activity || []).filter(a => a.uid === uid && !['login', 'logout'].includes(a.action))
@@ -1359,6 +1359,7 @@ function estadoBadgeClass(estado) {
   const map = {
     'Borrador':    'estado-borrador',
     'Enviada':     'estado-enviada',
+    'En seguimiento': 'estado-revision',
     'En revisión': 'estado-revision',
     'Adjudicada':  'estado-adjudicada',
     'Perdida':     'estado-perdida',

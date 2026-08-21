@@ -327,7 +327,7 @@
           <div class="cf-chips" id="filterEstadoChips">
             <button class="sfchip" data-estado="Borrador">Borrador</button>
             <button class="sfchip" data-estado="Enviada">Enviada</button>
-            <button class="sfchip" data-estado="En revisión">En revisión</button>
+            <button class="sfchip" data-estado="En seguimiento">En seguimiento</button>
             <button class="sfchip" data-estado="Adjudicada">Adjudicada</button>
             <button class="sfchip" data-estado="Perdida">Perdida</button>
             <button class="sfchip" data-estado="Backlog">📦 Backlog</button>
@@ -756,28 +756,9 @@
           </div>
         </label>
         <div id="academiaFields" class="hidden">
-          <label>Nombre del curso
-            <input name="cursoNombre" placeholder="Ej: BIM-AWP Nivel Avanzado" />
-          </label>
-          <label>Fecha del curso
+          <label>Posible fecha de inicio del curso
             <input name="cursoFecha" type="date" />
           </label>
-          <label>Modalidad
-            <select name="cursoModalidad">
-              <option value="">Seleccionar…</option>
-              <option value="Online">Online</option>
-              <option value="Presencial">Presencial</option>
-              <option value="Híbrido">Híbrido</option>
-            </select>
-          </label>
-          <div style="display:flex;gap:10px">
-            <label style="flex:1">Cupos totales
-              <input name="cursoCupos" type="number" min="1" placeholder="20" />
-            </label>
-            <label style="flex:1">Inscritos
-              <input name="cursoInscritos" type="number" min="0" placeholder="0" />
-            </label>
-          </div>
         </div>
         <label>N° Cotización
           <input name="numero" required placeholder="P001_v01" />
@@ -812,10 +793,18 @@
           <select name="estado">
             <option value="Borrador">Borrador</option>
             <option value="Enviada">Enviada</option>
-            <option value="En revisión">En revisión</option>
+            <option value="En seguimiento">En seguimiento</option>
             <option value="Adjudicada">Adjudicada</option>
             <option value="Perdida">Perdida</option>
             <option value="Backlog">Backlog</option>
+          </select>
+        </label>
+        <label>Generada por
+          <input name="generadaPor" type="text" readonly placeholder="—" />
+        </label>
+        <label>Responsable del seguimiento
+          <select name="responsableUid" id="quoteResponsable">
+            <option value="">Sin asignar</option>
           </select>
         </label>
         <label>Próximo seguimiento
