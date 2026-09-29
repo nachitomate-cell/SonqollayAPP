@@ -1,4 +1,11 @@
 .vercel
+.claude/
+
+# Datos personales de clientes: nunca al repo (es público) ni al hosting
+*.xlsx
+*.csv
+contactos_import.json
+a9b12975-*.png
 
 # Firebase artefactos locales
 .firebase/

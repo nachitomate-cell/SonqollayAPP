@@ -6,6 +6,12 @@
     "ignore": [
       "firebase.json",
       "**/.*",
+      "**/.*/**",
+      "*.xlsx",
+      "*.csv",
+      "contactos_import.json",
+      "a9b12975-*.png",
+      "vercel.json",
       "**/node_modules/**",
       "functions/**",
       "scripts/**",
