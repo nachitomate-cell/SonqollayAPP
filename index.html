@@ -770,8 +770,14 @@
         <label>Descripción
           <textarea name="descripcion" rows="2" placeholder="Descripción del trabajo o servicio" data-dictate></textarea>
         </label>
-        <label>Valor (CLP)
-          <input name="valor" type="text" inputmode="numeric" placeholder="0" />
+        <label>Valor <span id="valorMonedaLbl">(CLP)</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select name="moneda" aria-label="Moneda" style="width:auto;flex:none">
+              <option value="CLP">CLP</option>
+              <option value="USD">US$</option>
+            </select>
+            <input name="valor" type="text" inputmode="numeric" placeholder="0" style="flex:1;min-width:0" />
+          </div>
         </label>
         <div class="uf-convert" style="display:flex;gap:6px;align-items:center;margin-top:-4px">
           <input id="quoteValorUf" type="text" inputmode="decimal" placeholder="… o monto en UF" style="flex:1;min-width:0" />

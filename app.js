@@ -26,9 +26,10 @@ import {
   formatCLP, formatCLPShort, parseValor, formatDate, daysUntil, daysSinceUpdated,
   nextVersionNumero, escapeHtml, getSeguimientoStatus, generateICS, fmtDuration, timeAgo,
   ESTADO_LEGACY, ESTADO_SEGUIMIENTO, normalizeEstado,
+  esUSD, formatUSD, formatMonto, formatValorQuote, parseValorMoneda,
 } from './lib/format.js';
 import { seedQuotes } from './lib/seed-data.js';
-import { getRates, cachedUf } from './lib/indicadores.js';
+import { getRates, cachedUf, cachedDolar } from './lib/indicadores.js';
 import { startAppTour, tourSeen } from './lib/tour.js';
 
 // ---------- Init Firebase ----------
@@ -1341,7 +1342,11 @@ async function setupFcm() {
 
 // ---------- Indicadores USD/UF ----------
 let _ufValue = cachedUf();
+let _usd = cachedDolar(); // { valor, fecha } del dólar observado, o null
 const _fmtCLPplain = (n) => '$ ' + Math.round(n).toLocaleString('es-CL');
+
+// Moneda elegida en el formulario de cotización ('CLP' o 'USD').
+const monedaForm = () => (quoteForm?.moneda?.value === 'USD' ? 'USD' : 'CLP');
 
 async function renderRates(force = false) {
   const usdEl = document.getElementById('rateUsd');
@@ -1352,6 +1357,7 @@ async function renderRates(force = false) {
     if (r.dolar != null) usdEl.textContent = '$' + Math.round(r.dolar).toLocaleString('es-CL');
     if (r.uf != null)    ufEl.textContent  = '$' + Math.round(r.uf).toLocaleString('es-CL');
     if (r.uf) _ufValue = r.uf;
+    if (r.dolar) _usd = { valor: r.dolar, fecha: r.fecha || null };
     const w = document.getElementById('ratesWidget');
     if (w && r.fecha) {
       const f = new Date(r.fecha);
@@ -1367,6 +1373,14 @@ function updateUfHint() {
   const hint = document.getElementById('ufHint');
   if (!hint) return;
   const valorInput = document.querySelector('#quoteForm [name="valor"]');
+  if (monedaForm() === 'USD') {
+    const usd = valorInput ? parseValorMoneda(valorInput.value, 'USD') : null;
+    const tc = _tipoCambioForm();
+    if (usd && tc) hint.textContent = `≈ ${_fmtCLPplain(usd * tc.valor)}  ·  Dólar ${_fmtCLPplain(tc.valor)}${tc.fijo ? ' (el de la cotización)' : ' hoy'}`;
+    else if (tc) hint.textContent = `Dólar ${tc.fijo ? 'de la cotización' : 'hoy'}: ${_fmtCLPplain(tc.valor)}`;
+    else hint.textContent = 'Aún no tengo el valor del dólar. Toca el indicador de arriba.';
+    return;
+  }
   const clp = valorInput ? parseValor(valorInput.value) : null;
   if (clp && _ufValue) {
     hint.textContent = `≈ ${(clp / _ufValue).toLocaleString('es-CL', { maximumFractionDigits: 1 })} UF  ·  UF hoy ${_fmtCLPplain(_ufValue)}`;
@@ -1395,6 +1409,30 @@ document.getElementById('ufToClpBtn')?.addEventListener('click', () => {
 });
 
 document.querySelector('#quoteForm [name="valor"]')?.addEventListener('input', updateUfHint);
+
+// Tipo de cambio que se usaría al guardar: el que ya tenía la cotización en dólares mientras
+// no cambie el monto (así los KPIs no se mueven solos con el dólar), o el dólar de hoy.
+function _tipoCambioForm() {
+  const prev = editingQuoteId ? allQuotes().find(x => x.id === editingQuoteId) : null;
+  const usd = parseValorMoneda(quoteForm.valor.value, 'USD');
+  if (esUSD(prev) && prev.tipoCambio && prev.valorUsd === usd) {
+    return { valor: prev.tipoCambio, fecha: prev.tipoCambioFecha || null, fijo: true };
+  }
+  return _usd ? { ..._usd, fijo: false } : null;
+}
+
+// Cambia el formulario entre pesos y dólares: etiqueta, teclado y conversor UF (solo pesos).
+// No convierte el número escrito: "12.000" en pesos no es lo mismo que en dólares.
+function applyMonedaForm() {
+  const usd = monedaForm() === 'USD';
+  const lbl = document.getElementById('valorMonedaLbl');
+  if (lbl) lbl.textContent = usd ? '(US$)' : '(CLP)';
+  quoteForm.valor.setAttribute('inputmode', usd ? 'decimal' : 'numeric');
+  const ufRow = document.querySelector('#quoteForm .uf-convert');
+  if (ufRow) ufRow.style.display = usd ? 'none' : 'flex';
+  renderQuoteItems();
+  updateUfHint();
+}
 
 renderRates(false);
 
@@ -2084,7 +2122,7 @@ function cardQuoteHtml(q, opts = {}) {
       <div class="card-row">
         <span class="card-meta">${formatDate(q.fecha)}</span>
         <span class="card-meta">
-          <strong style="color:var(--text)">${formatCLP(q.valor)}</strong>
+          <strong style="color:var(--text)">${formatValorQuote(q)}</strong>
           ${responsable ? ` · <span style="color:var(--muted)">👤 ${escapeHtml(responsable)}</span>` : ''}
         </span>
       </div>
@@ -3534,6 +3572,7 @@ let editingQuoteId = null;
 let _editingTipo = '';
 let _editingIndustriaQuote = '';
 let _quoteItems = [];
+quoteForm.moneda?.addEventListener('change', applyMonedaForm);
 let _proyectoSheetId = null;
 let _hitosTemp = [];
 
@@ -3551,7 +3590,8 @@ function openQuoteForm(id, prefill = null) {
       quoteForm.numero.value = q.numero || '';
       quoteForm.fecha.value = q.fecha || '';
       quoteForm.descripcion.value = q.descripcion || '';
-      quoteForm.valor.value = q.valor != null ? q.valor : '';
+      if (quoteForm.moneda) quoteForm.moneda.value = esUSD(q) ? 'USD' : 'CLP';
+      quoteForm.valor.value = esUSD(q) ? (q.valorUsd ?? '') : (q.valor != null ? q.valor : '');
       quoteForm.rut.value = q.rut || '';
       quoteForm.contactos.value = q.contactos || '';
       quoteForm.estado.value = q.estado || 'Borrador';
@@ -3570,7 +3610,8 @@ function openQuoteForm(id, prefill = null) {
     quoteForm.numero.value = prefill.numero || '';
     quoteForm.fecha.value = prefill.fecha || new Date().toISOString().slice(0,10);
     quoteForm.descripcion.value = prefill.descripcion || '';
-    quoteForm.valor.value = prefill.valor != null ? prefill.valor : '';
+    if (quoteForm.moneda) quoteForm.moneda.value = esUSD(prefill) ? 'USD' : 'CLP';
+    quoteForm.valor.value = esUSD(prefill) ? (prefill.valorUsd ?? '') : (prefill.valor != null ? prefill.valor : '');
     quoteForm.rut.value = prefill.rut || '';
     quoteForm.contactos.value = prefill.contactos || '';
     quoteForm.estado.value = prefill.estado || 'Borrador';
@@ -3592,10 +3633,9 @@ function openQuoteForm(id, prefill = null) {
   }
   updateTipoChips();
   updateIndustriaChips('quote');
-  renderQuoteItems();
   const ufField = document.getElementById('quoteValorUf');
   if (ufField) ufField.value = '';
-  updateUfHint();
+  applyMonedaForm(); // dibuja los ítems y el hint según la moneda
   quoteModal.classList.remove('hidden');
 }
 
@@ -3626,6 +3666,27 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     showToast('Empresa, N° y fecha son obligatorios');
     return;
   }
+  // Moneda: en dólares se guarda lo cotizado (valorUsd) y el dólar usado; `valor` queda en
+  // pesos para que KPIs, pipeline y panel admin sigan sumando en una sola moneda.
+  const prevMoneda = editingQuoteId ? allQuotes().find(x => x.id === editingQuoteId) : null;
+  if (monedaForm() === 'USD') {
+    const usd = parseValorMoneda(quoteForm.valor.value, 'USD');
+    const tc = _tipoCambioForm();
+    if (usd != null && !tc) {
+      showToast('Aún no tengo el valor del dólar. Toca el indicador de arriba e intenta de nuevo.');
+      return;
+    }
+    Object.assign(data, {
+      moneda: 'USD',
+      valorUsd: usd,
+      tipoCambio: usd != null ? tc.valor : null,
+      tipoCambioFecha: usd != null ? (tc.fecha || null) : null,
+      valor: usd != null ? Math.round(usd * tc.valor) : null,
+    });
+  } else {
+    data.moneda = 'CLP';
+    if (esUSD(prevMoneda)) Object.assign(data, { valorUsd: null, tipoCambio: null, tipoCambioFecha: null });
+  }
   // Usuario supervisado: si intenta fijar un estado sensible, se mantiene el estado actual
   // y se registra una solicitud de aprobación para el administrador.
   let approvalRequest = null;
@@ -3646,6 +3707,8 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
       const prev = allQuotes().find(x => x.id === editingQuoteId);
       if (prev) {
         const fields = { empresa:'Empresa', numero:'N°', fecha:'Fecha', descripcion:'Descripción', valor:'Valor', estado:'Estado', seguimiento:'Seguimiento', responsableNombre:'Responsable' };
+        // Las cotizaciones antiguas no traen `moneda`: solo se registra cuando hay dólares de por medio
+        if (esUSD(prev) || esUSD(data)) Object.assign(fields, { moneda: 'Moneda', valorUsd: 'Valor US$' });
         const changes = Object.entries(fields)
           .filter(([k]) => String(prev[k]||'') !== String(data[k]||''))
           .map(([k, label]) => `${label}: ${prev[k]||'—'} → ${data[k]||'—'}`);
@@ -3725,7 +3788,7 @@ function openQuoteDetail(id) {
   const waText = encodeURIComponent(
     `Hola, te contacto respecto a la cotización *${q.numero}* — *${q.empresa}*\n` +
     `${q.descripcion ? q.descripcion + '\n' : ''}` +
-    `Valor: ${formatCLP(q.valor)}\nEstado: ${q.estado || 'Borrador'}`
+    `Valor: ${formatValorQuote(q)}\nEstado: ${q.estado || 'Borrador'}`
   );
   const waUrl = clientPhone
     ? `https://wa.me/56${clientPhone.replace(/^56/,'')}?text=${waText}`
@@ -3755,7 +3818,9 @@ function openQuoteDetail(id) {
     ${mySupervised ? `<div style="margin:-2px 0 10px;font-size:11.5px;color:var(--muted)">Los estados <b>Enviada</b> y <b>Adjudicada</b> requieren aprobación del administrador.</div>` : ''}
 
     <div class="detail-row"><span class="lbl">Fecha</span><span class="val">${formatDate(q.fecha)}</span></div>
-    <div class="detail-row"><span class="lbl">Valor</span><span class="val"><strong>${formatCLP(q.valor)}</strong></span></div>
+    <div class="detail-row"><span class="lbl">Valor</span><span class="val"><strong>${formatValorQuote(q)}</strong>${esUSD(q) && q.valor != null
+      ? `<div class="card-meta" style="margin-top:2px">≈ ${formatCLP(q.valor)}${q.tipoCambio ? ` · dólar ${formatCLP(Math.round(q.tipoCambio))}${q.tipoCambioFecha ? ' del ' + new Date(q.tipoCambioFecha).toLocaleDateString('es-CL') : ''}` : ''}</div>`
+      : ''}</span></div>
     <div class="detail-row"><span class="lbl">Descripción</span><span class="val">${escapeHtml(q.descripcion || '—')}</span></div>
 
     ${q.items && q.items.length ? `<div class="detail-row">
@@ -3764,9 +3829,9 @@ function openQuoteDetail(id) {
         ${q.items.map(item => `
           <div class="items-table-row">
             <span class="items-desc">${escapeHtml(item.descripcion||'—')}</span>
-            <span class="items-meta">${item.cantidad||1} × ${formatCLP(item.valorUnit)} = ${formatCLP((item.cantidad||1)*(Number(item.valorUnit)||0))}</span>
+            <span class="items-meta">${item.cantidad||1} × ${formatMonto(item.valorUnit, q.moneda)} = ${formatMonto((item.cantidad||1)*(Number(item.valorUnit)||0), q.moneda)}</span>
           </div>`).join('')}
-        <div class="items-table-total">Total: ${formatCLP(q.valor)}</div>
+        <div class="items-table-total">Total: ${formatValorQuote(q)}</div>
       </div>
     </div>` : ''}
 
@@ -3971,7 +4036,7 @@ function openQuoteDetail(id) {
       `📋 *COTIZACIÓN ${q.numero}*`,
       `🏢 *${q.empresa}*`,
       q.descripcion ? `📝 ${q.descripcion}` : null,
-      `💰 Valor: *${formatCLP(q.valor)}*`,
+      `💰 Valor: *${formatValorQuote(q)}*`,
       `📊 Estado: ${q.estado || 'Borrador'}`,
       `📅 Fecha: ${formatDate(q.fecha)}`,
       q.seguimiento ? `📌 Seguimiento: ${formatDate(q.seguimiento)}` : null,
@@ -3992,6 +4057,7 @@ function openQuoteDetail(id) {
       empresa: q.empresa,
       descripcion: q.descripcion,
       valor: q.valor,
+      moneda: q.moneda || 'CLP', valorUsd: q.valorUsd ?? null,
       contactos: q.contactos,
       estado: 'Borrador',
       fecha: new Date().toISOString().slice(0,10),
@@ -4020,6 +4086,7 @@ function openQuoteDetail(id) {
     openQuoteForm(null, {
       empresa: q.empresa, descripcion: q.descripcion,
       valor: q.valor, contactos: q.contactos,
+      moneda: q.moneda || 'CLP', valorUsd: q.valorUsd ?? null,
       estado: 'Borrador', fecha: new Date().toISOString().slice(0, 10),
       numero: nextVersionNumero(q.numero),
       seguimiento: '', notas: '',
@@ -4340,7 +4407,7 @@ function openTemplatePicker(onSelect) {
       <div class="card template-card" data-tpl-id="${escapeHtml(t.id)}">
         <div class="card-title">${escapeHtml(t.nombre)}</div>
         ${t.descripcion ? `<div class="card-sub">${escapeHtml(t.descripcion.slice(0,80))}</div>` : ''}
-        ${t.valor ? `<div class="card-meta">${formatCLP(t.valor)}</div>` : ''}
+        ${(esUSD(t) ? t.valorUsd : t.valor) ? `<div class="card-meta">${formatValorQuote(t)}</div>` : ''}
       </div>
     `).join('');
     listEl.querySelectorAll('.template-card').forEach(card => {
@@ -4362,6 +4429,7 @@ async function saveAsTemplate(q) {
     id, nombre: nombre.trim(),
     descripcion: q.descripcion || '',
     valor: q.valor ?? '',
+    ...(esUSD(q) ? { moneda: 'USD', valorUsd: q.valorUsd ?? null } : {}),
     estado: 'Borrador',
     contactos: q.contactos || '',
     createdAt: serverTimestamp(),
@@ -4373,7 +4441,9 @@ async function saveAsTemplate(q) {
 document.getElementById('useTemplateBtn')?.addEventListener('click', () => {
   openTemplatePicker(tpl => {
     quoteForm.descripcion.value = tpl.descripcion || '';
-    quoteForm.valor.value = tpl.valor || '';
+    if (quoteForm.moneda) quoteForm.moneda.value = esUSD(tpl) ? 'USD' : 'CLP';
+    quoteForm.valor.value = (esUSD(tpl) ? tpl.valorUsd : tpl.valor) || '';
+    applyMonedaForm();
     quoteForm.estado.value = tpl.estado || 'Borrador';
     quoteForm.contactos.value = tpl.contactos || '';
   });
@@ -4393,8 +4463,10 @@ document.getElementById('exportBtn').addEventListener('click', () => {
 });
 
 document.getElementById('exportCsvBtn').addEventListener('click', () => {
-  const headers = ['Empresa','N° Cotización','Fecha','Descripción','Valor','Contacto','Estado','Seguimiento','Notas'];
-  const rows = allQuotes().map(q => [q.empresa, q.numero, q.fecha, q.descripcion, q.valor ?? '', q.contactos, q.estado, q.seguimiento ?? '', q.notas ?? '']);
+  const headers = ['Empresa','N° Cotización','Fecha','Descripción','Valor (CLP)','Moneda','Valor US$','Dólar usado','Contacto','Estado','Seguimiento','Notas'];
+  const rows = allQuotes().map(q => [q.empresa, q.numero, q.fecha, q.descripcion, q.valor ?? '',
+    esUSD(q) ? 'USD' : 'CLP', esUSD(q) ? (q.valorUsd ?? '') : '', esUSD(q) ? (q.tipoCambio ?? '') : '',
+    q.contactos, q.estado, q.seguimiento ?? '', q.notas ?? '']);
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -4906,7 +4978,7 @@ function renderQuoteItems() {
       <input class="qi-input qi-desc" placeholder="Descripción del servicio" value="${escapeHtml(item.descripcion||'')}" data-qi="${i}" data-qif="descripcion">
       <div class="qi-nums">
         <input class="qi-input qi-cant" placeholder="Cant." type="number" min="1" value="${item.cantidad||1}" data-qi="${i}" data-qif="cantidad">
-        <input class="qi-input qi-val" placeholder="Valor unit." type="text" inputmode="numeric" value="${item.valorUnit!=null&&item.valorUnit!==''?item.valorUnit:''}" data-qi="${i}" data-qif="valorUnit">
+        <input class="qi-input qi-val" placeholder="${monedaForm() === 'USD' ? 'Valor unit. US$' : 'Valor unit.'}" type="text" inputmode="${monedaForm() === 'USD' ? 'decimal' : 'numeric'}" value="${item.valorUnit!=null&&item.valorUnit!==''?item.valorUnit:''}" data-qi="${i}" data-qif="valorUnit">
         <button type="button" class="icon-btn qi-del" data-qi="${i}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
@@ -4918,7 +4990,7 @@ function renderQuoteItems() {
       const i = parseInt(inp.dataset.qi);
       const f = inp.dataset.qif;
       if (f === 'cantidad') _quoteItems[i].cantidad = parseInt(inp.value)||1;
-      else if (f === 'valorUnit') _quoteItems[i].valorUnit = parseValor(inp.value);
+      else if (f === 'valorUnit') _quoteItems[i].valorUnit = parseValorMoneda(inp.value, monedaForm());
       else _quoteItems[i][f] = inp.value;
       updateItemsTotal();
     });
@@ -4932,7 +5004,7 @@ function renderQuoteItems() {
 function updateItemsTotal() {
   const total = _quoteItems.reduce((s, item) => s + ((Number(item.valorUnit)||0) * (Number(item.cantidad)||1)), 0);
   const totalEl = document.getElementById('itemsTotal');
-  if (totalEl) totalEl.textContent = formatCLP(total);
+  if (totalEl) totalEl.textContent = formatMonto(total, monedaForm());
   if (_quoteItems.length > 0) {
     quoteForm.valor.value = total > 0 ? total : '';
   }
@@ -5152,7 +5224,7 @@ function kanbanCardHtml(q) {
   return `<div class="kanban-card" draggable="true" data-quote-id="${escapeHtml(q.id)}" data-estado="${escapeHtml(q.estado || 'Borrador')}">
     <div class="kc-title">${escapeHtml(q.numero || '—')}</div>
     <div class="kc-emp">${escapeHtml(q.empresa || '')}</div>
-    ${q.valor != null && q.valor !== '' ? `<div class="kc-val">${formatCLP(q.valor)}</div>` : ''}
+    ${q.valor != null && q.valor !== '' ? `<div class="kc-val">${formatValorQuote(q)}</div>` : ''}
     ${sm ? `<div class="kc-seg ${sm.key}">${escapeHtml(sm.label)}</div>` : ''}
   </div>`;
 }

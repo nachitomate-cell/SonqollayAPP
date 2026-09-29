@@ -101,6 +101,13 @@ const formatCLPShort = (v) => {
   return '$ ' + n.toLocaleString('es-CL');
 };
 
+// Cotizaciones en dólares: `valor` sigue en pesos (sumas y KPIs), pero la cotización se muestra
+// en la moneda en que se le cotizó al cliente (valorUsd).
+const esUSD = (q) => q?.moneda === 'USD';
+const fmtValorQuoteShort = (q) => (esUSD(q) && q.valorUsd != null && !isNaN(q.valorUsd))
+  ? 'US$ ' + Number(q.valorUsd).toLocaleString('es-CL', { minimumFractionDigits: Number.isInteger(Number(q.valorUsd)) ? 0 : 2, maximumFractionDigits: 2 })
+  : formatCLPShort(q?.valor);
+
 function fmtDuration(sec) {
   if (!sec || sec < 60) return '< 1m';
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
@@ -503,7 +510,7 @@ function renderApprovals() {
     return `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid rgba(167,139,250,.25)">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;color:var(--text);font-size:13.5px">${esc(q.numero || '—')} · ${esc(q.empresa || '')}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(who)} solicita marcar <b style="color:#a78bfa">${esc(q.approval.estado)}</b>${q.valor ? ' · ' + esc(formatCLPShort(q.valor)) : ''}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(who)} solicita marcar <b style="color:#a78bfa">${esc(q.approval.estado)}</b>${q.valor ? ' · ' + esc(fmtValorQuoteShort(q)) : ''}</div>
       </div>
       <button class="new-btn" data-approve-quote="${esc(q.id)}" style="flex-shrink:0;padding:7px 14px;background:var(--success)">✓ Aprobar</button>
       <button class="new-btn" data-reject-quote="${esc(q.id)}" style="flex-shrink:0;padding:7px 14px;background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.4)">Rechazar</button>
@@ -1399,7 +1406,7 @@ function renderQuotes() {
       <div class="u-cell">${esc(qt.numero || '—')}</div>
       <div class="u-cell" style="font-weight:600">${esc(qt.empresa || '—')}</div>
       <div class="u-cell muted">${esc(fmtDateShort(qt.fecha))}</div>
-      <div class="u-cell">${esc(formatCLPShort(qt.valor))}</div>
+      <div class="u-cell">${esc(fmtValorQuoteShort(qt))}</div>
       <div class="u-cell muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(desc)}</div>
     </div>`;
   }).join('');
@@ -1533,7 +1540,16 @@ function openQuoteModal(qt = null) {
   el('qEmpresa').value    = qt?.empresa     || '';
   el('qNumero').value     = qt?.numero      || '';
   el('qFecha').value      = qt?.fecha       || '';
-  el('qValor').value      = qt?.valor != null ? fmtMoneyInput(qt.valor) : '';
+  // Una cotización en dólares se edita desde la app (ahí está el selector de moneda y el tipo
+  // de cambio); aquí se muestra en US$ y el monto no se toca al guardar.
+  const qUsd = esUSD(qt);
+  el('qValor').value      = qUsd ? (qt.valorUsd != null ? fmtValorQuoteShort(qt).replace('US$ ', '') : '')
+                                 : (qt?.valor != null ? fmtMoneyInput(qt.valor) : '');
+  el('qValor').disabled   = qUsd;
+  el('qValor').title      = qUsd ? 'Cotización en dólares: el monto se edita desde la app' : '';
+  el('qValor').style.paddingLeft = qUsd ? '44px' : '';
+  const qPre = el('qValor').parentElement?.querySelector('.qm-money-pre');
+  if (qPre) qPre.textContent = qUsd ? 'US$' : '$';
   el('qDescripcion').value= qt?.descripcion || '';
   el('qSeguimiento').value= qt?.seguimiento || '';
   el('qNotas').value      = qt?.notas       || '';
@@ -1625,6 +1641,8 @@ el('quoteModalSave')?.addEventListener('click', async () => {
       notas, rut, formaPago, validezDias,
       updatedAt: serverTimestamp(),
     };
+    // En dólares el campo va deshabilitado: no pisar el equivalente en pesos ya calculado
+    if (quoteEditId && esUSD((quotes || []).find(q => q.id === quoteEditId))) delete data.valor;
 
     if (quoteEditId) {
       await setDoc(doc(db, 'quotes', quoteEditId), data, { merge: true });
