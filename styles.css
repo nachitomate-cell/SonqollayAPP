@@ -1834,6 +1834,13 @@ main { padding: 14px 14px 20px; }
 .kanban-col-head.warn .kc-name { color: var(--warn); }
 .kanban-col-head.success .kc-name { color: var(--success); }
 .kanban-col-head.danger .kc-name { color: var(--danger); }
+.kanban-close-row { display: flex; gap: 12px; margin-top: 4px; flex-wrap: wrap; }
+.kanban-close { flex: 1 1 200px; width: auto; max-height: none; align-items: center; justify-content: center; padding: 12px; border-style: dashed; }
+.kanban-close .kc-name { font-weight: 700; font-size: 12.5px; }
+.kanban-close .kc-name.success { color: var(--success); }
+.kanban-close .kc-name.danger { color: var(--danger); }
+.cerradas-grupo { margin-bottom: 16px; }
+.cerradas-grupo > .kanban-col-head { position: static; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 8px; }
 .kanban-col-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 40px; }
 .kanban-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 10px; padding: 9px 11px; cursor: grab; transition: border-color .15s, transform .08s; }
 .kanban-card:hover { border-color: var(--accent); }

@@ -739,6 +739,25 @@ const BACKLOG_AUTO_DESDE = ['Borrador', 'Enviada', ESTADO_SEGUIMIENTO];
 
 // Lista canónica de estados, en el orden del embudo comercial.
 const ESTADOS_COTIZACION = ['Borrador', 'Enviada', ESTADO_SEGUIMIENTO, 'Adjudicada', 'Perdida', BACKLOG_ESTADO];
+// Estados cerrados: salen del tablero de seguimiento (Lista y Kanban) y viven en "Cerradas".
+const ESTADOS_CERRADOS = ['Adjudicada', 'Perdida', BACKLOG_ESTADO];
+function esCerrada(q) { return ESTADOS_CERRADOS.includes(q.estado || 'Borrador'); }
+
+// ---------- Tipos de servicio ----------
+// Una cotización puede llevar varios tipos (ej. Academia + Consultoría + Aura AWP).
+// Se guardan en `tiposServicio`; `tipoServicio` queda con el primero para lo que lee
+// un solo valor (panel de administración, dictado). "AURA" se guarda igual que antes
+// y solo cambia cómo se muestra.
+const TIPOS_SERVICIO = ['Consultoría', 'Academia', 'AURA'];
+const TIPO_LABEL = { AURA: 'Aura AWP' };
+function labelTipo(t) { return TIPO_LABEL[t] || t; }
+function tiposDe(q) {
+  if (Array.isArray(q?.tiposServicio) && q.tiposServicio.length) return q.tiposServicio;
+  return q?.tipoServicio ? [q.tipoServicio] : [];
+}
+function tagsTipoHtml(q) {
+  return tiposDe(q).map(t => `<span class="tag-tipo">${escapeHtml(labelTipo(t))}</span>`).join('');
+}
 
 // Migración one-shot del rename "En revisión" → "En seguimiento". Es idempotente: una vez
 // migrados los documentos, ningún registro coincide y queda en no-op para siempre.
@@ -1702,12 +1721,11 @@ function renderMetrics() {
   const maxCount = Math.max(...months.map(m => m.count), 1);
 
   // Tipo breakdown
-  const TIPOS = ['Consultoría', 'Academia', 'AURA'];
-  const tipoRows = TIPOS.map(tipo => {
-    const list = active.filter(q => q.tipoServicio === tipo);
+  const tipoRows = TIPOS_SERVICIO.map(tipo => {
+    const list = active.filter(q => tiposDe(q).includes(tipo));
     if (!list.length) return '';
     const val = list.reduce((s, q) => s + (Number(q.valor)||0), 0);
-    return `<div class="tipo-metric-row"><span class="tag-tipo">${escapeHtml(tipo)}</span><span class="tipo-metric-count">${list.length} cot.</span><span class="tipo-metric-val">${formatCLP(val)}</span></div>`;
+    return `<div class="tipo-metric-row"><span class="tag-tipo">${escapeHtml(labelTipo(tipo))}</span><span class="tipo-metric-count">${list.length} cot.</span><span class="tipo-metric-val">${formatCLP(val)}</span></div>`;
   }).filter(Boolean).join('');
 
   el.innerHTML = `
@@ -2114,7 +2132,7 @@ function cardQuoteHtml(q, opts = {}) {
         <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
           <span class="tag estado-${escapeHtml(estadoClass)}">${escapeHtml(q.estado || 'Borrador')}</span>
           ${q.version > 1 ? `<span class="tag-version">v${q.version}</span>` : ''}
-          ${q.tipoServicio ? `<span class="tag-tipo">${escapeHtml(q.tipoServicio)}</span>` : ''}
+          ${tagsTipoHtml(q)}
           ${q.industria ? `<span class="tag-industria">${escapeHtml(q.industria)}</span>` : ''}
         </div>
       </div>
@@ -2154,15 +2172,15 @@ function bindQuoteCards(root) {
   });
 }
 
-function applyQuotesFilters(list) {
-  if (quotesFilters.estados.length) {
+function applyQuotesFilters(list, { ignorarEstados = false } = {}) {
+  if (quotesFilters.estados.length && !ignorarEstados) {
     list = list.filter(q => quotesFilters.estados.includes(q.estado || 'Borrador'));
   }
   if (quotesFilters.industria !== 'all') {
     list = list.filter(q => q.industria === quotesFilters.industria);
   }
   if (quotesFilters.tipo !== 'all') {
-    list = list.filter(q => (q.tipoServicio || '') === quotesFilters.tipo);
+    list = list.filter(q => tiposDe(q).includes(quotesFilters.tipo));
   }
   if (quotesFilters.seg === 'con') list = list.filter(q => !!q.seguimiento);
   if (quotesFilters.seg === 'sin') list = list.filter(q => !q.seguimiento);
@@ -2203,11 +2221,15 @@ function renderQuotes() {
   renderQuoteIndustriaChips();
   if (_quotesView === 'pipeline') { renderPipeline(); return; }
   if (_quotesView === 'proyectos') { renderProyectos(); return; }
+  if (_quotesView === 'cerradas') { renderCerradas(); return; }
   if (!quotesLoaded) { document.getElementById('quotes-list').innerHTML = skeletonCards(5); return; }
   const q = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
-  // El Backlog queda oculto salvo que su chip de filtro esté activo (revisión explícita).
+  // Adjudicadas, perdidas y Backlog viven en "Cerradas"; en la lista solo aparecen si
+  // se filtra explícitamente por ese estado.
   const showBacklog = quotesFilters.estados.includes(BACKLOG_ESTADO);
-  let list = showBacklog ? [...quotes, ...quotesBacklog] : [...quotes];
+  const cerradasPedidas = ESTADOS_CERRADOS.filter(e => quotesFilters.estados.includes(e));
+  let list = (showBacklog ? [...quotes, ...quotesBacklog] : [...quotes])
+    .filter(x => !esCerrada(x) || cerradasPedidas.includes(x.estado));
   if (q) {
     list = list.filter(x =>
       (x.empresa||'').toLowerCase().includes(q) ||
@@ -2224,20 +2246,15 @@ function renderQuotes() {
   else if (s === 'empresa')     list.sort((a, b) => (a.empresa || '').localeCompare(b.empresa || ''));
   else                          list.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
   const el = document.getElementById('quotes-list');
-  const backlogHint = (!showBacklog && quotesBacklog.length)
-    ? `<button class="backlog-hint" id="backlogRevealBtn">📦 ${quotesBacklog.length} cotización${quotesBacklog.length !== 1 ? 'es' : ''} en Backlog · Ver</button>`
+  const nCerradas = quotes.filter(esCerrada).length + quotesBacklog.length;
+  const backlogHint = (!cerradasPedidas.length && nCerradas)
+    ? `<button class="backlog-hint" id="backlogRevealBtn">🗂 ${nCerradas} cerrada${nCerradas !== 1 ? 's' : ''} (adjudicadas, perdidas y Backlog) · Ver</button>`
     : '';
   el.innerHTML = (list.length
     ? list.map(x => cardQuoteHtml(x)).join('')
     : '<div class="empty">Sin resultados</div>') + backlogHint;
   bindQuoteCards(el);
-  document.getElementById('backlogRevealBtn')?.addEventListener('click', () => {
-    quotesFilters.estados = [BACKLOG_ESTADO];
-    document.querySelectorAll('#filterEstadoChips .sfchip').forEach(c =>
-      c.classList.toggle('active', c.dataset.estado === BACKLOG_ESTADO));
-    updateFilterBadge();
-    renderQuotes();
-  });
+  document.getElementById('backlogRevealBtn')?.addEventListener('click', () => setQuotesView('cerradas'));
 }
 
 const CLIENTS_PER_PAGE = 10;
@@ -2297,7 +2314,7 @@ function renderClients() {
     list = list.filter(c => c.industria === clientFilters.industria);
   }
   if (clientFilters.tipo !== 'all') {
-    list = list.filter(c => quotes.some(qq => qq.empresa === c.empresa && qq.tipoServicio === clientFilters.tipo));
+    list = list.filter(c => quotes.some(qq => qq.empresa === c.empresa && tiposDe(qq).includes(clientFilters.tipo)));
   }
   if (clientFilters.cotiz === 'con') list = list.filter(c => quotes.some(qq => qq.empresa === c.empresa));
   if (clientFilters.cotiz === 'sin') list = list.filter(c => !quotes.some(qq => qq.empresa === c.empresa));
@@ -3569,7 +3586,7 @@ async function setQuoteResponsables(q) {
 
 const quoteForm = document.getElementById('quoteForm');
 let editingQuoteId = null;
-let _editingTipo = '';
+let _editingTipos = [];
 let _editingIndustriaQuote = '';
 let _quoteItems = [];
 quoteForm.moneda?.addEventListener('change', applyMonedaForm);
@@ -3599,10 +3616,10 @@ function openQuoteForm(id, prefill = null) {
       quoteForm.formaPago.value = q.formaPago || '';
       quoteForm.validezDias.value = q.validezDias != null ? q.validezDias : '';
       quoteForm.notas.value = q.notas || '';
-      _editingTipo = q.tipoServicio || '';
+      _editingTipos = [...tiposDe(q)];
       _editingIndustriaQuote = q.industria || '';
       _quoteItems = q.items ? q.items.map(i => ({...i})) : [];
-      if (q.tipoServicio === 'Academia' && quoteForm.cursoFecha) quoteForm.cursoFecha.value = q.cursoFecha || '';
+      if (tiposDe(q).includes('Academia') && quoteForm.cursoFecha) quoteForm.cursoFecha.value = q.cursoFecha || '';
       setQuoteResponsables(q);
     }
   } else if (prefill) {
@@ -3619,14 +3636,14 @@ function openQuoteForm(id, prefill = null) {
     quoteForm.formaPago.value = prefill.formaPago || '';
     quoteForm.validezDias.value = prefill.validezDias != null ? prefill.validezDias : '';
     quoteForm.notas.value = prefill.notas || '';
-    _editingTipo = prefill.tipoServicio || '';
+    _editingTipos = [...tiposDe(prefill)];
     _editingIndustriaQuote = prefill.industria || '';
     _quoteItems = prefill.items ? prefill.items.map(i => ({...i})) : [];
     setQuoteResponsables(null);
   } else {
     quoteForm.fecha.value = new Date().toISOString().slice(0,10);
     quoteForm.estado.value = 'Borrador';
-    _editingTipo = '';
+    _editingTipos = [];
     _editingIndustriaQuote = '';
     _quoteItems = [];
     setQuoteResponsables(null);
@@ -3655,12 +3672,13 @@ document.getElementById('quoteSave').addEventListener('click', async () => {
     formaPago: quoteForm.formaPago.value.trim(),
     validezDias: parseInt(quoteForm.validezDias.value) || null,
     notas: quoteForm.notas.value.trim(),
-    tipoServicio: _editingTipo,
+    tipoServicio: _editingTipos[0] || '',
+    tiposServicio: _editingTipos,
     industria: _editingIndustriaQuote,
     items: _quoteItems,
     responsableUid: quoteForm.responsableUid?.value || '',
     responsableNombre: responsableSeleccionadoNombre(),
-    ...((_editingTipo === 'Academia') ? { cursoFecha: quoteForm.cursoFecha?.value || '' } : {}),
+    ...(_editingTipos.includes('Academia') ? { cursoFecha: quoteForm.cursoFecha?.value || '' } : {}),
   };
   if (!data.empresa || !data.numero || !data.fecha) {
     showToast('Empresa, N° y fecha son obligatorios');
@@ -3797,8 +3815,8 @@ function openQuoteDetail(id) {
   document.getElementById('detailBody').innerHTML = `
     <h3>${escapeHtml(q.numero)}</h3>
     <div class="det-company">${escapeHtml(q.empresa)}</div>
-    ${(q.tipoServicio || q.industria) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-      ${q.tipoServicio ? `<span class="tag-tipo">${escapeHtml(q.tipoServicio)}</span>` : ''}
+    ${(tiposDe(q).length || q.industria) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      ${tagsTipoHtml(q)}
       ${q.industria ? `<span class="tag-industria">${escapeHtml(q.industria)}</span>` : ''}
     </div>` : ''}
 
@@ -3835,7 +3853,7 @@ function openQuoteDetail(id) {
       </div>
     </div>` : ''}
 
-    ${q.tipoServicio === 'Academia' && q.cursoFecha
+    ${tiposDe(q).includes('Academia') && q.cursoFecha
       ? `<div class="detail-row"><span class="lbl">Posible inicio del curso</span><span class="val">${formatDate(q.cursoFecha)}</span></div>`
       : ''}
 
@@ -4064,7 +4082,7 @@ function openQuoteDetail(id) {
       numero: '',
       seguimiento: '',
       notas: '',
-      tipoServicio: q.tipoServicio || '',
+      tipoServicio: q.tipoServicio || '', tiposServicio: [...tiposDe(q)],
       industria: q.industria || '',
       items: q.items ? q.items.map(i => ({...i, id: uid()})) : [],
     });
@@ -4090,7 +4108,7 @@ function openQuoteDetail(id) {
       estado: 'Borrador', fecha: new Date().toISOString().slice(0, 10),
       numero: nextVersionNumero(q.numero),
       seguimiento: '', notas: '',
-      tipoServicio: q.tipoServicio || '', industria: q.industria || '',
+      tipoServicio: q.tipoServicio || '', tiposServicio: [...tiposDe(q)], industria: q.industria || '',
       items: q.items ? q.items.map(i => ({ ...i, id: uid() })) : [],
       _parentId: parentId, _version: nextVer,
     });
@@ -4346,6 +4364,7 @@ document.getElementById('clientDelete').addEventListener('click', async () => {
 document.getElementById('search-quotes').addEventListener('input', () => {
   if (_quotesView === 'pipeline') { renderPipeline(); return; }
   if (_quotesView === 'proyectos') { renderProyectos(); return; }
+  if (_quotesView === 'cerradas') { renderCerradas(); return; }
   renderQuotes();
 });
 document.getElementById('search-clients').addEventListener('input', () => { clientsPage = 0; renderClients(); });
@@ -4932,16 +4951,20 @@ document.addEventListener('visibilitychange', () => {
 // ---------- Tipo de servicio chip helpers ----------
 function updateTipoChips() {
   document.querySelectorAll('#tipoChips .tipo-chip').forEach(chip => {
-    chip.classList.toggle('active', chip.dataset.tipo === _editingTipo);
+    chip.classList.toggle('active', _editingTipos.includes(chip.dataset.tipo));
   });
   const academiaFields = document.getElementById('academiaFields');
-  if (academiaFields) academiaFields.classList.toggle('hidden', _editingTipo !== 'Academia');
+  if (academiaFields) academiaFields.classList.toggle('hidden', !_editingTipos.includes('Academia'));
 }
 
 document.getElementById('tipoChips')?.addEventListener('click', (e) => {
   const chip = e.target.closest('.tipo-chip[data-tipo]');
   if (!chip) return;
-  _editingTipo = _editingTipo === chip.dataset.tipo ? '' : chip.dataset.tipo;
+  const t = chip.dataset.tipo;
+  // Se pueden marcar varios; se guardan en el orden de los chips.
+  _editingTipos = _editingTipos.includes(t)
+    ? _editingTipos.filter(x => x !== t)
+    : TIPOS_SERVICIO.filter(x => x === t || _editingTipos.includes(x));
   updateTipoChips();
 });
 
@@ -5106,7 +5129,7 @@ function renderProyectos() {
     return `<div class="card proyecto-card" data-proyecto-id="${q.id}">
       <div class="card-row">
         <div class="card-title">${escapeHtml(q.numero)} · ${escapeHtml(q.empresa)}</div>
-        ${q.tipoServicio ? `<span class="tag-tipo">${escapeHtml(q.tipoServicio)}</span>` : ''}
+        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">${tagsTipoHtml(q)}</div>
       </div>
       <div class="card-sub">${escapeHtml(q.descripcion||'—')}</div>
       <div class="proyecto-progress">
@@ -5243,15 +5266,15 @@ async function moveQuoteEstado(id, newEstado) {
 function renderPipeline() {
   const el = document.getElementById('pipeline-view');
   if (!el) return;
+  // Tablero de seguimiento: solo lo abierto. Lo adjudicado/perdido sale a "Cerradas" y no
+  // suma aquí; se puede soltar una tarjeta en las zonas de abajo para cerrarla.
   const COLS = [
     { estado: 'Borrador',    cls: 'muted'   },
     { estado: 'Enviada',     cls: 'accent'  },
     { estado: ESTADO_SEGUIMIENTO, cls: 'warn' },
-    { estado: 'Adjudicada',  cls: 'success' },
-    { estado: 'Perdida',     cls: 'danger'  },
   ];
   const searchVal = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
-  let visible = quotes.slice();
+  let visible = quotes.filter(q => !esCerrada(q));
   if (searchVal) visible = visible.filter(q =>
     (q.empresa||'').toLowerCase().includes(searchVal) ||
     (q.numero||'').toLowerCase().includes(searchVal) ||
@@ -5259,13 +5282,11 @@ function renderPipeline() {
   );
   visible = applyQuotesFilters(visible);
 
-  // Pronóstico: ponderado (deals abiertos), pipeline abierto y adjudicado
-  let weighted = 0, openTotal = 0, won = 0;
+  // Pronóstico: ponderado y pipeline abierto (lo cerrado se ve en "Cerradas")
+  let weighted = 0, openTotal = 0;
   visible.forEach(q => {
     const v = Number(q.valor) || 0;
     const est = q.estado || 'Borrador';
-    if (est === 'Adjudicada') { won += v; return; }
-    if (est === 'Perdida') return;
     openTotal += v;
     weighted += v * (ESTADO_PROB[est] ?? 0);
   });
@@ -5273,7 +5294,6 @@ function renderPipeline() {
   const forecastHtml = `<div class="kanban-forecast">
     <div class="kf-item"><span class="kf-label">Pronóstico ponderado</span><span class="kf-val accent">${formatCLP(weighted)}</span></div>
     <div class="kf-item"><span class="kf-label">Pipeline abierto</span><span class="kf-val">${formatCLP(openTotal)}</span></div>
-    <div class="kf-item"><span class="kf-label">Adjudicado</span><span class="kf-val success">${formatCLP(won)}</span></div>
   </div>
   <div class="kanban-hint">Arrastra las tarjetas entre columnas para cambiar el estado · ponderación: Borrador 10% · Enviada 40% · En seguimiento 60%.</div>`;
 
@@ -5292,7 +5312,12 @@ function renderPipeline() {
     </div>`;
   }).join('')}</div>`;
 
-  el.innerHTML = forecastHtml + boardHtml;
+  const cerrarHtml = `<div class="kanban-close-row">
+    <div class="kanban-col kanban-close" data-drop-estado="Adjudicada"><span class="kc-name success">✅ Soltar aquí: Adjudicada</span></div>
+    <div class="kanban-col kanban-close" data-drop-estado="Perdida"><span class="kc-name danger">✖ Soltar aquí: Perdida</span></div>
+  </div>`;
+
+  el.innerHTML = forecastHtml + boardHtml + cerrarHtml;
 
   // Click → detalle
   el.querySelectorAll('.kanban-card').forEach(card => {
@@ -5317,18 +5342,61 @@ function renderPipeline() {
   });
 }
 
-document.getElementById('quotesViewToggle')?.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-vtoggle]');
-  if (!btn) return;
-  _quotesView = btn.dataset.vtoggle;
+// Cerradas: adjudicadas, perdidas y Backlog, fuera del tablero de seguimiento.
+// Respeta búsqueda y filtros de industria/tipo; los totales son solo de esta vista.
+function renderCerradas() {
+  const el = document.getElementById('cerradas-view');
+  if (!el) return;
+  if (!quotesLoaded) { el.innerHTML = skeletonCards(3); return; }
+  const searchVal = (document.getElementById('search-quotes').value || '').toLowerCase().trim();
+  let list = allQuotes().filter(esCerrada);
+  if (searchVal) list = list.filter(q =>
+    (q.empresa||'').toLowerCase().includes(searchVal) ||
+    (q.numero||'').toLowerCase().includes(searchVal) ||
+    (q.descripcion||'').toLowerCase().includes(searchVal) ||
+    (q.contactos||'').toLowerCase().includes(searchVal)
+  );
+  list = applyQuotesFilters(list, { ignorarEstados: true });
+  list.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  const GRUPOS = [
+    { estado: 'Adjudicada',   titulo: '✅ Adjudicadas', cls: 'success' },
+    { estado: 'Perdida',      titulo: '✖ Perdidas',     cls: 'danger'  },
+    { estado: BACKLOG_ESTADO, titulo: '📦 Backlog',     cls: 'muted'   },
+  ];
+  const html = GRUPOS.map(g => {
+    const group = list.filter(q => (q.estado || '') === g.estado);
+    const total = group.reduce((s, q) => s + (Number(q.valor) || 0), 0);
+    return `<div class="cerradas-grupo">
+      <div class="kanban-col-head ${g.cls}">
+        <span class="kc-name">${g.titulo}</span>
+        <span class="kc-count">${group.length}</span>
+        ${total ? `<span class="kc-total">${formatCLP(total)}</span>` : ''}
+      </div>
+      ${group.length ? group.map(q => cardQuoteHtml(q)).join('') : '<div class="pg-empty">—</div>'}
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="kanban-hint">Cotizaciones cerradas: no suman en la Lista ni en el Kanban. Para reabrir una, cámbiale el estado desde su detalle.</div>` + html;
+  bindQuoteCards(el);
+}
+
+function setQuotesView(view) {
+  _quotesView = view;
   document.querySelectorAll('#quotesViewToggle [data-vtoggle]').forEach(b =>
     b.classList.toggle('active', b.dataset.vtoggle === _quotesView));
   document.getElementById('quotes-list').classList.toggle('hidden', _quotesView !== 'list');
   document.getElementById('pipeline-view').classList.toggle('hidden', _quotesView !== 'pipeline');
   document.getElementById('proyectos-view').classList.toggle('hidden', _quotesView !== 'proyectos');
+  document.getElementById('cerradas-view').classList.toggle('hidden', _quotesView !== 'cerradas');
   if (_quotesView === 'pipeline') renderPipeline();
   else if (_quotesView === 'proyectos') renderProyectos();
+  else if (_quotesView === 'cerradas') renderCerradas();
   else renderQuotes();
+}
+
+document.getElementById('quotesViewToggle')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-vtoggle]');
+  if (!btn) return;
+  setQuotesView(btn.dataset.vtoggle);
 });
 
 // ---------- Acordeones home ----------
@@ -5384,7 +5452,7 @@ function fillQuoteFromDictation(data) {
   if (data.notas)           quoteForm.notas.value         = data.notas;
   if (data.estado)          quoteForm.estado.value        = data.estado;
   if (data.tipo) {
-    _editingTipo = data.tipo;
+    if (!_editingTipos.includes(data.tipo)) _editingTipos = TIPOS_SERVICIO.filter(x => x === data.tipo || _editingTipos.includes(x));
     updateTipoChips();
   }
   if (data.industria) {
