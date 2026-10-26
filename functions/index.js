@@ -706,7 +706,7 @@ Estructura exacta del JSON:
 {
   "empresa": string | null,
   "tipo": "Consultoría"|"Academia"|"AURA"|null,
-  "industria": "Construcción"|"Minería"|"Industrial"|"Infraestructura"|null,
+  "industria": "Construcción"|"Minería"|"Industrial"|"Infraestructura"|"Portuaria"|"Ferrocarriles"|null,
   "descripcion": string | null,
   "valor": number | null,
   "numero": string | null,
